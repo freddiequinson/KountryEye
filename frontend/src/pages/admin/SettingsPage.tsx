@@ -10,6 +10,8 @@ import {
   Trash2,
   Key,
   UserPlus,
+  AlertTriangle,
+  RotateCcw,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -143,6 +145,9 @@ export default function SettingsPage() {
   });
 
   const [newPassword, setNewPassword] = useState('');
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetReseed, setResetReseed] = useState(true);
 
   // Queries
   const { data: users = [], isLoading: usersLoading } = useQuery({
@@ -375,6 +380,35 @@ export default function SettingsPage() {
     },
     onError: () => {
       toast({ title: 'Failed to activate consultation type', variant: 'destructive' });
+    },
+  });
+
+  // Database reset mutation
+  const resetDatabaseMutation = useMutation({
+    mutationFn: (data: { password: string; reseed: boolean }) => 
+      api.post('/system/hard-reset', data),
+    onSuccess: (response) => {
+      setIsResetDialogOpen(false);
+      setResetPassword('');
+      queryClient.invalidateQueries();
+      toast({ 
+        title: 'Database Reset Complete',
+        description: response.data.reseeded 
+          ? `Login with: ${response.data.admin_credentials.email} / ${response.data.admin_credentials.password}`
+          : 'Database has been cleared. No seed data was added.',
+      });
+      // Force logout after reset
+      setTimeout(() => {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }, 3000);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: 'Reset Failed', 
+        description: error.response?.data?.detail || 'Invalid password or server error',
+        variant: 'destructive' 
+      });
     },
   });
 
@@ -943,6 +977,36 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+
+            <Card className="border-destructive md:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-destructive">
+                  <AlertTriangle className="h-5 w-5" />
+                  Danger Zone
+                </CardTitle>
+                <CardDescription>
+                  Irreversible actions that affect the entire system
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between p-4 border border-destructive/50 rounded-lg bg-destructive/5">
+                  <div>
+                    <h4 className="font-semibold">Hard Reset Database</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Delete ALL data and reset to initial state. This cannot be undone.
+                    </p>
+                  </div>
+                  <Button 
+                    variant="destructive" 
+                    onClick={() => setIsResetDialogOpen(true)}
+                    className="gap-2"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Reset Database
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
       </Tabs>
@@ -1273,6 +1337,75 @@ export default function SettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Database Reset Dialog */}
+      <AlertDialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Hard Reset Database
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-4">
+              <p className="font-semibold text-destructive">
+                ⚠️ WARNING: This will permanently delete ALL data including:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>All users and accounts</li>
+                <li>All patients and clinical records</li>
+                <li>All sales and financial data</li>
+                <li>All inventory and stock data</li>
+                <li>All messages and notifications</li>
+              </ul>
+              <p className="text-sm">
+                This action <strong>CANNOT</strong> be undone. Enter the system password to confirm.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>System Reset Password</Label>
+              <Input
+                type="password"
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                placeholder="Enter reset password"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="reseed"
+                checked={resetReseed}
+                onChange={(e) => setResetReseed(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <Label htmlFor="reseed" className="text-sm font-normal">
+                Re-seed with initial data (admin user, roles, categories)
+              </Label>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setResetPassword(''); setIsResetDialogOpen(false); }}>
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={() => resetDatabaseMutation.mutate({ password: resetPassword, reseed: resetReseed })}
+              disabled={resetDatabaseMutation.isPending || !resetPassword}
+            >
+              {resetDatabaseMutation.isPending ? (
+                <>
+                  <RotateCcw className="h-4 w-4 mr-2 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                'Confirm Reset'
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

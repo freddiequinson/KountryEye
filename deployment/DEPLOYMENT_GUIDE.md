@@ -104,7 +104,7 @@ ssh kountry@YOUR_DROPLET_IP
    ```bash
    sudo mkdir -p /var/www/kountryeye
    sudo chown -R $USER:$USER /var/www/kountryeye
-   git clone https://github.com/YOUR_USERNAME/KountryEye.git /var/www/kountryeye
+   git clone https://github.com/freddiequinson/KountryEye.git /var/www/kountryeye
    ```
 
 ### Option B: Using SCP (Direct Upload)

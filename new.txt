@@ -1,0 +1,13 @@
+# View backend logs
+sudo journalctl -u kountryeye -f
+
+# Restart backend
+sudo systemctl restart kountryeye
+
+# Restart nginx
+sudo systemctl restart nginx
+
+# Check backend status
+sudo systemctl status kountryeye
+
+ip: 144.126.199.94
