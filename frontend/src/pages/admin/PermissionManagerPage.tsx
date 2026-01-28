@@ -359,7 +359,7 @@ export default function PermissionManagerPage() {
                           <Badge variant="secondary" className="text-xs">System</Badge>
                         )}
                       </div>
-                      <p className="text-xs opacity-70">{role.permissions.length} permissions</p>
+                      <p className="text-xs opacity-70">{role.permissions?.length || 0} permissions</p>
                     </div>
                   ))}
                 </div>

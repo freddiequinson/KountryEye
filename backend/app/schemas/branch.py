@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, field_validator
+from typing import Optional, Any
 from datetime import datetime, time
 
 
@@ -47,6 +47,17 @@ class BranchResponse(BranchBase):
     work_end_time: Optional[str] = None
     late_threshold_minutes: Optional[int] = None
     require_geolocation: Optional[bool] = None
+
+    @field_validator('work_start_time', 'work_end_time', mode='before')
+    @classmethod
+    def convert_time_to_string(cls, v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        if isinstance(v, time):
+            return v.strftime("%H:%M")
+        if isinstance(v, str):
+            return v
+        return str(v)
 
     class Config:
         from_attributes = True
