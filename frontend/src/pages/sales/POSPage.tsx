@@ -205,8 +205,9 @@ export default function POSPage() {
   return (
     <div className="h-[calc(100vh-4rem)] flex gap-4">
       {/* Left side - Products */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col" data-tour="products">
         <div className="mb-4">
+          <h1 className="text-2xl font-bold mb-2" data-tour="page-title">Point of Sale</h1>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -261,7 +262,7 @@ export default function POSPage() {
       </div>
 
       {/* Right side - Cart */}
-      <div className="w-96 flex flex-col bg-card border rounded-lg">
+      <div className="w-96 flex flex-col bg-card border rounded-lg" data-tour="cart">
         <div className="p-4 border-b">
           <div className="flex items-center justify-between mb-2">
             <h2 className="font-bold text-lg flex items-center gap-2">

@@ -113,7 +113,7 @@ export default function AccountingPage() {
   return (
     <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Accounting</h1>
+          <h1 className="text-2xl font-bold" data-tour="page-title">Accounting</h1>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setIsExpenseDialogOpen(true)}>
               <TrendingDown className="mr-2 h-4 w-4" />
@@ -126,7 +126,7 @@ export default function AccountingPage() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-3" data-tour="summary">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Today</CardTitle>

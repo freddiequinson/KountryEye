@@ -1,8 +1,11 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth'
 import { Toaster } from '@/components/ui/toaster'
+import { OnboardingProvider } from '@/contexts/OnboardingContext'
+import { OnboardingOverlay } from '@/components/onboarding/OnboardingOverlay'
 import LoginPage from '@/pages/auth/LoginPage'
 import DashboardLayout from '@/components/layout/DashboardLayout'
+import HelpPage from '@/pages/HelpPage'
 import DashboardPage from '@/pages/DashboardPage'
 import PatientsPage from '@/pages/patients/PatientsPage'
 import PatientDetailPage from '@/pages/patients/PatientDetailPage'
@@ -52,7 +55,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <>
+    <OnboardingProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<PatientSelfRegisterPage />} />
@@ -101,6 +104,7 @@ function App() {
                   <Route path="/admin/fund-requests" element={<FundRequestsPage />} />
                   <Route path="/messages" element={<MessagesPage />} />
                   <Route path="/admin/user-profile/:userId" element={<UserProfilePage />} />
+                  <Route path="/help" element={<HelpPage />} />
                 </Routes>
               </DashboardLayout>
             </ProtectedRoute>
@@ -108,8 +112,9 @@ function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <OnboardingOverlay />
       <Toaster />
-    </>
+    </OnboardingProvider>
   )
 }
 

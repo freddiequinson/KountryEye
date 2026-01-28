@@ -177,7 +177,7 @@ function SidebarInnerContent() {
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
               onClick={() => navigate("/")}
             >
-              <img src="/kountry-sidebarilogo.png" alt="Kountry Eyecare" className="h-8 w-8 rounded" />
+              <img src="/kountry-sidebarilogo.png" alt="Kountry Eyecare" className="h-8 w-8 rounded" data-tour="sidebar-logo" />
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-semibold">Kountry Eyecare</span>
                 <span className="truncate text-xs text-muted-foreground">
@@ -201,6 +201,7 @@ function SidebarInnerContent() {
                     <SidebarMenuButton
                       tooltip="Main"
                       className="w-full justify-center group-data-[collapsible=icon]:justify-center"
+                      data-tour="section-main"
                     >
                       <Home className="h-4 w-4 shrink-0" />
                       <span className="flex-1 text-left group-data-[collapsible=icon]:hidden">Main</span>
@@ -218,6 +219,7 @@ function SidebarInnerContent() {
                           tooltip={item.title}
                           isActive={location.pathname === item.url}
                           onClick={() => navigate(item.url)}
+                          data-tour={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
                         >
                           <item.icon />
                           <span>{item.title}</span>
@@ -243,6 +245,7 @@ function SidebarInnerContent() {
                     <SidebarMenuButton
                       tooltip="Management"
                       className="w-full justify-center group-data-[collapsible=icon]:justify-center"
+                      data-tour="section-management"
                     >
                       <Briefcase className="h-4 w-4 shrink-0" />
                       <span className="flex-1 text-left group-data-[collapsible=icon]:hidden">Management</span>
@@ -260,6 +263,7 @@ function SidebarInnerContent() {
                           tooltip={item.title}
                           isActive={location.pathname === item.url}
                           onClick={() => navigate(item.url)}
+                          data-tour={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
                         >
                           <item.icon />
                           <span>{item.title}</span>
@@ -285,6 +289,7 @@ function SidebarInnerContent() {
                     <SidebarMenuButton
                       tooltip="Administration"
                       className="w-full justify-center group-data-[collapsible=icon]:justify-center"
+                      data-tour="section-admin"
                     >
                       <Shield className="h-4 w-4 shrink-0" />
                       <span className="flex-1 text-left group-data-[collapsible=icon]:hidden">Administration</span>
@@ -302,6 +307,7 @@ function SidebarInnerContent() {
                           tooltip={item.title}
                           isActive={location.pathname === item.url}
                           onClick={() => navigate(item.url)}
+                          data-tour={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
                         >
                           <item.icon />
                           <span>{item.title}</span>
@@ -322,6 +328,7 @@ function SidebarInnerContent() {
               tooltip="My Profile"
               isActive={location.pathname === "/profile"}
               onClick={() => navigate("/profile")}
+              data-tour="nav-profile"
             >
               <User />
               <span>My Profile</span>
@@ -350,7 +357,12 @@ function SidebarInnerContent() {
             </SidebarMenuItem>
           )}
           <SidebarMenuItem>
-            <SidebarMenuButton tooltip="Help">
+            <SidebarMenuButton
+              tooltip="Help"
+              isActive={location.pathname === "/help"}
+              onClick={() => navigate("/help")}
+              data-tour="nav-help"
+            >
               <HelpCircle />
               <span>Help</span>
             </SidebarMenuButton>

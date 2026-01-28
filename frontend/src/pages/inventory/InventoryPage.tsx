@@ -211,10 +211,10 @@ export default function InventoryPage() {
   return (
     <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Inventory Management</h1>
+          <h1 className="text-2xl font-bold" data-tour="page-title">Inventory Management</h1>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-3" data-tour="stock-levels">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Warehouses</CardTitle>
@@ -235,7 +235,7 @@ export default function InventoryPage() {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card data-tour="low-stock">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Stock Alerts</CardTitle>
               <AlertTriangle className="h-4 w-4 text-muted-foreground" />
@@ -248,7 +248,7 @@ export default function InventoryPage() {
           </Card>
         </div>
 
-        <Tabs defaultValue={defaultTab}>
+        <Tabs defaultValue={defaultTab} data-tour="transfer">
           <TabsList>
             <TabsTrigger value="warehouses">Warehouses</TabsTrigger>
             <TabsTrigger value="products">Products</TabsTrigger>

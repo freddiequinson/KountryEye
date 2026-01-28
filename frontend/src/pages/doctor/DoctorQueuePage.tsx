@@ -75,7 +75,7 @@ export default function DoctorQueuePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Patient Queue</h1>
+          <h1 className="text-2xl font-bold" data-tour="page-title">Patient Queue</h1>
           <p className="text-muted-foreground">Patients waiting for consultation</p>
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -91,7 +91,7 @@ export default function DoctorQueuePage() {
         </Select>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-3" data-tour="queue-stats">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Waiting</CardTitle>
@@ -124,7 +124,7 @@ export default function DoctorQueuePage() {
         </Card>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-3" data-tour="queue-list">
         {isLoading ? (
           <Card>
             <CardContent className="py-8 text-center">Loading queue...</CardContent>

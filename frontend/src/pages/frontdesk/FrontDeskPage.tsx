@@ -425,7 +425,7 @@ export default function FrontDeskPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Front Desk</h1>
+          <h1 className="text-2xl font-bold" data-tour="page-title">Front Desk</h1>
           <p className="text-muted-foreground">Manage visits and process payments</p>
         </div>
         <div className="flex items-center gap-4">
@@ -459,7 +459,7 @@ export default function FrontDeskPage() {
               />
             </div>
           )}
-          <Button onClick={() => setIsVisitDialogOpen(true)}>
+          <Button onClick={() => setIsVisitDialogOpen(true)} data-tour="register-btn">
             <Plus className="mr-2 h-4 w-4" />
             Record Visit
           </Button>

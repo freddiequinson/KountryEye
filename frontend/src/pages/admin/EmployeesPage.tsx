@@ -225,7 +225,7 @@ export default function EmployeesPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Employees</h1>
+          <h1 className="text-3xl font-bold" data-tour="page-title">Employees</h1>
           <p className="text-muted-foreground">Manage staff, attendance, and tasks</p>
         </div>
         <div className="flex gap-2">
@@ -233,7 +233,7 @@ export default function EmployeesPage() {
             <ListTodo className="mr-2 h-4 w-4" />
             Assign Task
           </Button>
-          <Button onClick={() => setIsAddEmployeeOpen(true)}>
+          <Button onClick={() => setIsAddEmployeeOpen(true)} data-tour="add-employee">
             <UserPlus className="mr-2 h-4 w-4" />
             Add Employee
           </Button>
@@ -241,7 +241,7 @@ export default function EmployeesPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-4" data-tour="employee-stats">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Employees</CardTitle>

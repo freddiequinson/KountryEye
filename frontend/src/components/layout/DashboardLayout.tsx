@@ -1,12 +1,16 @@
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteHeader } from '@/components/site-header'
 import { DailyGreetingToast } from '@/components/DailyGreetingToast'
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import {
   SidebarInset,
   SidebarProvider,
 } from '@/components/ui/sidebar'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // Initialize keyboard shortcuts
+  useKeyboardShortcuts();
+  
   return (
     <SidebarProvider
       style={
