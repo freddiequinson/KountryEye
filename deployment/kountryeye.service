@@ -1,0 +1,16 @@
+[Unit]
+Description=Kountry Eyecare Backend API
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/kountryeye/backend
+Environment="PATH=/var/www/kountryeye/backend/venv/bin"
+EnvironmentFile=/var/www/kountryeye/backend/.env
+ExecStart=/var/www/kountryeye/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

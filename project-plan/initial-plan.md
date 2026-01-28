@@ -1,0 +1,27 @@
+
+i am tasked in building a software that will run locally and on the web for an EyeCare Clinic with different branches. the clinic is called Kountry Eyecare. the software is supposed to manage all activities. below are what we have for the shop so change it into a polished requirements for us to use to build what they need. :
+we have 4 major roles: frontdesk (where we take people in, what they currently call visits, frontdesk also  take forms which are currently hardcopy and input them. we will like to change the harcopy form to softcopy so people can fill and frontdesk can see and validate it to be added), marketing(for scheduling events, seeing ratings of customers, organizing events and outreach as well as media tours, promotional activities, etc), Doctors( access patient record so they can see case history, attendance records, and so they can add their diagnosis and add management plan(spectacle rx, etc) and also medication which all adds up to the patient records). Doctors can also add prescription which patients can pay for on their way out at the frontdesk and it create a sales record. Last role we have is the Admin role, this is the doctor who owns the clinic that we are creating the system for. She wants to be able to see expenditure and revenue per month, day or yearly. she also want to be able to add branches and employess if there are new. She wants to be able to edit permissions and roles for these people. she also needx to do accounting. she needs to see all assets in all her shops and per shop. she want to have access to the warehouse and list products which can be sold at the branches. she want to be able to see everything that goes on in the system too basically, visitor records, etc. she needs to be able to input imported goods, set dates of arrival, then the system reminds her on the said date and she can confirm receipt, add to the warehouse and then distribute across branches of the clinic. 
+
+Modules:
+People who walk in are recorded in our system as visits. we need to indicate if the person was just an enquiry or full check in since people can just walk in and out. we need the purpose if its just enquiry too. but if full check in, we can let them fill the form where we take their first name, surname and middle name, dob and age, marital status, sex, contact, next of kin, nationality, occupation,. this can be filled digitally by the patient ar they can fill our hardcopy form and the frontdesk can enter it into the syetm. where it is filled by the customer, frontdesk just checks and approve and it gets added to our db. after this frontdesk need to fill the consultation type(opthalmologist or optometrist, more can be set by the admin later on), payment type (cash, insurance(this will bring a field so they can type what kind of insurance it is, and other insurance info like insurance id and number), VisionCare Membership(this is a personal one for the clinic so it can be configurable)), then the system can generate the cost so this should be set by the admin again based on the consultation type, etc. this is  also need to be set by the admin since it is an initial amount people pay for the initial consultation. before any tests and other cost are incurred by the patient. Patient records can be expansive but allow us to add more info later on, ghana card, etc. each patient record is saved permanently and edits are tracked . patient records can be viewed to see the persons details, payment records, payment type, case history, examination, patient diagnosis, mnagement plan, medications, etc. also we dont want double records for the same customer so we need our system to intelligently suggest if we already have a patient already in our system. so frontdesk can match.so it updates the patient record instead of having duplicates. 
+
+dashboards: a patients dashboard to show vistors/patients which we can chose if we want to see daily, monthly or yearly, all time. a sales dashboard to show expenditures, and revenue. also personal dashboards for each role. branches dashboard anfd branches filter for admin. other roles are sssigned to individual branches. 
+
+analytics: we need an analytics page for admin and some for the marketing,.
+
+ratings: customers should be able to rate services, and also rate business on google. 
+
+receipts generation: generate receipts 
+
+sales : add products. sell products based on prescriptions , add discounts(done by admin as well as who she assigns the role to), set price of product and change  prices which alerts employees (set by admin or she giives the role to) , branches can sell from their stock till 0. they can request for items needed, etc. 
+
+Assets Management: assets in different branches are listed here. we can schedule servicing or log servicing for assets that require servicing when it happens so we can track the health of each asset and print reports on each. 
+
+Tables: see all sales made. see all attendance records, etc. 
+
+Kountry Eye Care Colors: Green (#4c9b4f) and blue(##0cc0df) and White
+Stack: Shadcn frontend and fastapi
+Importance: we want a fast working procedure with data retention. we want it to  also work locally and also upload when connected to the internet. 
+
+Also where i did not use the right registers for an eye care clinic, use it. dont stick strictly to what i gave. be innovative as well and add any features or thing important that i am missing. 
+Web app and local pc software will be appreciated. 
