@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Shield, Users, Search, Save } from 'lucide-react';
+import { Shield, Users, Search, Save, Check, Plus } from 'lucide-react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -189,15 +189,18 @@ export default function PermissionManagerPage() {
     `${emp.first_name} ${emp.last_name} ${emp.email}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Get total permissions count for user
+  const totalUserPermissions = rolePermissionIds.length + employeePermissions.length;
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Permission Manager</h1>
-        <p className="text-muted-foreground">Manage roles, permissions, and branch access for employees</p>
+    <div className="h-[calc(100vh-120px)] flex flex-col">
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold">Permission Manager</h1>
+        <p className="text-sm text-muted-foreground">Manage roles, permissions, and branch access for employees</p>
       </div>
 
-      <Tabs defaultValue="users">
-        <TabsList>
+      <Tabs defaultValue="users" className="flex-1 flex flex-col">
+        <TabsList className="w-fit">
           <TabsTrigger value="users">
             <Users className="mr-2 h-4 w-4" />
             User Permissions
@@ -209,87 +212,139 @@ export default function PermissionManagerPage() {
         </TabsList>
 
         {/* User Permissions Tab */}
-        <TabsContent value="users" className="space-y-4">
-          <div className="grid lg:grid-cols-4 md:grid-cols-3 gap-6">
-            {/* Employee List */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Employees</CardTitle>
+        <TabsContent value="users" className="flex-1 mt-4">
+          <div className="grid grid-cols-12 gap-4 h-full">
+            {/* Employee List - Left Sidebar */}
+            <div className="col-span-3 flex flex-col bg-card rounded-lg border">
+              <div className="p-3 border-b">
+                <h3 className="font-semibold mb-2">Employees</h3>
                 <div className="relative">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search employees..."
-                    className="pl-8"
+                    placeholder="Search..."
+                    className="pl-8 h-9"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
-              </CardHeader>
-              <CardContent className="max-h-96 overflow-y-auto">
-                <div className="space-y-2">
+              </div>
+              <div className="flex-1 overflow-y-auto p-2">
+                <div className="space-y-1">
                   {filteredEmployees.map((emp) => (
                     <div
                       key={emp.id}
-                      className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                      className={`p-2 rounded-md cursor-pointer transition-colors ${
                         selectedEmployee?.id === emp.id
                           ? 'bg-primary text-primary-foreground'
                           : 'hover:bg-muted'
                       }`}
                       onClick={() => handleSelectEmployee(emp)}
                     >
-                      <p className="font-medium">{emp.first_name} {emp.last_name}</p>
+                      <p className="font-medium text-sm">{emp.first_name} {emp.last_name}</p>
                       <p className="text-xs opacity-70">{emp.role?.name || 'No role'}</p>
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            {/* Permissions & Branches */}
-            <Card className="lg:col-span-3 md:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  {selectedEmployee
-                    ? `${selectedEmployee.first_name} ${selectedEmployee.last_name}`
-                    : 'Select an Employee'}
-                </CardTitle>
-                <CardDescription>
-                  {selectedEmployee
-                    ? 'Assign additional permissions and branch access'
-                    : 'Click on an employee to manage their permissions'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {selectedEmployee ? (
-                  <Tabs defaultValue="extra-permissions">
-                    <TabsList className="mb-4">
-                      <TabsTrigger value="extra-permissions">Extra Permissions</TabsTrigger>
-                      <TabsTrigger value="branches">Branch Access</TabsTrigger>
-                    </TabsList>
+            {/* Permissions Panel - Right Side */}
+            <div className="col-span-9 flex flex-col bg-card rounded-lg border">
+              {selectedEmployee ? (
+                <>
+                  <div className="p-4 border-b">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold text-lg">{selectedEmployee.first_name} {selectedEmployee.last_name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Role: <Badge variant="outline">{selectedEmployee.role?.name || 'No role'}</Badge>
+                          <span className="ml-3">Total Permissions: <strong>{totalUserPermissions}</strong></span>
+                        </p>
+                      </div>
+                      <Button
+                        onClick={handleSaveUserPermissions}
+                        disabled={updateUserPermissionsMutation.isPending}
+                        size="sm"
+                      >
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Changes
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <Tabs defaultValue="all-permissions" className="flex-1 flex flex-col">
+                    <div className="px-4 pt-2 border-b">
+                      <TabsList>
+                        <TabsTrigger value="all-permissions">
+                          <Check className="mr-1 h-3 w-3" />
+                          All Permissions ({totalUserPermissions})
+                        </TabsTrigger>
+                        <TabsTrigger value="extra-permissions">
+                          <Plus className="mr-1 h-3 w-3" />
+                          Extra Permissions ({employeePermissions.length})
+                        </TabsTrigger>
+                        <TabsTrigger value="branches">Branch Access</TabsTrigger>
+                      </TabsList>
+                    </div>
 
-                    <TabsContent value="extra-permissions" className="space-y-4">
-                      <p className="text-sm text-muted-foreground">
-                        Checked permissions from role are shown in green. Add extra permissions by checking unchecked items.
+                    <TabsContent value="all-permissions" className="flex-1 overflow-y-auto p-4">
+                      <p className="text-sm text-muted-foreground mb-4">
+                        All permissions this user has (from role + extra). Green items are from their role.
                       </p>
-                      <div className="grid gap-4 max-h-[50vh] overflow-y-auto">
+                      <div className="grid grid-cols-3 gap-4">
+                        {Object.entries(permissionsByModule).map(([module, perms]) => {
+                          const modulePerms = perms.filter(p => rolePermissionIds.includes(p.id) || employeePermissions.includes(p.id));
+                          if (modulePerms.length === 0) return null;
+                          return (
+                            <div key={module} className="space-y-2">
+                              <h4 className="font-medium text-xs text-muted-foreground uppercase tracking-wide border-b pb-1">{module}</h4>
+                              <div className="space-y-1">
+                                {modulePerms.map((perm) => {
+                                  const isFromRole = rolePermissionIds.includes(perm.id);
+                                  return (
+                                    <div key={perm.id} className={`flex items-center gap-2 text-sm py-0.5 px-2 rounded ${isFromRole ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400' : 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400'}`}>
+                                      <Check className="h-3 w-3" />
+                                      <span>{perm.name}</span>
+                                      {isFromRole ? <Badge variant="outline" className="text-[10px] px-1 py-0">role</Badge> : <Badge variant="outline" className="text-[10px] px-1 py-0">extra</Badge>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {totalUserPermissions === 0 && (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Shield className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                          <p>No permissions assigned</p>
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value="extra-permissions" className="flex-1 overflow-y-auto p-4">
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Add extra permissions on top of the role's default permissions. Green items are already granted by role.
+                      </p>
+                      <div className="grid grid-cols-3 gap-4">
                         {Object.entries(permissionsByModule).map(([module, perms]) => (
                           <div key={module} className="space-y-2">
-                            <h4 className="font-medium text-sm text-muted-foreground uppercase">{module}</h4>
-                            <div className="grid grid-cols-2 gap-2">
+                            <h4 className="font-medium text-xs text-muted-foreground uppercase tracking-wide border-b pb-1">{module}</h4>
+                            <div className="space-y-1">
                               {perms.map((perm) => {
                                 const isFromRole = rolePermissionIds.includes(perm.id);
                                 const isExtra = employeePermissions.includes(perm.id);
                                 return (
-                                  <div key={perm.id} className={`flex items-center space-x-2 p-1 rounded ${isFromRole ? 'bg-green-50 dark:bg-green-950/30' : ''}`}>
+                                  <div key={perm.id} className={`flex items-center space-x-2 py-0.5 ${isFromRole ? 'opacity-50' : ''}`}>
                                     <Checkbox
                                       id={`perm-${perm.id}`}
                                       checked={isFromRole || isExtra}
                                       disabled={isFromRole}
                                       onCheckedChange={() => !isFromRole && togglePermission(perm.id, false)}
+                                      className="h-4 w-4"
                                     />
-                                    <Label htmlFor={`perm-${perm.id}`} className={`text-sm ${isFromRole ? 'text-green-700 dark:text-green-400' : ''}`}>
+                                    <Label htmlFor={`perm-${perm.id}`} className={`text-sm cursor-pointer ${isFromRole ? 'text-green-600' : ''}`}>
                                       {perm.name}
-                                      {isFromRole && <span className="text-xs ml-1">(role)</span>}
                                     </Label>
                                   </div>
                                 );
@@ -300,66 +355,61 @@ export default function PermissionManagerPage() {
                       </div>
                     </TabsContent>
 
-                    <TabsContent value="branches" className="space-y-4">
-                      <p className="text-sm text-muted-foreground">
-                        Primary branch: <strong>{selectedEmployee.branch?.name || 'Not assigned'}</strong>
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Select additional branches this employee can access:
-                      </p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {branches
-                          .filter(b => b.id !== selectedEmployee.branch?.id)
-                          .map((branch) => (
-                            <div key={branch.id} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`branch-${branch.id}`}
-                                checked={employeeBranches.includes(branch.id)}
-                                onCheckedChange={() => toggleBranch(branch.id)}
-                              />
-                              <Label htmlFor={`branch-${branch.id}`} className="text-sm">
-                                {branch.name}
-                              </Label>
-                            </div>
-                          ))}
+                    <TabsContent value="branches" className="flex-1 overflow-y-auto p-4">
+                      <div className="max-w-md">
+                        <p className="text-sm text-muted-foreground mb-2">
+                          Primary branch: <Badge>{selectedEmployee.branch?.name || 'Not assigned'}</Badge>
+                        </p>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          Select additional branches this employee can access:
+                        </p>
+                        <div className="space-y-2">
+                          {branches
+                            .filter(b => b.id !== selectedEmployee.branch?.id)
+                            .map((branch) => (
+                              <div key={branch.id} className="flex items-center space-x-2 p-2 rounded hover:bg-muted">
+                                <Checkbox
+                                  id={`branch-${branch.id}`}
+                                  checked={employeeBranches.includes(branch.id)}
+                                  onCheckedChange={() => toggleBranch(branch.id)}
+                                />
+                                <Label htmlFor={`branch-${branch.id}`} className="text-sm cursor-pointer flex-1">
+                                  {branch.name}
+                                </Label>
+                              </div>
+                            ))}
+                        </div>
                       </div>
                     </TabsContent>
-
-                    <div className="mt-4 pt-4 border-t">
-                      <Button
-                        onClick={handleSaveUserPermissions}
-                        disabled={updateUserPermissionsMutation.isPending}
-                      >
-                        <Save className="mr-2 h-4 w-4" />
-                        Save Changes
-                      </Button>
-                    </div>
                   </Tabs>
-                ) : (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>Select an employee from the list to manage their permissions</p>
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <Users className="h-16 w-16 mx-auto mb-4 opacity-30" />
+                    <p className="text-lg">Select an employee from the list</p>
+                    <p className="text-sm">to manage their permissions</p>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </div>
+              )}
+            </div>
           </div>
         </TabsContent>
 
         {/* Role Management Tab */}
-        <TabsContent value="roles" className="space-y-4">
-          <div className="grid lg:grid-cols-4 md:grid-cols-3 gap-6">
-            {/* Role List */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Roles</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
+        <TabsContent value="roles" className="flex-1 mt-4">
+          <div className="grid grid-cols-12 gap-4 h-full">
+            {/* Role List - Left Sidebar */}
+            <div className="col-span-3 flex flex-col bg-card rounded-lg border">
+              <div className="p-3 border-b">
+                <h3 className="font-semibold">Roles</h3>
+              </div>
+              <div className="flex-1 overflow-y-auto p-2">
+                <div className="space-y-1">
                   {roles.map((role) => (
                     <div
                       key={role.id}
-                      className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                      className={`p-2 rounded-md cursor-pointer transition-colors ${
                         selectedRole?.id === role.id
                           ? 'bg-primary text-primary-foreground'
                           : 'hover:bg-muted'
@@ -367,51 +417,60 @@ export default function PermissionManagerPage() {
                       onClick={() => handleSelectRole(role)}
                     >
                       <div className="flex items-center justify-between">
-                        <p className="font-medium">{role.name}</p>
+                        <p className="font-medium text-sm">{role.name}</p>
                         {role.is_system && (
-                          <Badge variant="secondary" className="text-xs">System</Badge>
+                          <Badge variant="secondary" className="text-[10px]">System</Badge>
                         )}
                       </div>
                       <p className="text-xs opacity-70">{role.permissions?.length || 0} permissions</p>
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            {/* Role Permissions */}
-            <Card className="lg:col-span-3 md:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  {selectedRole ? selectedRole.name : 'Select a Role'}
-                </CardTitle>
-                <CardDescription>
-                  {selectedRole
-                    ? selectedRole.description || 'Manage permissions for this role'
-                    : 'Click on a role to manage its permissions'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {selectedRole ? (
-                  <div className="space-y-4">
+            {/* Role Permissions - Right Side */}
+            <div className="col-span-9 flex flex-col bg-card rounded-lg border">
+              {selectedRole ? (
+                <>
+                  <div className="p-4 border-b">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold text-lg">{selectedRole.name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {selectedRole.description || 'Manage permissions for this role'}
+                        </p>
+                      </div>
+                      <Button
+                        onClick={handleSaveRolePermissions}
+                        disabled={updateRoleMutation.isPending}
+                        size="sm"
+                      >
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Role Permissions
+                      </Button>
+                    </div>
                     {selectedRole.is_system && (
-                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                      <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
                         This is a system role. Changes will affect all users with this role.
                       </div>
                     )}
-                    <div className="grid gap-4 max-h-[50vh] overflow-y-auto">
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4">
+                    <div className="grid grid-cols-3 gap-4">
                       {Object.entries(permissionsByModule).map(([module, perms]) => (
                         <div key={module} className="space-y-2">
-                          <h4 className="font-medium text-sm text-muted-foreground uppercase">{module}</h4>
-                          <div className="grid grid-cols-2 gap-2">
+                          <h4 className="font-medium text-xs text-muted-foreground uppercase tracking-wide border-b pb-1">{module}</h4>
+                          <div className="space-y-1">
                             {perms.map((perm) => (
-                              <div key={perm.id} className="flex items-center space-x-2">
+                              <div key={perm.id} className="flex items-center space-x-2 py-0.5">
                                 <Checkbox
                                   id={`role-perm-${perm.id}`}
                                   checked={rolePermissions.includes(perm.id)}
                                   onCheckedChange={() => togglePermission(perm.id, true)}
+                                  className="h-4 w-4"
                                 />
-                                <Label htmlFor={`role-perm-${perm.id}`} className="text-sm">
+                                <Label htmlFor={`role-perm-${perm.id}`} className="text-sm cursor-pointer">
                                   {perm.name}
                                 </Label>
                               </div>
@@ -420,24 +479,18 @@ export default function PermissionManagerPage() {
                         </div>
                       ))}
                     </div>
-                    <div className="mt-4 pt-4 border-t">
-                      <Button
-                        onClick={handleSaveRolePermissions}
-                        disabled={updateRoleMutation.isPending}
-                      >
-                        <Save className="mr-2 h-4 w-4" />
-                        Save Role Permissions
-                      </Button>
-                    </div>
                   </div>
-                ) : (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>Select a role from the list to manage its permissions</p>
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <Shield className="h-16 w-16 mx-auto mb-4 opacity-30" />
+                    <p className="text-lg">Select a role from the list</p>
+                    <p className="text-sm">to manage its permissions</p>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </div>
+              )}
+            </div>
           </div>
         </TabsContent>
       </Tabs>
