@@ -12,6 +12,10 @@ import {
   UserPlus,
   AlertTriangle,
   RotateCcw,
+  UserCheck,
+  UserX,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -53,6 +57,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 
 interface User {
@@ -101,6 +106,7 @@ export default function SettingsPage() {
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [_isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isVisionCareMemberDialogOpen, setIsVisionCareMemberDialogOpen] = useState(false);
+  const [showInactiveUsers, setShowInactiveUsers] = useState(true);
   
   // Edit states
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -266,14 +272,33 @@ export default function SettingsPage() {
 
   const deleteUserMutation = useMutation({
     mutationFn: (id: number) => api.delete(`/users/${id}`),
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-      setIsDeleteDialogOpen(false);
       setDeletingItem(null);
-      toast({ title: 'User deactivated successfully' });
+      const data = response.data;
+      if (data.deleted) {
+        toast({ title: 'User deleted permanently' });
+      } else {
+        toast({ 
+          title: 'User deactivated', 
+          description: `Has ${data.record_count} related records - cannot be permanently deleted` 
+        });
+      }
     },
     onError: () => {
-      toast({ title: 'Failed to deactivate user', variant: 'destructive' });
+      toast({ title: 'Failed to delete user', variant: 'destructive' });
+    },
+  });
+
+  const toggleUserActiveMutation = useMutation({
+    mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) => 
+      api.put(`/users/${id}`, { is_active }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      toast({ title: variables.is_active ? 'User activated' : 'User deactivated' });
+    },
+    onError: () => {
+      toast({ title: 'Failed to update user status', variant: 'destructive' });
     },
   });
 
@@ -586,10 +611,23 @@ export default function SettingsPage() {
                 <CardTitle>User Management</CardTitle>
                 <CardDescription>Create and manage employee accounts</CardDescription>
               </div>
-              <Button onClick={() => { resetUserForm(); setEditingUser(null); setIsUserDialogOpen(true); }}>
-                <UserPlus className="mr-2 h-4 w-4" />
-                Add User
-              </Button>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="show-inactive-users"
+                    checked={showInactiveUsers}
+                    onCheckedChange={setShowInactiveUsers}
+                  />
+                  <Label htmlFor="show-inactive-users" className="text-sm cursor-pointer flex items-center gap-1">
+                    {showInactiveUsers ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                    {showInactiveUsers ? 'Showing inactive' : 'Hiding inactive'}
+                  </Label>
+                </div>
+                <Button onClick={() => { resetUserForm(); setEditingUser(null); setIsUserDialogOpen(true); }}>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Add User
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -608,12 +646,12 @@ export default function SettingsPage() {
                     <TableRow>
                       <TableCell colSpan={6} className="text-center py-8">Loading...</TableCell>
                     </TableRow>
-                  ) : users.length === 0 ? (
+                  ) : users.filter((u: User) => showInactiveUsers || u.is_active).length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No users found</TableCell>
                     </TableRow>
                   ) : (
-                    users.map((user: User) => (
+                    users.filter((user: User) => showInactiveUsers || user.is_active).map((user: User) => (
                       <TableRow key={user.id}>
                         <TableCell className="font-medium">
                           {user.first_name} {user.last_name}
@@ -628,25 +666,44 @@ export default function SettingsPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button variant="ghost" size="sm" onClick={() => openEditUser(user)}>
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => openEditUser(user)} title="Edit">
                               <Pencil className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => { setPasswordUserId(user.id); setIsPasswordDialogOpen(true); }}
+                              title="Reset Password"
                             >
                               <Key className="h-4 w-4" />
                             </Button>
                             {!user.is_superuser && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setDeletingItem({ type: 'user', id: user.id, name: `${user.first_name} ${user.last_name}` })}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
+                              <>
+                                <Button
+                                  variant={user.is_active ? "ghost" : "default"}
+                                  size="sm"
+                                  onClick={() => toggleUserActiveMutation.mutate({ 
+                                    id: user.id, 
+                                    is_active: !user.is_active 
+                                  })}
+                                  title={user.is_active ? "Deactivate" : "Activate"}
+                                >
+                                  {user.is_active ? (
+                                    <UserX className="h-4 w-4" />
+                                  ) : (
+                                    <UserCheck className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setDeletingItem({ type: 'user', id: user.id, name: `${user.first_name} ${user.last_name}` })}
+                                  title="Delete"
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </>
                             )}
                           </div>
                         </TableCell>

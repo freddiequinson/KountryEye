@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, UserPlus, Clock, ListTodo, Eye } from 'lucide-react';
+import { Search, UserPlus, Clock, ListTodo, Eye, Trash2, UserCheck, UserX, EyeOff } from 'lucide-react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,10 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 
 interface Employee {
@@ -58,6 +59,8 @@ export default function EmployeesPage() {
   const [activeTab, setActiveTab] = useState('employees');
   const [isAddEmployeeOpen, setIsAddEmployeeOpen] = useState(false);
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
+  const [showInactive, setShowInactive] = useState(true);
+  const [deleteConfirm, setDeleteConfirm] = useState<Employee | null>(null);
 
   const [employeeForm, setEmployeeForm] = useState({
     email: '',
@@ -155,6 +158,38 @@ export default function EmployeesPage() {
     },
   });
 
+  const toggleActiveMutation = useMutation({
+    mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) => 
+      api.put(`/employees/${id}`, { is_active }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      toast({ title: variables.is_active ? 'Employee activated' : 'Employee deactivated' });
+    },
+    onError: () => {
+      toast({ title: 'Failed to update employee status', variant: 'destructive' });
+    },
+  });
+
+  const deleteEmployeeMutation = useMutation({
+    mutationFn: (id: number) => api.delete(`/employees/${id}`),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      setDeleteConfirm(null);
+      const data = response.data;
+      if (data.deleted) {
+        toast({ title: 'Employee deleted permanently' });
+      } else {
+        toast({ 
+          title: 'Employee deactivated', 
+          description: `Has ${data.record_count} related records - cannot be permanently deleted` 
+        });
+      }
+    },
+    onError: () => {
+      toast({ title: 'Failed to delete employee', variant: 'destructive' });
+    },
+  });
+
   const resetEmployeeForm = () => {
     setEmployeeForm({
       email: '',
@@ -197,9 +232,11 @@ export default function EmployeesPage() {
     });
   };
 
-  const filteredEmployees = employees.filter((emp: Employee) =>
-    `${emp.first_name} ${emp.last_name} ${emp.email}`.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredEmployees = employees.filter((emp: Employee) => {
+    const matchesSearch = `${emp.first_name} ${emp.last_name} ${emp.email}`.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesActiveFilter = showInactive || emp.is_active;
+    return matchesSearch && matchesActiveFilter;
+  });
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
@@ -292,7 +329,7 @@ export default function EmployeesPage() {
         </TabsList>
 
         <TabsContent value="employees" className="space-y-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between gap-4">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -301,6 +338,17 @@ export default function EmployeesPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
               />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="show-inactive"
+                checked={showInactive}
+                onCheckedChange={setShowInactive}
+              />
+              <Label htmlFor="show-inactive" className="text-sm cursor-pointer flex items-center gap-1">
+                {showInactive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                {showInactive ? 'Showing inactive' : 'Hiding inactive'}
+              </Label>
             </div>
           </div>
 
@@ -344,17 +392,48 @@ export default function EmployeesPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/admin/employees/${employee.id}`);
-                          }}
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          View
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/admin/employees/${employee.id}`);
+                            }}
+                            title="View details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant={employee.is_active ? "outline" : "default"}
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleActiveMutation.mutate({ 
+                                id: employee.id, 
+                                is_active: !employee.is_active 
+                              });
+                            }}
+                            title={employee.is_active ? "Deactivate" : "Activate"}
+                          >
+                            {employee.is_active ? (
+                              <UserX className="h-4 w-4" />
+                            ) : (
+                              <UserCheck className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteConfirm(employee);
+                            }}
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -651,6 +730,36 @@ export default function EmployeesPage() {
               disabled={!taskForm.title || !taskForm.assigned_to_id}
             >
               Assign Task
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Employee</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {deleteConfirm?.first_name} {deleteConfirm?.last_name}?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              If this employee has any related records (attendance, sales, tasks, etc.), 
+              they will be <strong>deactivated</strong> instead of permanently deleted to preserve data integrity.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={() => deleteConfirm && deleteEmployeeMutation.mutate(deleteConfirm.id)}
+              disabled={deleteEmployeeMutation.isPending}
+            >
+              {deleteEmployeeMutation.isPending ? 'Deleting...' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>
