@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { X, Clock, BookOpen, Loader2 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth'
+import { useOnboarding } from '@/contexts/OnboardingContext'
 import api from '@/lib/api'
 
 const FALLBACK_QUOTES = [
@@ -25,12 +27,17 @@ function getStorageKey(userId: number): string {
 
 export function DailyGreetingToast() {
   const { user } = useAuthStore()
+  const navigate = useNavigate()
+  const { isOnboarding, hasCompletedOnboarding } = useOnboarding()
   const [isVisible, setIsVisible] = useState(false)
   const [quote, setQuote] = useState<{ verse: string; text: string } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     if (!user?.id) return
+    
+    // Don't show greeting while onboarding is active - wait for it to complete
+    if (isOnboarding) return
 
     const storageKey = getStorageKey(user.id)
     const alreadyShown = localStorage.getItem(storageKey)
@@ -51,19 +58,24 @@ export function DailyGreetingToast() {
       
       fetchVerse()
       
-      // Small delay to let the page load first
+      // Delay greeting to show after onboarding is done
       const timer = setTimeout(() => {
         setIsVisible(true)
-      }, 1000)
+      }, 500)
       return () => clearTimeout(timer)
     }
-  }, [user?.id])
+  }, [user?.id, isOnboarding])
 
   const handleDismiss = () => {
     if (user?.id) {
       localStorage.setItem(getStorageKey(user.id), 'true')
     }
     setIsVisible(false)
+  }
+
+  const handleStartDay = () => {
+    handleDismiss()
+    navigate('/attendance')
   }
 
   if (!isVisible || !user) return null
@@ -141,7 +153,7 @@ export function DailyGreetingToast() {
         {/* Footer */}
         <div className="px-8 py-5 bg-gradient-to-r from-primary/5 to-transparent border-t border-primary/10">
           <button
-            onClick={handleDismiss}
+            onClick={handleStartDay}
             className="w-full py-3.5 px-6 bg-gradient-to-r from-primary to-primary/90 text-primary-foreground rounded-xl font-semibold text-base hover:from-primary/90 hover:to-primary/80 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
           >
             Start My Day

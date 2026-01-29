@@ -354,32 +354,62 @@ export default function BranchesPage() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="latitude">Latitude</Label>
-                      <Input
-                        id="latitude"
-                        type="number"
-                        step="any"
-                        placeholder="e.g., 5.6037"
-                        value={formData.latitude}
-                        onChange={(e) =>
-                          setFormData({ ...formData, latitude: e.target.value })
-                        }
-                      />
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label>Branch Coordinates</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (navigator.geolocation) {
+                            navigator.geolocation.getCurrentPosition(
+                              (position) => {
+                                setFormData({
+                                  ...formData,
+                                  latitude: position.coords.latitude.toFixed(6),
+                                  longitude: position.coords.longitude.toFixed(6),
+                                });
+                                toast({ title: 'Location captured successfully' });
+                              },
+                              () => {
+                                toast({ title: 'Failed to get location', variant: 'destructive' });
+                              }
+                            );
+                          }
+                        }}
+                      >
+                        <MapPin className="mr-2 h-4 w-4" />
+                        Use Current Location
+                      </Button>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="longitude">Longitude</Label>
-                      <Input
-                        id="longitude"
-                        type="number"
-                        step="any"
-                        placeholder="e.g., -0.1870"
-                        value={formData.longitude}
-                        onChange={(e) =>
-                          setFormData({ ...formData, longitude: e.target.value })
-                        }
-                      />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="latitude">Latitude</Label>
+                        <Input
+                          id="latitude"
+                          type="number"
+                          step="any"
+                          placeholder="e.g., 5.6037"
+                          value={formData.latitude}
+                          onChange={(e) =>
+                            setFormData({ ...formData, latitude: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="longitude">Longitude</Label>
+                        <Input
+                          id="longitude"
+                          type="number"
+                          step="any"
+                          placeholder="e.g., -0.1870"
+                          value={formData.longitude}
+                          onChange={(e) =>
+                            setFormData({ ...formData, longitude: e.target.value })
+                          }
+                        />
+                      </div>
                     </div>
                   </div>
 

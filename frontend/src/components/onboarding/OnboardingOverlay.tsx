@@ -20,7 +20,13 @@ export function OnboardingOverlay() {
     nextStep,
     prevStep,
     stopOnboarding,
+    markOnboardingComplete,
   } = useOnboarding();
+
+  const handleClose = () => {
+    stopOnboarding();
+    markOnboardingComplete();
+  };
 
   const [spotlightPosition, setSpotlightPosition] = useState<SpotlightPosition | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
@@ -165,7 +171,7 @@ export function OnboardingOverlay() {
               variant="ghost"
               size="icon"
               className="h-8 w-8"
-              onClick={stopOnboarding}
+              onClick={handleClose}
             >
               <X className="h-4 w-4" />
             </Button>

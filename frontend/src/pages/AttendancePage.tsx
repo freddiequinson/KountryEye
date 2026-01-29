@@ -43,11 +43,11 @@ export default function AttendancePage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Get today's attendance
+  // Get today's attendance for current user
   const { data: todayAttendance, isLoading } = useQuery({
     queryKey: ['my-attendance-today'],
     queryFn: async () => {
-      const response = await api.get('/employees/attendance/today');
+      const response = await api.get('/employees/attendance/my-status');
       return response.data as AttendanceRecord | null;
     },
   });

@@ -4,9 +4,8 @@ from sqlalchemy import select, func, and_, case
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from datetime import datetime, date, timedelta
-from passlib.context import CryptContext
-
 from app.core.database import get_db
+from app.core.security import get_password_hash
 from app.api.v1.deps import get_current_active_user
 from app.models.user import User, Role
 from app.models.branch import Branch
@@ -22,7 +21,6 @@ from app.schemas.employee import (
 )
 
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def generate_password(first_name: str) -> str:
@@ -82,7 +80,7 @@ async def create_employee(
         
         # Generate password from first name
         password = generate_password(employee_in.first_name)
-        hashed_password = pwd_context.hash(password)
+        hashed_password = get_password_hash(password)
         
         employee = User(
             email=employee_in.email,
