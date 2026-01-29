@@ -50,6 +50,7 @@ export default function PermissionManagerPage() {
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [employeePermissions, setEmployeePermissions] = useState<number[]>([]);
+  const [deniedPermissions, setDeniedPermissions] = useState<number[]>([]); // Permissions denied from role
   const [employeeBranches, setEmployeeBranches] = useState<number[]>([]);
   const [rolePermissions, setRolePermissions] = useState<number[]>([]);
   const [rolePermissionIds, setRolePermissionIds] = useState<number[]>([]); // Permissions from user's role
@@ -128,14 +129,16 @@ export default function PermissionManagerPage() {
     try {
       const response = await api.get(`/permissions/users/${employee.id}/effective-permissions`);
       const data = response.data;
-      // Set the user's extra permissions and additional branches
+      // Set the user's extra permissions, denied permissions, and additional branches
       setEmployeePermissions(data.extra_permission_ids || []);
+      setDeniedPermissions(data.denied_permission_ids || []);
       setEmployeeBranches(data.additional_branch_ids || []);
       // Store role permissions for display
       setRolePermissionIds(data.role_permission_ids || []);
     } catch (error) {
       console.error('Failed to fetch user permissions');
       setEmployeePermissions([]);
+      setDeniedPermissions([]);
       setEmployeeBranches([]);
       setRolePermissionIds([]);
     }
@@ -152,9 +155,16 @@ export default function PermissionManagerPage() {
       userId: selectedEmployee.id,
       data: {
         extra_permission_ids: employeePermissions,
+        denied_permission_ids: deniedPermissions,
         additional_branch_ids: employeeBranches,
       },
     });
+  };
+
+  const toggleDeniedPermission = (permId: number) => {
+    setDeniedPermissions(prev =>
+      prev.includes(permId) ? prev.filter(id => id !== permId) : [...prev, permId]
+    );
   };
 
   const handleSaveRolePermissions = () => {
@@ -189,8 +199,9 @@ export default function PermissionManagerPage() {
     `${emp.first_name} ${emp.last_name} ${emp.email}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Get total permissions count for user
-  const totalUserPermissions = rolePermissionIds.length + employeePermissions.length;
+  // Get total permissions count for user (role permissions minus denied plus extra)
+  const effectiveRolePermissions = rolePermissionIds.filter(id => !deniedPermissions.includes(id)).length;
+  const totalUserPermissions = effectiveRolePermissions + employeePermissions.length;
 
   return (
     <div className="h-[calc(100vh-120px)] flex flex-col">
@@ -289,7 +300,7 @@ export default function PermissionManagerPage() {
 
                     <TabsContent value="all-permissions" className="flex-1 overflow-y-auto p-4">
                       <p className="text-sm text-muted-foreground mb-4">
-                        All permissions this user has (from role + extra). Green items are from their role.
+                        All permissions from role. <span className="text-green-600">Green = active</span>, <span className="text-red-600">Red/strikethrough = denied</span>. Click to toggle.
                       </p>
                       <div className="grid grid-cols-3 gap-4">
                         {Object.entries(permissionsByModule).map(([module, perms]) => {
@@ -301,20 +312,43 @@ export default function PermissionManagerPage() {
                               <div className="space-y-1">
                                 {modulePerms.map((perm) => {
                                   const isFromRole = rolePermissionIds.includes(perm.id);
-                                  return (
-                                    <div key={perm.id} className={`flex items-center gap-2 text-sm py-0.5 px-2 rounded ${isFromRole ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400' : 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400'}`}>
-                                      <Check className="h-3 w-3" />
-                                      <span>{perm.name}</span>
-                                      {isFromRole ? <Badge variant="outline" className="text-[10px] px-1 py-0">role</Badge> : <Badge variant="outline" className="text-[10px] px-1 py-0">extra</Badge>}
-                                    </div>
-                                  );
+                                  const isDenied = deniedPermissions.includes(perm.id);
+                                  const isExtra = employeePermissions.includes(perm.id);
+                                  
+                                  if (isFromRole) {
+                                    // Role permission - can be denied
+                                    return (
+                                      <div 
+                                        key={perm.id} 
+                                        className={`flex items-center gap-2 text-sm py-1 px-2 rounded cursor-pointer transition-colors ${
+                                          isDenied 
+                                            ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400 line-through' 
+                                            : 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400'
+                                        }`}
+                                        onClick={() => toggleDeniedPermission(perm.id)}
+                                      >
+                                        <Checkbox checked={!isDenied} className="h-4 w-4" />
+                                        <span className="flex-1">{perm.name}</span>
+                                        <Badge variant="outline" className="text-[10px] px-1 py-0">role</Badge>
+                                      </div>
+                                    );
+                                  } else {
+                                    // Extra permission
+                                    return (
+                                      <div key={perm.id} className="flex items-center gap-2 text-sm py-1 px-2 rounded bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400">
+                                        <Check className="h-3 w-3" />
+                                        <span className="flex-1">{perm.name}</span>
+                                        <Badge variant="outline" className="text-[10px] px-1 py-0">extra</Badge>
+                                      </div>
+                                    );
+                                  }
                                 })}
                               </div>
                             </div>
                           );
                         })}
                       </div>
-                      {totalUserPermissions === 0 && (
+                      {totalUserPermissions === 0 && deniedPermissions.length === 0 && (
                         <div className="text-center py-8 text-muted-foreground">
                           <Shield className="h-12 w-12 mx-auto mb-2 opacity-50" />
                           <p>No permissions assigned</p>

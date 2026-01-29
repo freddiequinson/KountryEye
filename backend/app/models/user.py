@@ -25,6 +25,13 @@ UserBranch = Table(
     Column("branch_id", Integer, ForeignKey("branches.id"), primary_key=True),
 )
 
+UserDeniedPermission = Table(
+    "user_denied_permissions",
+    Base.metadata,
+    Column("user_id", Integer, ForeignKey("users.id"), primary_key=True),
+    Column("permission_id", Integer, ForeignKey("permissions.id"), primary_key=True),
+)
+
 
 class Permission(Base):
     __tablename__ = "permissions"
@@ -76,4 +83,5 @@ class User(Base):
     role = relationship("Role", back_populates="users")
     branch = relationship("Branch", back_populates="employees")
     extra_permissions = relationship("Permission", secondary=UserPermission, back_populates="users")
+    denied_permissions = relationship("Permission", secondary=UserDeniedPermission)  # Permissions denied from role
     additional_branches = relationship("Branch", secondary=UserBranch)  # Additional branches user can access

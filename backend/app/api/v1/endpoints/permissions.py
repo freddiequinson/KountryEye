@@ -55,6 +55,7 @@ class RoleResponse(RoleBase):
 
 class UserPermissionUpdate(BaseModel):
     extra_permission_ids: List[int] = []
+    denied_permission_ids: List[int] = []
     additional_branch_ids: List[int] = []
 
 
@@ -328,9 +329,15 @@ async def update_user_permissions(
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not authorized")
     
+    from app.models.user import UserDeniedPermission
+    
     result = await db.execute(
         select(User)
-        .options(selectinload(User.extra_permissions), selectinload(User.additional_branches))
+        .options(
+            selectinload(User.extra_permissions), 
+            selectinload(User.denied_permissions),
+            selectinload(User.additional_branches)
+        )
         .where(User.id == user_id)
     )
     user = result.scalar_one_or_none()
@@ -345,6 +352,15 @@ async def update_user_permissions(
         user.extra_permissions = perm_result.scalars().all()
     else:
         user.extra_permissions = []
+    
+    # Update denied permissions
+    if data.denied_permission_ids:
+        denied_result = await db.execute(
+            select(Permission).where(Permission.id.in_(data.denied_permission_ids))
+        )
+        user.denied_permissions = denied_result.scalars().all()
+    else:
+        user.denied_permissions = []
     
     # Update additional branches
     from app.models.branch import Branch
@@ -373,6 +389,7 @@ async def get_user_effective_permissions(
         .options(
             selectinload(User.role).selectinload(Role.permissions),
             selectinload(User.extra_permissions),
+            selectinload(User.denied_permissions),
             selectinload(User.additional_branches),
             selectinload(User.branch)
         )
@@ -382,11 +399,15 @@ async def get_user_effective_permissions(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Combine role permissions and extra permissions
+    # Get denied permission IDs
+    denied_ids = {p.id for p in user.denied_permissions}
+    
+    # Combine role permissions and extra permissions, excluding denied ones
     permissions = set()
     if user.role:
         for perm in user.role.permissions:
-            permissions.add(perm.code)
+            if perm.id not in denied_ids:
+                permissions.add(perm.code)
     
     for perm in user.extra_permissions:
         permissions.add(perm.code)
@@ -405,6 +426,7 @@ async def get_user_effective_permissions(
         "is_superuser": user.is_superuser,
         "permissions": list(permissions),
         "extra_permission_ids": [p.id for p in user.extra_permissions],
+        "denied_permission_ids": [p.id for p in user.denied_permissions],
         "additional_branch_ids": [b.id for b in user.additional_branches],
         "role_permission_ids": [p.id for p in user.role.permissions] if user.role else [],
         "branches": branches,
