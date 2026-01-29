@@ -549,7 +549,13 @@ async def create_visit(
     status = "pending_payment"
     visioncare_member_id = None
     
-    if payment_type == "insurance":
+    # Enquiry visits don't need to wait for doctor - mark as completed immediately
+    visit_type = visit_data.get('visit_type', '')
+    if visit_type == 'enquiry':
+        status = "completed"
+        payment_status = "paid"  # No payment needed for enquiry
+        consultation_fee = Decimal("0")
+    elif payment_type == "insurance":
         # Get insurance limit from request
         insurance_limit = Decimal(str(visit_data.get('insurance_limit', 0) or 0))
         

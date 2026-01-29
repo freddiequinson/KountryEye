@@ -336,7 +336,12 @@ async def create_product(
         db.add(stock)
     
     await db.commit()
-    await db.refresh(product)
+    
+    # Eagerly load the category relationship to avoid async context issues
+    result = await db.execute(
+        select(Product).options(selectinload(Product.category)).where(Product.id == product.id)
+    )
+    product = result.scalar_one()
     return product
 
 
