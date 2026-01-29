@@ -52,6 +52,7 @@ export default function PermissionManagerPage() {
   const [employeePermissions, setEmployeePermissions] = useState<number[]>([]);
   const [employeeBranches, setEmployeeBranches] = useState<number[]>([]);
   const [rolePermissions, setRolePermissions] = useState<number[]>([]);
+  const [rolePermissionIds, setRolePermissionIds] = useState<number[]>([]); // Permissions from user's role
 
   // Queries
   const { data: employees = [] } = useQuery({
@@ -125,12 +126,18 @@ export default function PermissionManagerPage() {
     setSelectedEmployee(employee);
     // Fetch user's effective permissions
     try {
-      await api.get(`/permissions/users/${employee.id}/effective-permissions`);
-      // For now, we'll use an empty array since extra permissions need to be fetched
-      setEmployeePermissions([]);
-      setEmployeeBranches([]);
+      const response = await api.get(`/permissions/users/${employee.id}/effective-permissions`);
+      const data = response.data;
+      // Set the user's extra permissions and additional branches
+      setEmployeePermissions(data.extra_permission_ids || []);
+      setEmployeeBranches(data.additional_branch_ids || []);
+      // Store role permissions for display
+      setRolePermissionIds(data.role_permission_ids || []);
     } catch (error) {
       console.error('Failed to fetch user permissions');
+      setEmployeePermissions([]);
+      setEmployeeBranches([]);
+      setRolePermissionIds([]);
     }
   };
 
@@ -203,7 +210,7 @@ export default function PermissionManagerPage() {
 
         {/* User Permissions Tab */}
         <TabsContent value="users" className="space-y-4">
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid lg:grid-cols-4 md:grid-cols-3 gap-6">
             {/* Employee List */}
             <Card>
               <CardHeader>
@@ -239,7 +246,7 @@ export default function PermissionManagerPage() {
             </Card>
 
             {/* Permissions & Branches */}
-            <Card className="md:col-span-2">
+            <Card className="lg:col-span-3 md:col-span-2">
               <CardHeader>
                 <CardTitle className="text-lg">
                   {selectedEmployee
@@ -262,25 +269,31 @@ export default function PermissionManagerPage() {
 
                     <TabsContent value="extra-permissions" className="space-y-4">
                       <p className="text-sm text-muted-foreground">
-                        These permissions are added on top of the role's default permissions.
+                        Checked permissions from role are shown in green. Add extra permissions by checking unchecked items.
                       </p>
-                      <div className="grid gap-4 max-h-64 overflow-y-auto">
+                      <div className="grid gap-4 max-h-[50vh] overflow-y-auto">
                         {Object.entries(permissionsByModule).map(([module, perms]) => (
                           <div key={module} className="space-y-2">
                             <h4 className="font-medium text-sm text-muted-foreground uppercase">{module}</h4>
                             <div className="grid grid-cols-2 gap-2">
-                              {perms.map((perm) => (
-                                <div key={perm.id} className="flex items-center space-x-2">
-                                  <Checkbox
-                                    id={`perm-${perm.id}`}
-                                    checked={employeePermissions.includes(perm.id)}
-                                    onCheckedChange={() => togglePermission(perm.id, false)}
-                                  />
-                                  <Label htmlFor={`perm-${perm.id}`} className="text-sm">
-                                    {perm.name}
-                                  </Label>
-                                </div>
-                              ))}
+                              {perms.map((perm) => {
+                                const isFromRole = rolePermissionIds.includes(perm.id);
+                                const isExtra = employeePermissions.includes(perm.id);
+                                return (
+                                  <div key={perm.id} className={`flex items-center space-x-2 p-1 rounded ${isFromRole ? 'bg-green-50 dark:bg-green-950/30' : ''}`}>
+                                    <Checkbox
+                                      id={`perm-${perm.id}`}
+                                      checked={isFromRole || isExtra}
+                                      disabled={isFromRole}
+                                      onCheckedChange={() => !isFromRole && togglePermission(perm.id, false)}
+                                    />
+                                    <Label htmlFor={`perm-${perm.id}`} className={`text-sm ${isFromRole ? 'text-green-700 dark:text-green-400' : ''}`}>
+                                      {perm.name}
+                                      {isFromRole && <span className="text-xs ml-1">(role)</span>}
+                                    </Label>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         ))}
@@ -335,7 +348,7 @@ export default function PermissionManagerPage() {
 
         {/* Role Management Tab */}
         <TabsContent value="roles" className="space-y-4">
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid lg:grid-cols-4 md:grid-cols-3 gap-6">
             {/* Role List */}
             <Card>
               <CardHeader>
@@ -367,7 +380,7 @@ export default function PermissionManagerPage() {
             </Card>
 
             {/* Role Permissions */}
-            <Card className="md:col-span-2">
+            <Card className="lg:col-span-3 md:col-span-2">
               <CardHeader>
                 <CardTitle className="text-lg">
                   {selectedRole ? selectedRole.name : 'Select a Role'}
@@ -386,7 +399,7 @@ export default function PermissionManagerPage() {
                         This is a system role. Changes will affect all users with this role.
                       </div>
                     )}
-                    <div className="grid gap-4 max-h-80 overflow-y-auto">
+                    <div className="grid gap-4 max-h-[50vh] overflow-y-auto">
                       {Object.entries(permissionsByModule).map(([module, perms]) => (
                         <div key={module} className="space-y-2">
                           <h4 className="font-medium text-sm text-muted-foreground uppercase">{module}</h4>

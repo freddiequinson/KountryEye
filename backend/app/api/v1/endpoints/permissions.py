@@ -400,8 +400,12 @@ async def get_user_effective_permissions(
     return {
         "user_id": user.id,
         "role": user.role.name if user.role else None,
+        "role_id": user.role.id if user.role else None,
         "is_superuser": user.is_superuser,
         "permissions": list(permissions),
+        "extra_permission_ids": [p.id for p in user.extra_permissions],
+        "additional_branch_ids": [b.id for b in user.additional_branches],
+        "role_permission_ids": [p.id for p in user.role.permissions] if user.role else [],
         "branches": branches,
         "default_page": user.role.default_page if user.role else "/dashboard"
     }
