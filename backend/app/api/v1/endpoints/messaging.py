@@ -9,7 +9,7 @@ import json
 from app.core.database import get_db, async_session_maker
 from app.api.v1.deps import get_current_active_user
 from app.models.user import User, Role
-from app.models.communication import Conversation, ConversationParticipant, Message, Notification
+from app.models.communication import Conversation, ConversationParticipant, Message, Notification, MessageReadReceipt
 from app.models.sales import Product
 from app.models.branch import Branch
 
@@ -31,12 +31,29 @@ class ConnectionManager:
         await websocket.accept()
         self.active_connections[user_id] = websocket
         self.user_conversations[user_id] = set()
+        # Broadcast online status to all connected users
+        await self.broadcast_online_status(user_id, True)
     
-    def disconnect(self, user_id: int):
+    async def disconnect(self, user_id: int):
         if user_id in self.active_connections:
             del self.active_connections[user_id]
         if user_id in self.user_conversations:
             del self.user_conversations[user_id]
+        # Broadcast offline status to all connected users
+        await self.broadcast_online_status(user_id, False)
+    
+    async def broadcast_online_status(self, user_id: int, is_online: bool):
+        """Broadcast user online/offline status to all connected users"""
+        status_msg = {
+            "type": "user_online" if is_online else "user_offline",
+            "data": {
+                "user_id": user_id,
+                "is_online": is_online
+            }
+        }
+        for uid in list(self.active_connections.keys()):
+            if uid != user_id:
+                await self.send_personal_message(uid, status_msg)
     
     def set_viewing_conversation(self, user_id: int, conversation_id: int):
         if user_id in self.user_conversations:
@@ -79,6 +96,16 @@ class MessageCreate(BaseModel):
     message_type: str = "text"
     fund_request_id: Optional[int] = None
     product_id: Optional[int] = None
+    reply_to_id: Optional[int] = None
+
+
+class ReplyInfo(BaseModel):
+    id: int
+    sender_name: str
+    content: str
+
+    class Config:
+        from_attributes = True
 
 
 class MessageResponse(BaseModel):
@@ -91,7 +118,11 @@ class MessageResponse(BaseModel):
     fund_request_id: Optional[int]
     product_id: Optional[int]
     product_name: Optional[str] = None
+    reply_to_id: Optional[int] = None
+    reply_to: Optional[ReplyInfo] = None
     is_edited: bool
+    is_delivered: bool = False
+    is_read: bool = False
     created_at: datetime
 
     class Config:
@@ -199,6 +230,42 @@ async def create_message_notification(db: AsyncSession, sender: User, recipient_
 
 
 # ============ REST ENDPOINTS ============
+
+@router.get("/unread-count")
+async def get_unread_count(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get total unread message count for current user"""
+    # Get all conversations where user is a participant
+    conversations_result = await db.execute(
+        select(ConversationParticipant)
+        .where(ConversationParticipant.user_id == current_user.id)
+    )
+    participants = conversations_result.scalars().all()
+    
+    total_unread = 0
+    for p in participants:
+        if p.last_read_at:
+            unread_result = await db.execute(
+                select(func.count(Message.id))
+                .where(and_(
+                    Message.conversation_id == p.conversation_id,
+                    Message.created_at > p.last_read_at,
+                    Message.sender_id != current_user.id
+                ))
+            )
+        else:
+            unread_result = await db.execute(
+                select(func.count(Message.id))
+                .where(and_(
+                    Message.conversation_id == p.conversation_id,
+                    Message.sender_id != current_user.id
+                ))
+            )
+        total_unread += unread_result.scalar() or 0
+    
+    return {"unread_count": total_unread}
 
 @router.get("/conversations")
 async def get_conversations(
@@ -387,6 +454,37 @@ async def get_messages(
             if product:
                 product_name = product.name
         
+        # Get reply-to info if this is a reply
+        reply_to_info = None
+        if msg.reply_to_id:
+            reply_result = await db.execute(select(Message).where(Message.id == msg.reply_to_id))
+            reply_msg = reply_result.scalar_one_or_none()
+            if reply_msg:
+                reply_sender_result = await db.execute(select(User).where(User.id == reply_msg.sender_id))
+                reply_sender = reply_sender_result.scalar_one_or_none()
+                reply_to_info = {
+                    "id": reply_msg.id,
+                    "sender_name": f"{reply_sender.first_name} {reply_sender.last_name}" if reply_sender else "Unknown",
+                    "content": reply_msg.content[:100] + "..." if len(reply_msg.content) > 100 else reply_msg.content
+                }
+        
+        # Get read receipt status for sender's own messages
+        is_delivered = False
+        is_read = False
+        if msg.sender_id == current_user.id:
+            # Check if any other participant has received/read this message
+            receipt_result = await db.execute(
+                select(MessageReadReceipt)
+                .where(and_(
+                    MessageReadReceipt.message_id == msg.id,
+                    MessageReadReceipt.user_id != current_user.id
+                ))
+            )
+            receipts = receipt_result.scalars().all()
+            if receipts:
+                is_delivered = any(r.delivered_at for r in receipts)
+                is_read = any(r.read_at for r in receipts)
+        
         response.append({
             "id": msg.id,
             "conversation_id": msg.conversation_id,
@@ -397,7 +495,11 @@ async def get_messages(
             "fund_request_id": msg.fund_request_id,
             "product_id": msg.product_id,
             "product_name": product_name,
+            "reply_to_id": msg.reply_to_id,
+            "reply_to": reply_to_info,
             "is_edited": msg.is_edited,
+            "is_delivered": is_delivered,
+            "is_read": is_read,
             "created_at": msg.created_at.isoformat()
         })
     
@@ -434,7 +536,8 @@ async def send_message(
         content=data.content,
         message_type=data.message_type,
         fund_request_id=data.fund_request_id,
-        product_id=data.product_id
+        product_id=data.product_id,
+        reply_to_id=data.reply_to_id
     )
     db.add(message)
     
@@ -467,6 +570,20 @@ async def send_message(
     
     await db.commit()
     
+    # Get reply-to info if this is a reply
+    reply_to_info = None
+    if data.reply_to_id:
+        reply_result = await db.execute(select(Message).where(Message.id == data.reply_to_id))
+        reply_msg = reply_result.scalar_one_or_none()
+        if reply_msg:
+            reply_sender_result = await db.execute(select(User).where(User.id == reply_msg.sender_id))
+            reply_sender = reply_sender_result.scalar_one_or_none()
+            reply_to_info = {
+                "id": reply_msg.id,
+                "sender_name": f"{reply_sender.first_name} {reply_sender.last_name}" if reply_sender else "Unknown",
+                "content": reply_msg.content[:100] + "..." if len(reply_msg.content) > 100 else reply_msg.content
+            }
+    
     # Prepare message for WebSocket broadcast
     ws_message = {
         "type": "new_message",
@@ -480,6 +597,8 @@ async def send_message(
             "fund_request_id": data.fund_request_id,
             "product_id": data.product_id,
             "product_name": product_name,
+            "reply_to_id": data.reply_to_id,
+            "reply_to": reply_to_info,
             "is_edited": False,
             "created_at": message.created_at.isoformat()
         }
@@ -511,9 +630,96 @@ async def send_message(
         "fund_request_id": data.fund_request_id,
         "product_id": data.product_id,
         "product_name": product_name,
+        "reply_to_id": data.reply_to_id,
+        "reply_to": reply_to_info,
         "is_edited": False,
+        "is_delivered": False,
+        "is_read": False,
         "created_at": message.created_at.isoformat()
     }
+
+
+@router.post("/conversations/{conversation_id}/mark-read")
+async def mark_messages_read(
+    conversation_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Mark all messages in a conversation as read by current user"""
+    # Verify user is participant
+    participant_result = await db.execute(
+        select(ConversationParticipant)
+        .where(and_(
+            ConversationParticipant.conversation_id == conversation_id,
+            ConversationParticipant.user_id == current_user.id
+        ))
+    )
+    participant = participant_result.scalar_one_or_none()
+    
+    if not participant:
+        raise HTTPException(status_code=403, detail="Not a participant in this conversation")
+    
+    # Get all unread messages from other users
+    messages_result = await db.execute(
+        select(Message)
+        .where(and_(
+            Message.conversation_id == conversation_id,
+            Message.sender_id != current_user.id,
+            Message.is_deleted == False
+        ))
+    )
+    messages = messages_result.scalars().all()
+    
+    now = datetime.utcnow()
+    updated_message_ids = []
+    
+    for msg in messages:
+        # Check if receipt exists
+        receipt_result = await db.execute(
+            select(MessageReadReceipt)
+            .where(and_(
+                MessageReadReceipt.message_id == msg.id,
+                MessageReadReceipt.user_id == current_user.id
+            ))
+        )
+        receipt = receipt_result.scalar_one_or_none()
+        
+        if receipt:
+            if not receipt.read_at:
+                receipt.read_at = now
+                updated_message_ids.append(msg.id)
+        else:
+            # Create new receipt with both delivered and read
+            new_receipt = MessageReadReceipt(
+                message_id=msg.id,
+                user_id=current_user.id,
+                delivered_at=now,
+                read_at=now
+            )
+            db.add(new_receipt)
+            updated_message_ids.append(msg.id)
+    
+    # Update last_read_at for participant
+    participant.last_read_at = now
+    
+    await db.commit()
+    
+    # Broadcast read receipt to sender via WebSocket
+    if updated_message_ids:
+        for msg in messages:
+            if msg.id in updated_message_ids:
+                read_receipt_msg = {
+                    "type": "message_read",
+                    "data": {
+                        "conversation_id": conversation_id,
+                        "message_id": msg.id,
+                        "read_by": current_user.id,
+                        "read_at": now.isoformat()
+                    }
+                }
+                await manager.send_personal_message(msg.sender_id, read_receipt_msg)
+    
+    return {"message": "Messages marked as read", "count": len(updated_message_ids)}
 
 
 @router.post("/conversations/{conversation_id}/typing")
@@ -688,7 +894,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
                 await websocket.send_json({"type": "pong"})
                 
     except WebSocketDisconnect:
-        manager.disconnect(user_id)
+        await manager.disconnect(user_id)
         
         # Clear typing status for all conversations
         async with async_session_maker() as db:

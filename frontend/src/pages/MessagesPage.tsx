@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   MessageSquare,
   Send,
@@ -16,6 +16,10 @@ import {
   Calendar,
   DollarSign,
   AtSign,
+  Reply,
+  CornerUpLeft,
+  Check,
+  CheckCheck,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
@@ -55,6 +59,12 @@ interface Conversation {
   updated_at: string;
 }
 
+interface ReplyInfo {
+  id: number;
+  sender_name: string;
+  content: string;
+}
+
 interface Message {
   id: number;
   conversation_id: number;
@@ -65,7 +75,11 @@ interface Message {
   fund_request_id: number | null;
   product_id: number | null;
   product_name: string | null;
+  reply_to_id: number | null;
+  reply_to: ReplyInfo | null;
   is_edited: boolean;
+  is_delivered: boolean;
+  is_read: boolean;
   created_at: string;
 }
 
@@ -145,6 +159,7 @@ export default function MessagesPage() {
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { conversationId } = useParams<{ conversationId?: string }>();
   
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messageText, setMessageText] = useState('');
@@ -167,6 +182,9 @@ export default function MessagesPage() {
   const [showAttachmentPreview, setShowAttachmentPreview] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<{type: string; id: number} | null>(null);
   
+  // Reply state
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  
   const isAdmin = user?.role === 'Admin' || user?.is_superuser;
 
   // Mention type definitions
@@ -187,6 +205,16 @@ export default function MessagesPage() {
     },
     refetchInterval: 5000, // Poll every 5 seconds for new messages
   });
+
+  // Select conversation from URL parameter
+  useEffect(() => {
+    if (conversationId && conversations.length > 0 && !selectedConversation) {
+      const conv = conversations.find((c: Conversation) => c.id === parseInt(conversationId));
+      if (conv) {
+        setSelectedConversation(conv);
+      }
+    }
+  }, [conversationId, conversations, selectedConversation]);
 
   // Fetch messages for selected conversation
   const { data: messages = [], isLoading: messagesLoading } = useQuery({
@@ -325,12 +353,13 @@ export default function MessagesPage() {
 
   // Send message mutation
   const sendMessageMutation = useMutation({
-    mutationFn: async (data: { conversationId: number; content: string; messageType?: string; fundRequestId?: number; productId?: number }) => {
+    mutationFn: async (data: { conversationId: number; content: string; messageType?: string; fundRequestId?: number; productId?: number; replyToId?: number }) => {
       const response = await api.post(`/messaging/conversations/${data.conversationId}/messages`, {
         content: data.content,
         message_type: data.messageType || 'text',
         fund_request_id: data.fundRequestId,
         product_id: data.productId,
+        reply_to_id: data.replyToId,
       });
       return response.data;
     },
@@ -338,6 +367,7 @@ export default function MessagesPage() {
       queryClient.invalidateQueries({ queryKey: ['messages', selectedConversation?.id] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       setMessageText('');
+      setReplyingTo(null);
     },
     onError: () => {
       toast({ title: 'Error', description: 'Failed to send message', variant: 'destructive' });
@@ -406,9 +436,21 @@ export default function MessagesPage() {
               description: data.data.message,
             });
           } else if (data.type === 'user_online' || data.type === 'user_offline') {
+            // Update selected conversation's online status immediately
+            if (selectedConversation && selectedConversation.other_user_id === data.data.user_id) {
+              setSelectedConversation(prev => prev ? {
+                ...prev,
+                other_user_online: data.data.is_online
+              } : null);
+            }
             // Refresh conversations to update online status
             queryClient.invalidateQueries({ queryKey: ['conversations'] });
             queryClient.invalidateQueries({ queryKey: ['messageable-users'] });
+          } else if (data.type === 'message_read') {
+            // Update message read status in real-time
+            if (selectedConversation && data.data.conversation_id === selectedConversation.id) {
+              queryClient.invalidateQueries({ queryKey: ['messages', selectedConversation.id] });
+            }
           }
         };
         
@@ -441,13 +483,16 @@ export default function MessagesPage() {
     };
   }, [user?.id]);
 
-  // Join conversation when selected
+  // Join conversation when selected and mark messages as read
   useEffect(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && selectedConversation) {
       wsRef.current.send(JSON.stringify({
         type: 'join_conversation',
         conversation_id: selectedConversation.id,
       }));
+      
+      // Mark messages as read when opening conversation
+      api.post(`/messaging/conversations/${selectedConversation.id}/mark-read`).catch(() => {});
     }
   }, [selectedConversation?.id]);
 
@@ -455,6 +500,23 @@ export default function MessagesPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Mark messages as read when new messages arrive
+  useEffect(() => {
+    if (selectedConversation && messages.length > 0) {
+      const hasUnreadFromOthers = messages.some(
+        (m: Message) => m.sender_id !== user?.id && !m.is_read
+      );
+      if (hasUnreadFromOthers) {
+        api.post(`/messaging/conversations/${selectedConversation.id}/mark-read`)
+          .then(() => {
+            queryClient.invalidateQueries({ queryKey: ['messages', selectedConversation.id] });
+            queryClient.invalidateQueries({ queryKey: ['unread-messages'] });
+          })
+          .catch(() => {});
+      }
+    }
+  }, [messages, selectedConversation?.id, user?.id]);
 
   // Handle typing indicator
   const handleTyping = () => {
@@ -505,6 +567,7 @@ export default function MessagesPage() {
       messageType: attachments.length > 0 ? attachments[0].type : 'text',
       fundRequestId: fundRequest?.id,
       productId: product?.id,
+      replyToId: replyingTo?.id,
     });
     
     // Clear after sending
@@ -918,26 +981,65 @@ export default function MessagesPage() {
                     return (
                       <div
                         key={msg.id}
-                        className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+                        className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group`}
                       >
-                        <div
-                          className={`max-w-[70%] rounded-lg p-3 ${
-                            isOwn
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted'
-                          }`}
-                        >
-                          {!isOwn && (
-                            <p className="text-xs font-medium mb-1 opacity-70">
-                              {msg.sender_name}
-                            </p>
-                          )}
-                          {/* Render message content with inline attachment cards */}
-                          {renderMessageContent(msg.content, isOwn)}
-                          
-                          <p className={`text-xs mt-1 ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                            {formatTime(msg.created_at)}
-                          </p>
+                        <div className={`flex items-end gap-1 max-w-[70%] ${isOwn ? 'flex-row-reverse' : ''}`}>
+                          <div
+                            className={`rounded-lg p-3 ${
+                              isOwn
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted'
+                            }`}
+                          >
+                            {/* Reply preview if this is a reply */}
+                            {msg.reply_to && (
+                              <div 
+                                className={`mb-2 p-2 rounded border-l-2 ${
+                                  isOwn 
+                                    ? 'bg-primary-foreground/10 border-primary-foreground/50' 
+                                    : 'bg-background/50 border-muted-foreground/50'
+                                }`}
+                              >
+                                <p className={`text-xs font-medium ${isOwn ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
+                                  <CornerUpLeft className="h-3 w-3 inline mr-1" />
+                                  {msg.reply_to.sender_name}
+                                </p>
+                                <p className={`text-xs truncate ${isOwn ? 'text-primary-foreground/60' : 'text-muted-foreground/80'}`}>
+                                  {msg.reply_to.content}
+                                </p>
+                              </div>
+                            )}
+                            {!isOwn && (
+                              <p className="text-xs font-medium mb-1 opacity-70">
+                                {msg.sender_name}
+                              </p>
+                            )}
+                            {/* Render message content with inline attachment cards */}
+                            {renderMessageContent(msg.content, isOwn)}
+                            
+                            <div className={`flex items-center gap-1 text-xs mt-1 ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                              <span>{formatTime(msg.created_at)}</span>
+                              {isOwn && (
+                                <span title={msg.is_read ? "Read" : msg.is_delivered ? "Delivered" : "Sent"}>
+                                  {msg.is_read ? (
+                                    <CheckCheck className="h-3 w-3 text-blue-400" />
+                                  ) : msg.is_delivered ? (
+                                    <CheckCheck className="h-3 w-3" />
+                                  ) : (
+                                    <Check className="h-3 w-3" />
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {/* Reply button */}
+                          <button
+                            onClick={() => setReplyingTo(msg)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded"
+                            title="Reply"
+                          >
+                            <Reply className="h-4 w-4 text-muted-foreground" />
+                          </button>
                         </div>
                       </div>
                     );
@@ -949,6 +1051,27 @@ export default function MessagesPage() {
 
             {/* Message Input */}
             <div className="p-4 border-t relative">
+              {/* Reply preview bar */}
+              {replyingTo && (
+                <div className="mb-2 p-2 bg-muted rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CornerUpLeft className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Replying to {replyingTo.sender_name}
+                      </p>
+                      <p className="text-sm truncate">{replyingTo.content}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setReplyingTo(null)} 
+                    className="p-1 hover:bg-background rounded flex-shrink-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+              
               {/* Show attachments */}
               {attachments.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-2">

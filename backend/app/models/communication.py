@@ -125,6 +125,9 @@ class Message(Base):
     content = Column(Text, nullable=False)
     message_type = Column(String(20), default="text")
     
+    # Reply to another message
+    reply_to_id = Column(Integer, ForeignKey("messages.id"), nullable=True)
+    
     # Attachments/References
     fund_request_id = Column(Integer, ForeignKey("fund_requests.id"))
     product_id = Column(Integer, ForeignKey("products.id"))
@@ -141,6 +144,29 @@ class Message(Base):
     sender = relationship("User", backref="sent_messages")
     fund_request = relationship("FundRequest")
     product = relationship("Product")
+    reply_to = relationship("Message", remote_side=[id], backref="replies")
+    read_receipts = relationship("MessageReadReceipt", back_populates="message", cascade="all, delete-orphan")
+
+
+class MessageReadReceipt(Base):
+    """Track message delivery and read status per user"""
+    __tablename__ = "message_read_receipts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    message_id = Column(Integer, ForeignKey("messages.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    delivered_at = Column(DateTime)
+    read_at = Column(DateTime)
+    
+    # Relationships
+    message = relationship("Message", back_populates="read_receipts")
+    user = relationship("User")
+
+    __table_args__ = (
+        # Unique constraint: one receipt per message per user
+        {'sqlite_autoincrement': True},
+    )
 
 
 # ============ NOTIFICATION SYSTEM ============

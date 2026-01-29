@@ -78,13 +78,17 @@ export default function FrontDeskDashboard() {
             <div className="text-2xl font-bold text-red-600">{stats?.pendingPayments || 0}</div>
           </CardContent>
         </Card>
-        <Card className={stats?.pendingRegistrations > 0 ? "border-blue-500" : ""}>
+        <Card 
+          className={`cursor-pointer hover:shadow-md transition-shadow ${stats?.pendingRegistrations > 0 ? "border-blue-500" : ""}`}
+          onClick={() => navigate('/frontdesk?tab=registrations')}
+        >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">New Registrations</CardTitle>
             <UserPlus className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">{stats?.pendingRegistrations || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">Click to review</p>
           </CardContent>
         </Card>
       </div>

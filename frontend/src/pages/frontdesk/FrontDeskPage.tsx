@@ -97,6 +97,14 @@ export default function FrontDeskPage() {
     }
   }, [location.state]);
 
+  // Handle tab query parameter
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'registrations') {
+      setActiveTab('registrations');
+    }
+  }, [searchParams]);
+
   const [visitForm, setVisitForm] = useState({
     visit_type: 'full_checkup',
     reason: '',

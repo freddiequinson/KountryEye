@@ -105,6 +105,7 @@ function App() {
                   <Route path="/fund-requests" element={<FundRequestsPage />} />
                   <Route path="/admin/fund-requests" element={<FundRequestsPage />} />
                   <Route path="/messages" element={<MessagesPage />} />
+                  <Route path="/messages/:conversationId" element={<MessagesPage />} />
                   <Route path="/admin/user-profile/:userId" element={<UserProfilePage />} />
                   <Route path="/help" element={<HelpPage />} />
                 </Routes>

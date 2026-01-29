@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import { useLocation, useNavigate } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
+import api from "@/lib/api"
 import {
   LayoutDashboard,
   Users,
@@ -102,6 +104,18 @@ function SidebarInnerContent() {
   const isCollapsed = state === 'collapsed'
   const [openSection, setOpenSection] = React.useState<string | null>('main')
   const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false)
+
+  // Fetch unread message count
+  const { data: unreadData } = useQuery({
+    queryKey: ['unread-messages'],
+    queryFn: async () => {
+      const response = await api.get('/messaging/unread-count')
+      return response.data
+    },
+    refetchInterval: 30000, // Refresh every 30 seconds
+    enabled: !!user,
+  })
+  const unreadCount = unreadData?.unread_count || 0
 
   const handleLogout = () => {
     setShowLogoutConfirm(false)
@@ -236,7 +250,12 @@ function SidebarInnerContent() {
                           data-tour={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
                         >
                           <item.icon />
-                          <span>{item.title}</span>
+                          <span className="flex-1">{item.title}</span>
+                          {item.title === "Messages" && unreadCount > 0 && (
+                            <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground">
+                              {unreadCount > 99 ? '99+' : unreadCount}
+                            </span>
+                          )}
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     ))}

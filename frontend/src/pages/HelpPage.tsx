@@ -70,10 +70,13 @@ const adminHelpSections: HelpSection[] = [
       'View and manage the patient queue',
       'Update patient contact information',
       'Print patient cards and receipts',
+      'Review and approve self-registered patients from the Registrations tab',
     ],
     tips: [
       'Always verify patient phone numbers during check-in',
       'Use the search function to quickly find returning patients',
+      'Check the New Registrations card on your dashboard for patients who registered via the public form',
+      'Click on the New Registrations card to go directly to pending registrations',
     ],
   },
   {
