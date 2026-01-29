@@ -373,7 +373,8 @@ async def get_user_effective_permissions(
         .options(
             selectinload(User.role).selectinload(Role.permissions),
             selectinload(User.extra_permissions),
-            selectinload(User.additional_branches)
+            selectinload(User.additional_branches),
+            selectinload(User.branch)
         )
         .where(User.id == user_id)
     )
