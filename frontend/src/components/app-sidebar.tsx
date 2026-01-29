@@ -60,6 +60,7 @@ type NavItem = {
 
 const allNavItems: NavItem[] = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, permissions: ["dashboard.view"] },
+  { title: "Attendance", url: "/attendance", icon: Clock, permissions: ["attendance.view"] },
   { title: "Front Desk", url: "/frontdesk", icon: ClipboardList, permissions: ["dashboard.frontdesk", "visits.create"] },
   { title: "POS", url: "/sales/pos", icon: ShoppingCart, permissions: ["pos.access"] },
   { title: "Doctor Queue", url: "/doctor/queue", icon: Stethoscope, permissions: ["clinical.queue"] },
@@ -72,7 +73,8 @@ const allNavItems: NavItem[] = [
   { title: "Marketing", url: "/marketing", icon: Megaphone, permissions: ["marketing.view"] },
   { title: "Accounting", url: "/accounting", icon: BarChart3, permissions: ["accounting.view"] },
   { title: "Revenue", url: "/admin/revenue", icon: DollarSign, permissions: ["revenue.view"] },
-  { title: "Branches", url: "/admin/branches", icon: Building2, permissions: ["branches.manage"] },
+  // Branches page removed - use Settings page instead
+  // { title: "Branches", url: "/admin/branches", icon: Building2, permissions: ["branches.manage"] },
   { title: "Users", url: "/admin/users", icon: UserCog, permissions: ["employees.manage"] },
   { title: "Employees", url: "/admin/employees", icon: UsersRound, permissions: ["employees.view"] },
   { title: "Permissions", url: "/admin/permissions", icon: KeyRound, permissions: ["permissions.manage"] },
@@ -115,13 +117,21 @@ function SidebarInnerContent() {
   // Get user permissions - from the permissions array in user object
   const userPermissions: string[] = user?.permissions || []
   
+  // If user has no permissions assigned, they should still see basic navigation
+  const hasNoPermissions = userPermissions.length === 0 && !user?.is_superuser
+  
   // Debug: log permissions
-  console.log('User permissions:', userPermissions, 'Role:', userRole, 'Is superuser:', user?.is_superuser)
+  console.log('User permissions:', userPermissions, 'Role:', userRole, 'Is superuser:', user?.is_superuser, 'Has no permissions:', hasNoPermissions)
   
   // Check if user has any of the required permissions
   const hasPermission = (permCodes: string[] | undefined): boolean => {
     if (!permCodes || permCodes.length === 0) return true
     if (user?.is_superuser) return true
+    // If user has no permissions at all, show basic items (Dashboard, Attendance, Messages)
+    if (hasNoPermissions) {
+      const basicPermissions = ["dashboard.view", "attendance.view", "messages.view"]
+      return permCodes.some(code => basicPermissions.includes(code))
+    }
     // Check if user has any of the required permissions
     return permCodes.some(code => userPermissions.includes(code))
   }
@@ -140,7 +150,7 @@ function SidebarInnerContent() {
   }
 
   const mainItems = filterByPermission(allNavItems.filter(i => 
-    ["/", "/frontdesk", "/sales/pos", "/doctor/queue", "/patients", "/fund-requests", "/messages"].includes(i.url)
+    ["/", "/attendance", "/frontdesk", "/sales/pos", "/doctor/queue", "/patients", "/fund-requests", "/messages"].includes(i.url)
   ))
   
   const managementItems = filterByPermission(allNavItems.filter(i => 
@@ -148,7 +158,7 @@ function SidebarInnerContent() {
   ))
   
   const adminItems = filterByPermission(allNavItems.filter(i => 
-    ["/marketing", "/accounting", "/admin/revenue", "/admin/branches", "/admin/users", "/admin/employees", "/admin/permissions", "/admin/analytics"].includes(i.url)
+    ["/marketing", "/accounting", "/admin/revenue", "/admin/users", "/admin/employees", "/admin/permissions", "/admin/analytics"].includes(i.url)
   ))
 
   const getRoleDisplayName = () => {

@@ -21,7 +21,8 @@ import CreateTransferPage from '@/pages/inventory/CreateTransferPage'
 import AssetsPage from '@/pages/inventory/AssetsPage'
 import MarketingPage from '@/pages/marketing/MarketingPage'
 import AccountingPage from '@/pages/accounting/AccountingPage'
-import BranchesPage from '@/pages/admin/BranchesPage'
+// BranchesPage removed - use Settings page instead
+// import BranchesPage from '@/pages/admin/BranchesPage'
 import DoctorQueuePage from '@/pages/doctor/DoctorQueuePage'
 import ConsultationPage from '@/pages/doctor/ConsultationPage'
 import FrontDeskPage from '@/pages/frontdesk/FrontDeskPage'
@@ -83,7 +84,8 @@ function App() {
                   <Route path="/inventory/assets" element={<AssetsPage />} />
                   <Route path="/marketing" element={<MarketingPage />} />
                   <Route path="/accounting" element={<AccountingPage />} />
-                  <Route path="/admin/branches" element={<BranchesPage />} />
+                  {/* BranchesPage removed - use Settings page instead */}
+                  {/* <Route path="/admin/branches" element={<BranchesPage />} /> */}
                   <Route path="/doctor/queue" element={<DoctorQueuePage />} />
                   <Route path="/doctor/consultation/:visitId" element={<ConsultationPage />} />
                   <Route path="/frontdesk" element={<FrontDeskPage />} />

@@ -22,6 +22,16 @@ class AttendanceClockOut(BaseModel):
     longitude: Optional[float] = None
 
 
+class AttendanceUserInfo(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    email: str
+    
+    class Config:
+        from_attributes = True
+
+
 class AttendanceResponse(BaseModel):
     id: int
     user_id: int
@@ -38,6 +48,7 @@ class AttendanceResponse(BaseModel):
     clock_in_within_geofence: Optional[bool] = None
     clock_out_within_geofence: Optional[bool] = None
     created_at: Optional[datetime] = None
+    user: Optional[AttendanceUserInfo] = None
 
     class Config:
         from_attributes = True
