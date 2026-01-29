@@ -73,7 +73,7 @@ async def export_patients(
             ws.title = "Patients"
             
             # Headers
-            headers = ["Patient Number", "First Name", "Last Name", "Phone", "Email", "Gender", "Date of Birth", "Address", "Occupation", "Insurance Provider", "Insurance Number", "Created At"]
+            headers = ["Patient Number", "First Name", "Last Name", "Phone", "Email", "Gender", "Date of Birth", "Address", "Occupation", "Emergency Contact", "Emergency Phone", "Created At"]
             ws.append(headers)
             
             # Data
@@ -88,8 +88,8 @@ async def export_patients(
                     p.date_of_birth.strftime("%Y-%m-%d") if p.date_of_birth else "",
                     p.address or "",
                     p.occupation or "",
-                    p.insurance_provider or "",
-                    p.insurance_number or "",
+                    p.emergency_contact_name or "",
+                    p.emergency_contact_phone or "",
                     p.created_at.strftime("%Y-%m-%d %H:%M") if p.created_at else ""
                 ])
             
@@ -110,7 +110,7 @@ async def export_patients(
     writer = csv.writer(output)
     
     # Headers
-    writer.writerow(["Patient Number", "First Name", "Last Name", "Phone", "Email", "Gender", "Date of Birth", "Address", "Occupation", "Insurance Provider", "Insurance Number", "Created At"])
+    writer.writerow(["Patient Number", "First Name", "Last Name", "Phone", "Email", "Gender", "Date of Birth", "Address", "Occupation", "Emergency Contact", "Emergency Phone", "Created At"])
     
     # Data
     for p in patients:
@@ -124,8 +124,8 @@ async def export_patients(
             p.date_of_birth.strftime("%Y-%m-%d") if p.date_of_birth else "",
             p.address or "",
             p.occupation or "",
-            p.insurance_provider or "",
-            p.insurance_number or "",
+            p.emergency_contact_name or "",
+            p.emergency_contact_phone or "",
             p.created_at.strftime("%Y-%m-%d %H:%M") if p.created_at else ""
         ])
     
