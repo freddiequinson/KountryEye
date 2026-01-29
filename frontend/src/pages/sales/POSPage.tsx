@@ -233,7 +233,7 @@ export default function POSPage() {
                   <CardContent className="p-4">
                     <div className="aspect-square bg-muted rounded-md mb-2 flex items-center justify-center relative overflow-hidden">
                       {product.image_url ? (
-                        <img src={`http://localhost:8000${product.image_url}`} alt={product.name} className="w-full h-full object-cover rounded-md" />
+                        <img src={product.image_url} alt={product.name} className="w-full h-full object-cover rounded-md" />
                       ) : (
                         <ShoppingCart className="h-8 w-8 text-muted-foreground" />
                       )}

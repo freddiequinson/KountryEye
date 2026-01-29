@@ -599,14 +599,12 @@ export default function ProductDetailPage() {
                     <div className="flex items-start gap-4">
                       {product.image_url ? (
                         <img 
-                          src={`http://localhost:8000${product.image_url}`} 
+                          src={product.image_url} 
                           alt={product.name}
                           className="w-32 h-32 object-cover rounded-lg border"
                           onError={(e) => {
-                            console.error('Image load error:', product.image_url);
                             e.currentTarget.style.display = 'none';
                           }}
-                          onLoad={() => console.log('Image loaded:', product.image_url)}
                         />
                       ) : (
                         <div className="w-32 h-32 bg-muted rounded-lg border flex items-center justify-center">

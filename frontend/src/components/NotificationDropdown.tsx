@@ -66,6 +66,7 @@ export default function NotificationDropdown() {
       return response.data;
     },
     refetchInterval: 15000, // Poll every 15 seconds
+    staleTime: 0, // Always fetch fresh data
   });
 
   const unreadCount = countData?.unread_count || 0;
@@ -76,8 +77,8 @@ export default function NotificationDropdown() {
       await api.post(`/notifications/${notificationId}/read`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications-count'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['notifications-count'], refetchType: 'all' });
     },
   });
 
@@ -87,8 +88,8 @@ export default function NotificationDropdown() {
       await api.post('/notifications/read-all');
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications-count'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['notifications-count'], refetchType: 'all' });
     },
   });
 
