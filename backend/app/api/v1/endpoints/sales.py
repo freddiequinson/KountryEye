@@ -315,10 +315,11 @@ async def create_product(
     
     sku = product_in.sku or generate_sku(product_in.category_id, count)
     
-    # Extract initial_stock and branch_id if provided
-    product_data = product_in.model_dump(exclude={"sku", "initial_stock", "branch_id"})
+    # Extract initial_stock, branch_id, and reorder_level if provided
+    product_data = product_in.model_dump(exclude={"sku", "initial_stock", "branch_id", "reorder_level"})
     initial_stock = getattr(product_in, 'initial_stock', None) or 0
     branch_id = getattr(product_in, 'branch_id', None) or 1
+    reorder_level = getattr(product_in, 'reorder_level', None) or 10
     
     product = Product(**product_data, sku=sku)
     db.add(product)
@@ -330,7 +331,7 @@ async def create_product(
             branch_id=branch_id,
             product_id=product.id,
             quantity=initial_stock,
-            min_quantity=product_in.reorder_level or 10
+            min_quantity=reorder_level
         )
         db.add(stock)
     
