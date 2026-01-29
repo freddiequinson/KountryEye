@@ -74,13 +74,14 @@ export default function UserProfilePage() {
   });
 
   // Fetch activity logs
-  const { data: activities } = useQuery({
+  const { data: activities, refetch: refetchActivities } = useQuery({
     queryKey: ['user-activity', userId],
     queryFn: async () => {
       const response = await api.get(`/user-profile/${userId}/activity`);
       return response.data;
     },
-    enabled: !!userId && activeTab === 'activity',
+    enabled: !!userId,
+    staleTime: 0, // Always refetch when tab is activated
   });
 
   // Fetch fund requests

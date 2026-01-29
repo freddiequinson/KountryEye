@@ -126,6 +126,7 @@ export default function EmployeeDetailPage() {
       return response.data;
     },
     enabled: !!employeeId,
+    staleTime: 0, // Always refetch to get latest activities
   });
   
   const activity = activityData?.items || activityData || [];

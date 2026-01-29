@@ -27,7 +27,7 @@ async def is_admin(db: AsyncSession, user: User) -> bool:
     if user.role_id:
         role_result = await db.execute(select(Role).where(Role.id == user.role_id))
         role = role_result.scalar_one_or_none()
-        if role and role.name == "Admin":
+        if role and role.name.lower() == "admin":
             return True
     return False
 
