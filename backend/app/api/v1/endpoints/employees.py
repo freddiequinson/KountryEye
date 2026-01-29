@@ -482,18 +482,56 @@ async def delete_employee(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Delete an employee permanently"""
-    if not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Only superusers can delete employees")
-    
+    """Delete an employee - hard delete if no records, soft delete (deactivate) if has records"""
     result = await db.execute(select(User).where(User.id == employee_id))
     employee = result.scalar_one_or_none()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     
-    await db.delete(employee)
-    await db.commit()
-    return {"message": "Employee deleted successfully"}
+    # Check if employee has any related records
+    has_attendance = await db.execute(
+        select(func.count(Attendance.id)).where(Attendance.user_id == employee_id)
+    )
+    attendance_count = has_attendance.scalar() or 0
+    
+    has_sales = await db.execute(
+        select(func.count(Sale.id)).where(Sale.created_by_id == employee_id)
+    )
+    sales_count = has_sales.scalar() or 0
+    
+    has_tasks = await db.execute(
+        select(func.count(Task.id)).where(
+            (Task.assigned_to_id == employee_id) | (Task.assigned_by_id == employee_id)
+        )
+    )
+    tasks_count = has_tasks.scalar() or 0
+    
+    has_consultations = await db.execute(
+        select(func.count(Consultation.id)).where(Consultation.doctor_id == employee_id)
+    )
+    consultations_count = has_consultations.scalar() or 0
+    
+    total_records = attendance_count + sales_count + tasks_count + consultations_count
+    
+    if total_records > 0:
+        # Soft delete - just deactivate
+        employee.is_active = False
+        await db.commit()
+        return {
+            "message": f"Employee deactivated (has {total_records} related records)",
+            "deleted": False,
+            "deactivated": True,
+            "record_count": total_records
+        }
+    else:
+        # Hard delete - no related records
+        await db.delete(employee)
+        await db.commit()
+        return {
+            "message": "Employee deleted permanently",
+            "deleted": True,
+            "deactivated": False
+        }
 
 
 @router.post("/{employee_id}/reset-password")
