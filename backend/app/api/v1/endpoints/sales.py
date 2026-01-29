@@ -370,7 +370,12 @@ async def update_product(
         setattr(product, field, value)
     
     await db.commit()
-    await db.refresh(product)
+    
+    # Eagerly load the category relationship to avoid async context issues
+    result = await db.execute(
+        select(Product).options(selectinload(Product.category)).where(Product.id == product_id)
+    )
+    product = result.scalar_one()
     return product
 
 

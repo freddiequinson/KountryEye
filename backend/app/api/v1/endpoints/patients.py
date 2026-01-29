@@ -747,6 +747,7 @@ async def get_pending_payment_visits(
     # This ensures partial payments still show up until fully paid
     query = select(Visit).options(joinedload(Visit.patient)).where(
         func.date(Visit.visit_date) == today,
+        Visit.visit_type != "enquiry",  # Exclude enquiry visits - they don't require payment
         or_(
             Visit.status == "pending_payment",
             Visit.payment_status == "partial"

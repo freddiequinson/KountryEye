@@ -815,7 +815,7 @@ export default function FrontDeskPage() {
       </Tabs>
 
       <Dialog open={isVisitDialogOpen} onOpenChange={setIsVisitDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Record New Visit</DialogTitle>
           </DialogHeader>

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search, Eye, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
+import { useAuthStore } from '@/stores/auth';
 import { Patient } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,6 +49,11 @@ export default function PatientsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuthStore();
+  
+  // Check if user is frontdesk (hide export buttons)
+  const roleName = typeof user?.role === 'string' ? user.role : user?.role?.name;
+  const isFrontdesk = roleName?.toLowerCase() === 'frontdesk' || roleName?.toLowerCase() === 'front desk';
 
   const { data: patients = [], isLoading } = useQuery({
     queryKey: ['patients', search],
@@ -90,44 +96,48 @@ export default function PatientsPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold" data-tour="page-title">Patients</h1>
           <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              onClick={async () => {
-                try {
-                  const response = await api.get('/patients/export?format=csv', { responseType: 'blob' });
-                  const url = window.URL.createObjectURL(new Blob([response.data]));
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = 'patients.csv';
-                  a.click();
-                  window.URL.revokeObjectURL(url);
-                } catch (e) {
-                  toast({ title: 'Export failed', variant: 'destructive' });
-                }
-              }}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Export CSV
-            </Button>
-            <Button 
-              variant="outline" 
-              onClick={async () => {
-                try {
-                  const response = await api.get('/patients/export?format=xlsx', { responseType: 'blob' });
-                  const url = window.URL.createObjectURL(new Blob([response.data]));
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = 'patients.xlsx';
-                  a.click();
-                  window.URL.revokeObjectURL(url);
-                } catch (e) {
-                  toast({ title: 'Export failed', variant: 'destructive' });
-                }
-              }}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Export Excel
-            </Button>
+            {!isFrontdesk && (
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={async () => {
+                    try {
+                      const response = await api.get('/patients/export?format=csv', { responseType: 'blob' });
+                      const url = window.URL.createObjectURL(new Blob([response.data]));
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'patients.csv';
+                      a.click();
+                      window.URL.revokeObjectURL(url);
+                    } catch (e) {
+                      toast({ title: 'Export failed', variant: 'destructive' });
+                    }
+                  }}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Export CSV
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={async () => {
+                    try {
+                      const response = await api.get('/patients/export?format=xlsx', { responseType: 'blob' });
+                      const url = window.URL.createObjectURL(new Blob([response.data]));
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'patients.xlsx';
+                      a.click();
+                      window.URL.revokeObjectURL(url);
+                    } catch (e) {
+                      toast({ title: 'Export failed', variant: 'destructive' });
+                    }
+                  }}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Export Excel
+                </Button>
+              </>
+            )}
             <Button onClick={() => setIsDialogOpen(true)} data-tour="add-patient">
               <Plus className="mr-2 h-4 w-4" />
               New Patient
