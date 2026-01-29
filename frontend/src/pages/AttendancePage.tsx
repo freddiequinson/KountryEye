@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 
 interface AttendanceRecord {
   id: number;
@@ -36,6 +37,7 @@ export default function AttendancePage() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [showClockOutConfirm, setShowClockOutConfirm] = useState(false);
 
   // Update current time every second
   useEffect(() => {
@@ -161,6 +163,7 @@ export default function AttendancePage() {
   };
 
   const handleClockOut = async () => {
+    setShowClockOutConfirm(false);
     setIsGettingLocation(true);
     setLocationError(null);
     
@@ -301,7 +304,7 @@ export default function AttendancePage() {
                 <Button 
                   className="flex-1 h-16 text-lg"
                   variant="destructive"
-                  onClick={handleClockOut}
+                  onClick={() => setShowClockOutConfirm(true)}
                   disabled={clockOutMutation.isPending || isGettingLocation}
                 >
                   <XCircle className="mr-2 h-5 w-5" />
@@ -362,6 +365,30 @@ export default function AttendancePage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Clock Out Confirmation Dialog */}
+      <Dialog open={showClockOutConfirm} onOpenChange={setShowClockOutConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Clock Out</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to clock out? This will end your shift for today.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowClockOutConfirm(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleClockOut}
+              disabled={clockOutMutation.isPending || isGettingLocation}
+            >
+              {isGettingLocation ? 'Getting Location...' : 'Yes, Clock Out'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

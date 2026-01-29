@@ -49,6 +49,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
 
 type NavItem = {
   title: string
@@ -99,8 +101,10 @@ function SidebarInnerContent() {
   const { state } = useSidebar()
   const isCollapsed = state === 'collapsed'
   const [openSection, setOpenSection] = React.useState<string | null>('main')
+  const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false)
 
   const handleLogout = () => {
+    setShowLogoutConfirm(false)
     logout()
     navigate("/login")
   }
@@ -378,13 +382,33 @@ function SidebarInnerContent() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton tooltip="Logout" onClick={handleLogout}>
+            <SidebarMenuButton tooltip="Logout" onClick={() => setShowLogoutConfirm(true)}>
               <LogOut />
               <span>Logout</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+
+      {/* Logout Confirmation Dialog */}
+      <Dialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Logout</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to logout? You will need to sign in again to access the system.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLogoutConfirm(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleLogout}>
+              Yes, Logout
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
