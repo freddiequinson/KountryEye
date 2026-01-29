@@ -43,6 +43,7 @@ import AnalyticsPage from '@/pages/admin/AnalyticsPage'
 import FundRequestsPage from '@/pages/FundRequestsPage'
 import MessagesPage from '@/pages/MessagesPage'
 import UserProfilePage from '@/pages/admin/UserProfilePage'
+import NotificationsPage from '@/pages/NotificationsPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -108,6 +109,7 @@ function App() {
                   <Route path="/messages/:conversationId" element={<MessagesPage />} />
                   <Route path="/admin/user-profile/:userId" element={<UserProfilePage />} />
                   <Route path="/help" element={<HelpPage />} />
+                  <Route path="/notifications" element={<NotificationsPage />} />
                 </Routes>
               </DashboardLayout>
             </ProtectedRoute>

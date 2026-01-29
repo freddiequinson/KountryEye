@@ -659,6 +659,20 @@ async def mark_messages_read(
     if not participant:
         raise HTTPException(status_code=403, detail="Not a participant in this conversation")
     
+    # Also mark any message notifications for this conversation as read
+    from sqlalchemy import update
+    await db.execute(
+        update(Notification)
+        .where(and_(
+            Notification.user_id == current_user.id,
+            Notification.notification_type == "message",
+            Notification.reference_type == "conversation",
+            Notification.reference_id == conversation_id,
+            Notification.is_read == False
+        ))
+        .values(is_read=True, read_at=datetime.utcnow())
+    )
+    
     # Get all unread messages from other users
     messages_result = await db.execute(
         select(Message)
