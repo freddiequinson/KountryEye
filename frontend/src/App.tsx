@@ -44,6 +44,7 @@ import FundRequestsPage from '@/pages/FundRequestsPage'
 import MessagesPage from '@/pages/MessagesPage'
 import UserProfilePage from '@/pages/admin/UserProfilePage'
 import NotificationsPage from '@/pages/NotificationsPage'
+import ActivityTracker from '@/components/ActivityTracker'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -65,6 +66,7 @@ function App() {
           path="/*"
           element={
             <ProtectedRoute>
+              <ActivityTracker />
               <DashboardLayout>
                 <Routes>
                   <Route path="/" element={<DashboardPage />} />

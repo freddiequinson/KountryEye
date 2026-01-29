@@ -119,14 +119,16 @@ export default function EmployeeDetailPage() {
     enabled: !!employeeId,
   });
 
-  const { data: activity = [] } = useQuery({
+  const { data: activityData } = useQuery({
     queryKey: ['employee-activity', employeeId],
     queryFn: async () => {
-      const response = await api.get(`/employees/${employeeId}/activity?limit=50`);
+      const response = await api.get(`/employees/${employeeId}/activity?limit=100`);
       return response.data;
     },
     enabled: !!employeeId,
   });
+  
+  const activity = activityData?.items || activityData || [];
 
   const { data: tasks = [] } = useQuery({
     queryKey: ['employee-tasks', employeeId],

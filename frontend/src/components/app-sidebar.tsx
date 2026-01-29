@@ -4,6 +4,7 @@ import * as React from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import api from "@/lib/api"
+import { activityLogger } from "@/lib/activityLogger"
 import {
   LayoutDashboard,
   Users,
@@ -119,6 +120,7 @@ function SidebarInnerContent() {
 
   const handleLogout = () => {
     setShowLogoutConfirm(false)
+    activityLogger.logout()
     logout()
     navigate("/login")
   }

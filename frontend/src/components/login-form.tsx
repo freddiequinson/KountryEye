@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuthStore } from "@/stores/auth"
 import api from "@/lib/api"
+import { activityLogger } from "@/lib/activityLogger"
 
 export function LoginForm({
   className,
@@ -41,6 +42,9 @@ export function LoginForm({
       console.log('Login user data:', userResponse.data)
       console.log('User permissions:', userResponse.data.permissions)
       setAuth(userResponse.data, data.access_token)
+      
+      // Log login activity
+      activityLogger.login()
       
       // Redirect based on role's default page
       const defaultPage = userResponse.data.role?.default_page || "/dashboard"

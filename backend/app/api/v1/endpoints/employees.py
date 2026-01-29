@@ -412,7 +412,21 @@ async def log_activity(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Log user activity"""
+    """Log user activity and auto-cleanup old entries"""
+    # First, cleanup old activities (older than 7 days) for this user
+    # Do this occasionally (1 in 10 requests) to avoid performance impact
+    import random
+    if random.random() < 0.1:
+        week_ago = datetime.utcnow() - timedelta(days=7)
+        await db.execute(
+            ActivityLog.__table__.delete().where(
+                and_(
+                    ActivityLog.user_id == current_user.id,
+                    ActivityLog.created_at < week_ago
+                )
+            )
+        )
+    
     activity = ActivityLog(
         user_id=current_user.id,
         action=activity_in.action,
@@ -574,21 +588,39 @@ async def get_employee_attendance(
     return result.scalars().all()
 
 
-@router.get("/{employee_id}/activity", response_model=List[ActivityLogResponse])
+@router.get("/{employee_id}/activity")
 async def get_employee_activity(
     employee_id: int,
+    skip: int = 0,
     limit: int = 50,
+    module: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get activity logs for an employee"""
-    result = await db.execute(
-        select(ActivityLog)
-        .where(ActivityLog.user_id == employee_id)
-        .order_by(ActivityLog.created_at.desc())
-        .limit(limit)
-    )
-    return result.scalars().all()
+    """Get activity logs for an employee with pagination"""
+    # Get total count
+    count_query = select(func.count(ActivityLog.id)).where(ActivityLog.user_id == employee_id)
+    if module:
+        count_query = count_query.where(ActivityLog.module == module)
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+    
+    # Get activities
+    query = select(ActivityLog).where(ActivityLog.user_id == employee_id)
+    if module:
+        query = query.where(ActivityLog.module == module)
+    query = query.order_by(ActivityLog.created_at.desc()).offset(skip).limit(limit)
+    
+    result = await db.execute(query)
+    activities = result.scalars().all()
+    
+    return {
+        "items": activities,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "has_more": skip + len(activities) < total
+    }
 
 
 @router.get("/{employee_id}/stats")
