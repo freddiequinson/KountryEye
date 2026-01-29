@@ -169,7 +169,13 @@ export default function MessagesPage() {
   const [otherTyping, setOtherTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const selectedConversationRef = useRef<Conversation | null>(null);
   const navigate = useNavigate();
+  
+  // Keep ref in sync with state for WebSocket callbacks
+  useEffect(() => {
+    selectedConversationRef.current = selectedConversation;
+  }, [selectedConversation]);
   
   // @ Mention state
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
@@ -226,6 +232,8 @@ export default function MessagesPage() {
     },
     enabled: !!selectedConversation,
     refetchInterval: 3000, // Poll every 3 seconds
+    staleTime: 0, // Always consider data stale to fetch immediately
+    refetchOnMount: 'always', // Always refetch when conversation changes
   });
 
   // Fetch messageable users
@@ -427,7 +435,9 @@ export default function MessagesPage() {
             queryClient.invalidateQueries({ queryKey: ['messages', data.data.conversation_id] });
             queryClient.invalidateQueries({ queryKey: ['conversations'] });
           } else if (data.type === 'typing') {
-            if (data.data.conversation_id === selectedConversation?.id) {
+            // Use ref to get current selected conversation (avoids stale closure)
+            const currentConv = selectedConversationRef.current;
+            if (currentConv && data.data.conversation_id === currentConv.id) {
               setOtherTyping(data.data.is_typing);
             }
           } else if (data.type === 'notification') {
@@ -437,7 +447,8 @@ export default function MessagesPage() {
             });
           } else if (data.type === 'user_online' || data.type === 'user_offline') {
             // Update selected conversation's online status immediately
-            if (selectedConversation && selectedConversation.other_user_id === data.data.user_id) {
+            const currentConv = selectedConversationRef.current;
+            if (currentConv && currentConv.other_user_id === data.data.user_id) {
               setSelectedConversation(prev => prev ? {
                 ...prev,
                 other_user_online: data.data.is_online
@@ -448,8 +459,9 @@ export default function MessagesPage() {
             queryClient.invalidateQueries({ queryKey: ['messageable-users'] });
           } else if (data.type === 'message_read') {
             // Update message read status in real-time
-            if (selectedConversation && data.data.conversation_id === selectedConversation.id) {
-              queryClient.invalidateQueries({ queryKey: ['messages', selectedConversation.id] });
+            const currentConv = selectedConversationRef.current;
+            if (currentConv && data.data.conversation_id === currentConv.id) {
+              queryClient.invalidateQueries({ queryKey: ['messages', currentConv.id] });
             }
           }
         };
