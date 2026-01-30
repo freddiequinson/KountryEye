@@ -860,6 +860,14 @@ export default function MessagesPage() {
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      
+      // Easter egg: Check for /gif command before sending
+      if (messageText.trim().toLowerCase() === '/gif') {
+        setShowGifPicker(true);
+        setMessageText('');
+        return;
+      }
+      
       handleSendMessage();
     }
   };

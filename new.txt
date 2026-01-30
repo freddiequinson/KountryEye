@@ -10,4 +10,4 @@ sudo systemctl restart nginx
 # Check backend status
 sudo systemctl status kountryeye
 
-ip: 2
+ip: 144.126.199.94
