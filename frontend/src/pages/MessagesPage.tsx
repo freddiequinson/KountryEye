@@ -42,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import GifPicker from '@/components/GifPicker';
 
 interface Conversation {
   id: number;
@@ -187,6 +188,9 @@ export default function MessagesPage() {
   // Attachment preview modal state
   const [showAttachmentPreview, setShowAttachmentPreview] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<{type: string; id: number} | null>(null);
+  
+  // GIF picker easter egg state
+  const [showGifPicker, setShowGifPicker] = useState(false);
   
   // Reply state
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -586,6 +590,19 @@ export default function MessagesPage() {
     setAttachments([]);
   };
 
+  // Handle sending a GIF (easter egg)
+  const handleSendGif = (gifUrl: string) => {
+    if (!selectedConversation) return;
+    
+    sendMessageMutation.mutate({
+      conversationId: selectedConversation.id,
+      content: `[gif:${gifUrl}]`,
+      messageType: 'gif',
+    });
+    
+    setShowGifPicker(false);
+  };
+
   const handleViewUserProfile = (userId: number) => {
     if (isAdmin) {
       navigate(`/admin/user-profile/${userId}`);
@@ -598,6 +615,13 @@ export default function MessagesPage() {
     const cursorPos = e.target.selectionStart || 0;
     setMessageText(value);
     handleTyping();
+    
+    // Easter egg: Check for /gif command
+    if (value.trim().toLowerCase() === '/gif') {
+      setShowGifPicker(true);
+      setMessageText('');
+      return;
+    }
     
     // Check for @ trigger - match @type:search pattern (allows spaces in search)
     const textBeforeCursor = value.substring(0, cursorPos);
@@ -749,6 +773,21 @@ export default function MessagesPage() {
 
   // Parse message content and render inline attachment references as clickable cards
   const renderMessageContent = (content: string, isOwn: boolean) => {
+    // Check for GIF message (easter egg)
+    const gifMatch = content.match(/^\[gif:(https?:\/\/[^\]]+)\]$/);
+    if (gifMatch) {
+      return (
+        <div className="max-w-xs">
+          <img 
+            src={gifMatch[1]} 
+            alt="GIF" 
+            className="rounded-lg max-w-full h-auto"
+            loading="lazy"
+          />
+        </div>
+      );
+    }
+    
     // Regex to match [@type:id:name] pattern
     const attachmentRegex = /\[@([\w-]+):(\d+):([^\]]+)\]/g;
     const parts: React.ReactNode[] = [];
@@ -1150,7 +1189,15 @@ export default function MessagesPage() {
                 </div>
               )}
               
-              <div className="flex items-center gap-2">
+              <div className="relative flex items-center gap-2">
+                {/* GIF Picker (Easter Egg) */}
+                {showGifPicker && (
+                  <GifPicker 
+                    onSelect={handleSendGif} 
+                    onClose={() => setShowGifPicker(false)} 
+                  />
+                )}
+                
                 <div className="relative flex-1">
                   <Input
                     ref={inputRef}
