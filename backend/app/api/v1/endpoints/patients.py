@@ -734,6 +734,40 @@ async def pay_for_visit(
     }
 
 
+@router.get("/visits/{visit_id}")
+async def get_visit(
+    visit_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get a single visit by ID"""
+    from sqlalchemy.orm import joinedload
+    
+    result = await db.execute(
+        select(Visit).options(joinedload(Visit.patient)).where(Visit.id == visit_id)
+    )
+    visit = result.unique().scalar_one_or_none()
+    
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found")
+    
+    return {
+        "id": visit.id,
+        "visit_number": visit.visit_number,
+        "patient_id": visit.patient_id,
+        "patient_name": f"{visit.patient.first_name} {visit.patient.last_name}" if visit.patient else "Unknown",
+        "visit_date": visit.visit_date.isoformat() if visit.visit_date else None,
+        "visit_type": visit.visit_type,
+        "status": visit.status,
+        "payment_status": visit.payment_status,
+        "payment_type": visit.payment_type,
+        "amount_paid": float(visit.amount_paid or 0),
+        "consultation_fee": float(visit.consultation_fee or 0),
+        "insurance_provider": visit.insurance_provider,
+        "notes": visit.notes,
+    }
+
+
 @router.get("/visits/pending-payment")
 async def get_pending_payment_visits(
     db: AsyncSession = Depends(get_db),

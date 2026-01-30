@@ -106,7 +106,9 @@ function App() {
                   <Route path="/admin/permissions" element={<PermissionManagerPage />} />
                   <Route path="/admin/analytics" element={<AnalyticsPage />} />
                   <Route path="/fund-requests" element={<FundRequestsPage />} />
+                  <Route path="/fund-requests/:requestId" element={<FundRequestsPage />} />
                   <Route path="/admin/fund-requests" element={<FundRequestsPage />} />
+                  <Route path="/admin/fund-requests/:requestId" element={<FundRequestsPage />} />
                   <Route path="/messages" element={<MessagesPage />} />
                   <Route path="/messages/:conversationId" element={<MessagesPage />} />
                   <Route path="/admin/user-profile/:userId" element={<UserProfilePage />} />

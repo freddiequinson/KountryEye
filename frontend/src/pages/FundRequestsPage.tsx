@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
@@ -90,6 +91,7 @@ export default function FundRequestsPage() {
   const { user } = useAuthStore();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { requestId } = useParams<{ requestId: string }>();
   
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -140,6 +142,17 @@ export default function FundRequestsPage() {
       return response.data;
     },
   });
+
+  // Open specific fund request from URL param
+  useEffect(() => {
+    if (requestId && requests.length > 0) {
+      const request = requests.find((r: FundRequest) => r.id === parseInt(requestId));
+      if (request) {
+        setSelectedRequest(request);
+        setShowDetailDialog(true);
+      }
+    }
+  }, [requestId, requests]);
 
   // Create mutation
   const createMutation = useMutation({
