@@ -565,7 +565,7 @@ export default function MessagesPage() {
 
   const handleSendMessage = () => {
     if ((!messageText.trim() && attachments.length === 0) || !selectedConversation) return;
-    
+
     // Build message content with attachment references
     let content = messageText.trim();
     if (attachments.length > 0) {
@@ -616,8 +616,8 @@ export default function MessagesPage() {
     setMessageText(value);
     handleTyping();
     
-    // Easter egg: Check for /gif command
-    if (value.trim().toLowerCase() === '/gif') {
+    // Easter egg: Check for /gif command - show picker as user types
+    if (value.toLowerCase().startsWith('/gif')) {
       setShowGifPicker(true);
       setMessageText('');
       return;
@@ -857,17 +857,9 @@ export default function MessagesPage() {
     return <div>{parts}</div>;
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      
-      // Easter egg: Check for /gif command before sending
-      if (messageText.trim().toLowerCase() === '/gif') {
-        setShowGifPicker(true);
-        setMessageText('');
-        return;
-      }
-      
       handleSendMessage();
     }
   };
@@ -1211,7 +1203,7 @@ export default function MessagesPage() {
                     ref={inputRef}
                     value={messageText}
                     onChange={handleMessageInputChange}
-                    onKeyPress={handleKeyPress}
+                    onKeyDown={handleKeyPress}
                     placeholder="Type @ to reference items..."
                     className="pr-10"
                   />
