@@ -639,6 +639,105 @@ async def send_message(
     }
 
 
+class MessageUpdate(BaseModel):
+    content: str
+
+
+@router.put("/messages/{message_id}")
+async def edit_message(
+    message_id: int,
+    data: MessageUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Edit a message (only sender or admin can edit)"""
+    # Get the message
+    result = await db.execute(select(Message).where(Message.id == message_id))
+    message = result.scalar_one_or_none()
+    
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    # Check if user is admin
+    is_admin = current_user.is_superuser
+    if not is_admin and current_user.role_id:
+        role_result = await db.execute(select(Role).where(Role.id == current_user.role_id))
+        role = role_result.scalar_one_or_none()
+        if role and role.name.lower() == "admin":
+            is_admin = True
+    
+    # Only sender or admin can edit
+    if message.sender_id != current_user.id and not is_admin:
+        raise HTTPException(status_code=403, detail="You can only edit your own messages")
+    
+    # Update message
+    message.content = data.content
+    message.is_edited = True
+    message.edited_at = datetime.utcnow()
+    
+    await db.commit()
+    
+    # Broadcast edit to conversation participants
+    ws_message = {
+        "type": "message_edited",
+        "data": {
+            "id": message.id,
+            "conversation_id": message.conversation_id,
+            "content": data.content,
+            "is_edited": True,
+            "edited_at": message.edited_at.isoformat()
+        }
+    }
+    await manager.broadcast_to_conversation(message.conversation_id, ws_message)
+    
+    return {"success": True, "message": "Message updated"}
+
+
+@router.delete("/messages/{message_id}")
+async def delete_message(
+    message_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Delete a message (only sender or admin can delete)"""
+    # Get the message
+    result = await db.execute(select(Message).where(Message.id == message_id))
+    message = result.scalar_one_or_none()
+    
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    # Check if user is admin
+    is_admin = current_user.is_superuser
+    if not is_admin and current_user.role_id:
+        role_result = await db.execute(select(Role).where(Role.id == current_user.role_id))
+        role = role_result.scalar_one_or_none()
+        if role and role.name.lower() == "admin":
+            is_admin = True
+    
+    # Only sender or admin can delete
+    if message.sender_id != current_user.id and not is_admin:
+        raise HTTPException(status_code=403, detail="You can only delete your own messages")
+    
+    # Soft delete
+    message.is_deleted = True
+    conversation_id = message.conversation_id
+    
+    await db.commit()
+    
+    # Broadcast deletion to conversation participants
+    ws_message = {
+        "type": "message_deleted",
+        "data": {
+            "id": message.id,
+            "conversation_id": conversation_id
+        }
+    }
+    await manager.broadcast_to_conversation(conversation_id, ws_message)
+    
+    return {"success": True, "message": "Message deleted"}
+
+
 @router.post("/conversations/{conversation_id}/mark-read")
 async def mark_messages_read(
     conversation_id: int,

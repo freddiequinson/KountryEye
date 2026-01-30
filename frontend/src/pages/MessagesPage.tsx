@@ -20,6 +20,9 @@ import {
   CornerUpLeft,
   Check,
   CheckCheck,
+  MoreVertical,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
@@ -194,6 +197,10 @@ export default function MessagesPage() {
   
   // Reply state
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  
+  // Edit message state
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [editContent, setEditContent] = useState('');
   
   const isAdmin = user?.role === 'Admin' || user?.is_superuser;
 
@@ -407,6 +414,38 @@ export default function MessagesPage() {
     },
     onError: () => {
       toast({ title: 'Error', description: 'Failed to start conversation', variant: 'destructive' });
+    },
+  });
+
+  // Edit message mutation
+  const editMessageMutation = useMutation({
+    mutationFn: async ({ messageId, content }: { messageId: number; content: string }) => {
+      const response = await api.put(`/messaging/messages/${messageId}`, { content });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', selectedConversation?.id] });
+      setEditingMessage(null);
+      setEditContent('');
+      toast({ title: 'Success', description: 'Message updated' });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to edit message', variant: 'destructive' });
+    },
+  });
+
+  // Delete message mutation
+  const deleteMessageMutation = useMutation({
+    mutationFn: async (messageId: number) => {
+      const response = await api.delete(`/messaging/messages/${messageId}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', selectedConversation?.id] });
+      toast({ title: 'Success', description: 'Message deleted' });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to delete message', variant: 'destructive' });
     },
   });
 
@@ -1083,14 +1122,42 @@ export default function MessagesPage() {
                               )}
                             </div>
                           </div>
-                          {/* Reply button */}
-                          <button
-                            onClick={() => setReplyingTo(msg)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded"
-                            title="Reply"
-                          >
-                            <Reply className="h-4 w-4 text-muted-foreground" />
-                          </button>
+                          {/* Message actions */}
+                          <div className={`opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 ${isOwn ? 'flex-row-reverse' : ''}`}>
+                            <button
+                              onClick={() => setReplyingTo(msg)}
+                              className="p-1 hover:bg-muted rounded"
+                              title="Reply"
+                            >
+                              <Reply className="h-4 w-4 text-muted-foreground" />
+                            </button>
+                            {/* Edit/Delete for own messages or admin */}
+                            {(isOwn || isAdmin) && (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setEditingMessage(msg);
+                                    setEditContent(msg.content);
+                                  }}
+                                  className="p-1 hover:bg-muted rounded"
+                                  title="Edit"
+                                >
+                                  <Pencil className="h-4 w-4 text-muted-foreground" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (confirm('Delete this message?')) {
+                                      deleteMessageMutation.mutate(msg.id);
+                                    }
+                                  }}
+                                  className="p-1 hover:bg-muted rounded"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -1102,6 +1169,49 @@ export default function MessagesPage() {
 
             {/* Message Input */}
             <div className="p-4 border-t relative">
+              {/* Edit message bar */}
+              {editingMessage && (
+                <div className="mb-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-medium text-yellow-700 dark:text-yellow-400 flex items-center gap-1">
+                      <Pencil className="h-3 w-3" />
+                      Editing message
+                    </p>
+                    <button 
+                      onClick={() => {
+                        setEditingMessage(null);
+                        setEditContent('');
+                      }} 
+                      className="p-1 hover:bg-yellow-100 dark:hover:bg-yellow-800 rounded"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      className="flex-1"
+                      autoFocus
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (editContent.trim()) {
+                          editMessageMutation.mutate({
+                            messageId: editingMessage.id,
+                            content: editContent.trim()
+                          });
+                        }
+                      }}
+                      disabled={!editContent.trim() || editMessageMutation.isPending}
+                    >
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
               {/* Reply preview bar */}
               {replyingTo && (
                 <div className="mb-2 p-2 bg-muted rounded-lg flex items-center justify-between">

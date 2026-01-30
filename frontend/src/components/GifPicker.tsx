@@ -99,7 +99,7 @@ export default function GifPicker({ onSelect, onClose }: GifPickerProps) {
         </Button>
       </div>
       
-      <ScrollArea className="h-64">
+      <ScrollArea className="h-48">
         <div className="p-2">
           {loading && gifs.length === 0 ? (
             <div className="flex items-center justify-center h-48">
@@ -111,12 +111,12 @@ export default function GifPicker({ onSelect, onClose }: GifPickerProps) {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-1">
                 {gifs.map((gif) => (
                   <button
                     key={gif.id}
                     onClick={() => handleSelect(gif)}
-                    className="relative aspect-square overflow-hidden rounded-md hover:ring-2 hover:ring-primary transition-all group"
+                    className="relative aspect-square overflow-hidden rounded hover:ring-2 hover:ring-primary transition-all group"
                   >
                     <img
                       src={gif.images.fixed_height_small.url}
