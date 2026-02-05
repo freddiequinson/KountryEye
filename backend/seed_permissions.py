@@ -51,6 +51,12 @@ DEFAULT_PERMISSIONS = [
     {'name': 'Create Fund Requests', 'code': 'fund_requests.create', 'module': 'fund_requests'},
     {'name': 'View Messages', 'code': 'messages.view', 'module': 'messaging'},
     {'name': 'Send Messages', 'code': 'messages.send', 'module': 'messaging'},
+    # Technician permissions
+    {'name': 'View Technician Dashboard', 'code': 'technician.view', 'module': 'technician'},
+    {'name': 'Manage Referrals', 'code': 'technician.referrals', 'module': 'technician'},
+    {'name': 'Manage Scans', 'code': 'technician.scans', 'module': 'technician'},
+    {'name': 'View Referral Payments', 'code': 'referrals.payments', 'module': 'technician'},
+    {'name': 'Manage Referral Payments', 'code': 'referrals.payments.manage', 'module': 'technician'},
 ]
 
 ROLE_PERMISSIONS = {
@@ -101,6 +107,17 @@ ROLE_PERMISSIONS = {
         'revenue.view', 'accounting.view',
         'attendance.clock', 'attendance.view_own', 'attendance.view_all', 'attendance.view',
         'analytics.view',
+        'fund_requests.view', 'fund_requests.create',
+        'messages.view', 'messages.send',
+        # Admin also gets technician management
+        'technician.view', 'technician.referrals', 'technician.scans',
+        'referrals.payments', 'referrals.payments.manage',
+    ],
+    'technician': [
+        'dashboard.view',
+        'technician.view', 'technician.referrals', 'technician.scans',
+        'patients.view', 'patients.create',
+        'attendance.clock', 'attendance.view_own', 'attendance.view',
         'fund_requests.view', 'fund_requests.create',
         'messages.view', 'messages.send',
     ],

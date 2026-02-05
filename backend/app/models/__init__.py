@@ -10,3 +10,4 @@ from app.models.marketing import Campaign, Event, CustomerRating
 from app.models.accounting import IncomeCategory, ExpenseCategory, Income, Expense, FinancialSummary
 from app.models.employee import Attendance, ActivityLog, Task, EmployeeStats
 from app.models.communication import FundRequest, Conversation, ConversationParticipant, Message, Notification
+from app.models.technician_referral import ReferralDoctor, ExternalReferral, TechnicianScan, ReferralPaymentSetting, ReferralPayment

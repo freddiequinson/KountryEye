@@ -46,6 +46,14 @@ import UserProfilePage from '@/pages/admin/UserProfilePage'
 import NotificationsPage from '@/pages/NotificationsPage'
 import ActivityTracker from '@/components/ActivityTracker'
 
+// Technician pages
+import TechnicianDashboard from '@/pages/technician/TechnicianDashboard'
+import ReferralsPage from '@/pages/technician/ReferralsPage'
+import NewReferralPage from '@/pages/technician/NewReferralPage'
+import ScansPage from '@/pages/technician/ScansPage'
+import NewScanPage from '@/pages/technician/NewScanPage'
+import ReferralPaymentsPage from '@/pages/admin/ReferralPaymentsPage'
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
   
@@ -114,6 +122,20 @@ function App() {
                   <Route path="/admin/user-profile/:userId" element={<UserProfilePage />} />
                   <Route path="/help" element={<HelpPage />} />
                   <Route path="/notifications" element={<NotificationsPage />} />
+                  
+                  {/* Technician Routes */}
+                  <Route path="/technician" element={<TechnicianDashboard />} />
+                  <Route path="/technician/dashboard" element={<TechnicianDashboard />} />
+                  <Route path="/technician/referrals" element={<ReferralsPage />} />
+                  <Route path="/technician/referrals/new" element={<NewReferralPage />} />
+                  <Route path="/technician/referrals/:referralId" element={<ReferralsPage />} />
+                  <Route path="/technician/scans" element={<ScansPage />} />
+                  <Route path="/technician/scans/new" element={<NewScanPage />} />
+                  <Route path="/technician/scans/:scanId" element={<ScansPage />} />
+                  <Route path="/technician/doctors" element={<ReferralsPage />} />
+                  
+                  {/* Admin Referral Payments */}
+                  <Route path="/admin/referral-payments" element={<ReferralPaymentsPage />} />
                 </Routes>
               </DashboardLayout>
             </ProtectedRoute>

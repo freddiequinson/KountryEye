@@ -35,6 +35,8 @@ import {
   TrendingUp,
   FileText,
   MessageSquare,
+  Eye,
+  Scan,
 } from "lucide-react"
 
 import { useAuthStore } from "@/stores/auth"
@@ -86,6 +88,11 @@ const allNavItems: NavItem[] = [
   { title: "Analytics", url: "/admin/analytics", icon: TrendingUp, permissions: ["analytics.view"] },
   { title: "Memos", url: "/fund-requests", icon: FileText, permissions: ["fund_requests.view"] },
   { title: "Messages", url: "/messages", icon: MessageSquare, permissions: ["messages.view"] },
+  // Technician items
+  { title: "Technician", url: "/technician", icon: Eye, permissions: ["technician.view"], roles: ["technician"] },
+  { title: "Referrals", url: "/technician/referrals", icon: Users, permissions: ["technician.referrals"], roles: ["technician"] },
+  { title: "Scans", url: "/technician/scans", icon: Eye, permissions: ["technician.scans"], roles: ["technician"] },
+  { title: "Referral Payments", url: "/admin/referral-payments", icon: DollarSign, permissions: ["referrals.payments"] },
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
