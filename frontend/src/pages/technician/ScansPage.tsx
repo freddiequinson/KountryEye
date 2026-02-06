@@ -11,11 +11,15 @@ import {
   User,
   CheckCircle,
   Clock,
+  ChevronLeft,
+  ChevronRight,
+  Settings,
 } from 'lucide-react';
 import api from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -32,17 +36,30 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
 
 export default function ScansPage() {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [showPricingDialog, setShowPricingDialog] = useState(false);
 
-  // Fetch scans
-  const { data: scans = [], isLoading } = useQuery({
-    queryKey: ['scans', typeFilter, statusFilter],
+  // Fetch scans with pagination
+  const { data: scansData, isLoading } = useQuery({
+    queryKey: ['scans', typeFilter, statusFilter, page, pageSize],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (typeFilter && typeFilter !== 'all') {
@@ -51,8 +68,37 @@ export default function ScansPage() {
       if (statusFilter && statusFilter !== 'all') {
         params.append('status', statusFilter);
       }
+      params.append('skip', ((page - 1) * pageSize).toString());
+      params.append('limit', pageSize.toString());
       const response = await api.get(`/technician/scans?${params.toString()}`);
       return response.data;
+    },
+  });
+
+  const scans = Array.isArray(scansData) ? scansData : scansData?.items || [];
+  const totalCount = scansData?.total || scans.length;
+  const totalPages = Math.ceil(totalCount / pageSize);
+
+  // Fetch pricing
+  const { data: pricing = [] } = useQuery({
+    queryKey: ['scan-pricing'],
+    queryFn: async () => {
+      const response = await api.get('/technician/scan-pricing');
+      return response.data;
+    },
+  });
+
+  // Update pricing mutation
+  const updatePricingMutation = useMutation({
+    mutationFn: async ({ scanType, price }: { scanType: string; price: number }) => {
+      const response = await api.put(`/technician/scan-pricing/${scanType}`, null, {
+        params: { price },
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      toast({ title: 'Success', description: 'Pricing updated' });
+      queryClient.invalidateQueries({ queryKey: ['scan-pricing'] });
     },
   });
 
@@ -93,10 +139,37 @@ export default function ScansPage() {
             OCT, Visual Field Test, Fundus Photography, and Pachymeter scans
           </p>
         </div>
-        <Button onClick={() => navigate('/technician/scans/new')}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Scan
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowPricingDialog(true)}>
+            <Settings className="h-4 w-4 mr-2" />
+            Pricing
+          </Button>
+          <Button onClick={() => navigate('/technician/scans/new')}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Scan
+          </Button>
+        </div>
+      </div>
+
+      {/* Pricing Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {pricing.map((p: any) => (
+          <Card key={p.scan_type} className="bg-gradient-to-br from-background to-muted/30">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-muted-foreground">
+                    {scanTypeLabels[p.scan_type] || p.scan_type}
+                  </div>
+                  <div className="text-2xl font-bold">GH₵ {p.price}</div>
+                </div>
+                <Badge className={scanTypeColors[p.scan_type] || ''}>
+                  {p.scan_type.toUpperCase()}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Quick Scan Buttons */}
@@ -271,8 +344,104 @@ export default function ScansPage() {
               </TableBody>
             </Table>
           )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4 border-t">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Show</span>
+                <Select value={pageSize.toString()} onValueChange={(v) => { setPageSize(parseInt(v)); setPage(1); }}>
+                  <SelectTrigger className="w-[70px] h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span>per page</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  Page {page} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Pricing Dialog */}
+      <Dialog open={showPricingDialog} onOpenChange={setShowPricingDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Scan Pricing</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Set the price for each scan type. Changes are saved automatically.
+            </p>
+            {['oct', 'vft', 'fundus', 'pachymeter'].map((scanType) => {
+              const existingPrice = pricing.find((p: any) => p.scan_type === scanType);
+              return (
+                <div key={scanType} className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <Label className="font-medium">{scanTypeLabels[scanType]}</Label>
+                    <p className="text-xs text-muted-foreground">
+                      {scanType === 'oct' && 'Optical Coherence Tomography'}
+                      {scanType === 'vft' && 'Visual Field Testing'}
+                      {scanType === 'fundus' && 'Retinal Photography'}
+                      {scanType === 'pachymeter' && 'Corneal Thickness Measurement'}
+                    </p>
+                  </div>
+                  <div className="w-32">
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm text-muted-foreground">GH₵</span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        defaultValue={existingPrice?.price || ''}
+                        onBlur={(e) => {
+                          const newPrice = parseFloat(e.target.value);
+                          if (!isNaN(newPrice) && newPrice >= 0) {
+                            updatePricingMutation.mutate({
+                              scanType: scanType,
+                              price: newPrice,
+                            });
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowPricingDialog(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

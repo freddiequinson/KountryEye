@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import {
   DollarSign,
   Search,
@@ -11,6 +12,15 @@ import {
   Calendar,
   TrendingUp,
   Settings,
+  Eye,
+  Phone,
+  ChevronRight,
+  ChevronDown,
+  Users,
+  CreditCard,
+  Banknote,
+  ArrowUpRight,
+  FileText,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -18,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Table,
   TableBody,
@@ -39,18 +50,35 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
 
 export default function ReferralPaymentsPage() {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // Filters
   const [search, setSearch] = useState('');
   const [paidFilter, setPaidFilter] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [activeTab, setActiveTab] = useState('overview');
+  
+  // Dialog states
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [showPayDialog, setShowPayDialog] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [showDoctorDetail, setShowDoctorDetail] = useState(false);
+  const [selectedDoctor, setSelectedDoctor] = useState<any>(null);
+  const [expandedDoctors, setExpandedDoctors] = useState<Set<number>>(new Set());
 
   // Payment form state
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -73,12 +101,27 @@ export default function ReferralPaymentsPage() {
 
   // Fetch payments
   const { data: payments = [], isLoading } = useQuery({
-    queryKey: ['referral-payments', paidFilter],
+    queryKey: ['referral-payments', paidFilter, dateFrom, dateTo],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (paidFilter === 'paid') params.append('is_paid', 'true');
       if (paidFilter === 'unpaid') params.append('is_paid', 'false');
+      if (dateFrom) params.append('date_from', dateFrom);
+      if (dateTo) params.append('date_to', dateTo);
       const response = await api.get(`/technician/payments?${params.toString()}`);
+      return response.data;
+    },
+  });
+
+  // Fetch all referrals
+  const { data: referrals = [] } = useQuery({
+    queryKey: ['all-referrals', dateFrom, dateTo],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (dateFrom) params.append('date_from', dateFrom);
+      if (dateTo) params.append('date_to', dateTo);
+      params.append('limit', '500');
+      const response = await api.get(`/technician/referrals?${params.toString()}`);
       return response.data;
     },
   });
@@ -87,7 +130,7 @@ export default function ReferralPaymentsPage() {
   const { data: topReferrers = [] } = useQuery({
     queryKey: ['top-referrers'],
     queryFn: async () => {
-      const response = await api.get('/technician/analytics/top-referrers?limit=5');
+      const response = await api.get('/technician/analytics/top-referrers?limit=10');
       return response.data;
     },
   });
@@ -109,6 +152,61 @@ export default function ReferralPaymentsPage() {
       return response.data;
     },
   });
+
+  // Group referrals by doctor with payment summary
+  const doctorSummaries = useMemo(() => {
+    const groups: Record<number, {
+      doctor: any;
+      referrals: any[];
+      totalFees: number;
+      paidAmount: number;
+      unpaidAmount: number;
+      referralCount: number;
+    }> = {};
+
+    referrals.forEach((r: any) => {
+      const doctorId = r.referral_doctor?.id || 0;
+      if (!groups[doctorId]) {
+        groups[doctorId] = {
+          doctor: r.referral_doctor || { id: 0, name: 'Unknown' },
+          referrals: [],
+          totalFees: 0,
+          paidAmount: 0,
+          unpaidAmount: 0,
+          referralCount: 0,
+        };
+      }
+      groups[doctorId].referrals.push(r);
+      groups[doctorId].totalFees += r.service_fee || 0;
+      groups[doctorId].referralCount++;
+    });
+
+    // Calculate paid/unpaid from payments
+    payments.forEach((p: any) => {
+      const doctorId = p.referral_doctor?.id;
+      if (doctorId && groups[doctorId]) {
+        if (p.is_paid) {
+          groups[doctorId].paidAmount += p.amount || 0;
+        } else {
+          groups[doctorId].unpaidAmount += p.amount || 0;
+        }
+      }
+    });
+
+    return Object.values(groups).sort((a, b) => b.referralCount - a.referralCount);
+  }, [referrals, payments]);
+
+  const toggleDoctorExpanded = (doctorId: number) => {
+    setExpandedDoctors(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(doctorId)) {
+        newSet.delete(doctorId);
+      } else {
+        newSet.add(doctorId);
+      }
+      return newSet;
+    });
+  };
 
   // Mark payment as paid mutation
   const markPaidMutation = useMutation({
@@ -189,29 +287,75 @@ export default function ReferralPaymentsPage() {
     });
   };
 
-  const filteredPayments = payments.filter((p: any) =>
-    p.referral_doctor?.name?.toLowerCase().includes(search.toLowerCase()) ||
-    p.payment_number?.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filter payments by search
+  const filteredPayments = useMemo(() => {
+    if (!search.trim()) return payments;
+    const searchLower = search.toLowerCase();
+    return payments.filter((p: any) =>
+      p.referral_doctor?.name?.toLowerCase().includes(searchLower) ||
+      p.referral_doctor?.clinic_name?.toLowerCase().includes(searchLower) ||
+      p.payment_number?.toLowerCase().includes(searchLower) ||
+      p.external_referral?.client_name?.toLowerCase().includes(searchLower)
+    );
+  }, [payments, search]);
+
+  // Filter referrals by search
+  const filteredReferrals = useMemo(() => {
+    if (!search.trim()) return referrals;
+    const searchLower = search.toLowerCase();
+    return referrals.filter((r: any) =>
+      r.client_name?.toLowerCase().includes(searchLower) ||
+      r.referral_number?.toLowerCase().includes(searchLower) ||
+      r.referral_doctor?.name?.toLowerCase().includes(searchLower) ||
+      r.referral_doctor?.clinic_name?.toLowerCase().includes(searchLower)
+    );
+  }, [referrals, search]);
+
+  // Filter doctor summaries by search
+  const filteredDoctorSummaries = useMemo(() => {
+    if (!search.trim()) return doctorSummaries;
+    const searchLower = search.toLowerCase();
+    return doctorSummaries.filter((g) =>
+      g.doctor.name?.toLowerCase().includes(searchLower) ||
+      g.doctor.clinic_name?.toLowerCase().includes(searchLower)
+    );
+  }, [doctorSummaries, search]);
+
+  // Calculate totals
+  const totalUnpaid = payments.filter((p: any) => !p.is_paid).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+  const totalPaid = payments.filter((p: any) => p.is_paid).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Referral Payments</h1>
+          <h1 className="text-3xl font-bold">Referral Management</h1>
           <p className="text-muted-foreground">
-            Manage payments to referring doctors
+            Track referrals, manage payments to referring doctors
           </p>
         </div>
-        <Button onClick={() => setShowSettingsDialog(true)}>
-          <Settings className="h-4 w-4 mr-2" />
-          Payment Settings
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowSettingsDialog(true)}>
+            <Settings className="h-4 w-4 mr-2" />
+            Payment Settings
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Total Referrals</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{referrals.length}</div>
+            <p className="text-xs text-muted-foreground">From {doctorSummaries.length} doctors</p>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
@@ -219,7 +363,7 @@ export default function ReferralPaymentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              GH₵ {(summary?.total_revenue || 0).toLocaleString()}
+              GH₵ {referrals.reduce((sum: number, r: any) => sum + (r.service_fee || 0), 0).toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">From referral services</p>
           </CardContent>
@@ -227,72 +371,263 @@ export default function ReferralPaymentsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Pending Payments</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-500" />
+            <CardTitle className="text-sm font-medium">Total Paid</CardTitle>
+            <Check className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
-              {summary?.pending_payments?.count || 0}
+            <div className="text-2xl font-bold text-green-600">
+              GH₵ {totalPaid.toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">
-              GH₵ {(summary?.pending_payments?.amount || 0).toLocaleString()} due
+              {payments.filter((p: any) => p.is_paid).length} payments
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Paid</CardTitle>
-            <Check className="h-4 w-4 text-green-500" />
+            <CardTitle className="text-sm font-medium">Outstanding</CardTitle>
+            <Clock className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              GH₵ {(summary?.total_paid || 0).toLocaleString()}
+            <div className="text-2xl font-bold text-yellow-600">
+              GH₵ {totalUnpaid.toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground">Payments completed</p>
+            <p className="text-xs text-muted-foreground">
+              {payments.filter((p: any) => !p.is_paid).length} pending
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Referrals</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Doctors</CardTitle>
+            <User className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary?.total_referrals || 0}</div>
-            <p className="text-xs text-muted-foreground">External referrals</p>
+            <div className="text-2xl font-bold">{doctors.length}</div>
+            <p className="text-xs text-muted-foreground">Referring doctors</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Payments Table */}
-        <div className="lg:col-span-2">
+      {/* Date Filters */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-wrap gap-4 items-end">
+            <div>
+              <Label className="text-xs text-muted-foreground">From Date</Label>
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="w-[160px]"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">To Date</Label>
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="w-[160px]"
+              />
+            </div>
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search doctor or payment number..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={paidFilter} onValueChange={setPaidFilter}>
+              <SelectTrigger className="w-[150px]">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="unpaid">Unpaid Only</SelectItem>
+                <SelectItem value="paid">Paid Only</SelectItem>
+              </SelectContent>
+            </Select>
+            {(dateFrom || dateTo) && (
+              <Button variant="ghost" size="sm" onClick={() => { setDateFrom(''); setDateTo(''); }}>
+                Clear Dates
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-3 max-w-md">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="payments">Payments</TabsTrigger>
+          <TabsTrigger value="doctors">By Doctor</TabsTrigger>
+        </TabsList>
+
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Unpaid Payments - Priority */}
+            <div className="lg:col-span-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-yellow-500" />
+                    Outstanding Payments
+                  </CardTitle>
+                  <CardDescription>Payments due to referring doctors</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {filteredPayments.filter((p: any) => !p.is_paid).length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Check className="h-12 w-12 mx-auto mb-2 text-green-500" />
+                      <p>All payments are up to date!</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {filteredPayments.filter((p: any) => !p.is_paid).slice(0, 10).map((payment: any) => (
+                        <div
+                          key={payment.id}
+                          className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                              <User className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                            <div>
+                              <div className="font-medium">{payment.referral_doctor?.name}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {payment.referral_doctor?.clinic_name || 'No clinic'} • {payment.payment_number}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <div className="font-bold text-lg">GH₵ {(payment.amount || 0).toLocaleString()}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {payment.created_at ? new Date(payment.created_at).toLocaleDateString() : ''}
+                              </div>
+                            </div>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setSelectedPayment(payment);
+                                setShowPayDialog(true);
+                              }}
+                            >
+                              <Banknote className="h-4 w-4 mr-1" />
+                              Pay
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Top Referrers */}
+            <div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-primary" />
+                    Top Referrers
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {topReferrers.length === 0 ? (
+                    <div className="text-center py-4 text-muted-foreground">
+                      No referrals yet
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {topReferrers.slice(0, 5).map((referrer: any, index: number) => (
+                        <div
+                          key={referrer.doctor_id}
+                          className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer"
+                          onClick={() => {
+                            setActiveTab('doctors');
+                            setTimeout(() => {
+                              toggleDoctorExpanded(referrer.doctor_id);
+                            }, 100);
+                          }}
+                        >
+                          <div className="flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm bg-muted text-muted-foreground">
+                            {index + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{referrer.doctor_name}</div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {referrer.clinic_name || 'No clinic'}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold">{referrer.referral_count}</div>
+                            <div className="text-xs text-muted-foreground">referrals</div>
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Payment Settings */}
+              <Card className="mt-4">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="text-base">Payment Rates</CardTitle>
+                  <Button variant="ghost" size="sm" onClick={() => setShowSettingsDialog(true)}>
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  {paymentSettings.length === 0 ? (
+                    <div className="text-center py-2 text-sm text-muted-foreground">
+                      <p>No rates configured</p>
+                      <Button variant="link" size="sm" onClick={() => setShowSettingsDialog(true)}>
+                        Configure rates
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {paymentSettings.slice(0, 3).map((setting: any) => (
+                        <div key={setting.id} className="flex items-center justify-between text-sm">
+                          <span className="truncate">{setting.doctor_name || 'Default'}</span>
+                          <Badge variant="outline">
+                            {setting.payment_type === 'percentage' ? `${setting.rate}%` : `GH₵${setting.rate}`}
+                          </Badge>
+                        </div>
+                      ))}
+                      {paymentSettings.length > 3 && (
+                        <Button variant="link" size="sm" className="w-full" onClick={() => setShowSettingsDialog(true)}>
+                          View all {paymentSettings.length} settings
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Payments Tab */}
+        <TabsContent value="payments">
           <Card>
             <CardHeader>
-              <CardTitle>Payment Records</CardTitle>
-              <div className="flex gap-4 mt-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by doctor or payment number..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-                <Select value={paidFilter} onValueChange={setPaidFilter}>
-                  <SelectTrigger className="w-[150px]">
-                    <Filter className="h-4 w-4 mr-2" />
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="unpaid">Unpaid</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <CardTitle>All Payment Records</CardTitle>
+              <CardDescription>
+                {filteredPayments.length} payments found
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -308,7 +643,9 @@ export default function ReferralPaymentsPage() {
                     <TableRow>
                       <TableHead>Payment #</TableHead>
                       <TableHead>Doctor</TableHead>
+                      <TableHead>Referral</TableHead>
                       <TableHead>Amount</TableHead>
+                      <TableHead>Date</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead></TableHead>
                     </TableRow>
@@ -322,20 +659,34 @@ export default function ReferralPaymentsPage() {
                         <TableCell>
                           <div>
                             <div className="font-medium">{payment.referral_doctor?.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {payment.referral_doctor?.clinic_name}
+                            <div className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Building2 className="h-3 w-3" />
+                              {payment.referral_doctor?.clinic_name || 'No clinic'}
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div>
-                            <div className="font-medium">GH₵ {payment.amount.toLocaleString()}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {payment.payment_type === 'percentage'
-                                ? `${payment.payment_rate}% of GH₵${payment.service_amount}`
-                                : `Fixed: GH₵${payment.payment_rate}`}
-                            </div>
+                          <div className="text-sm">
+                            {payment.external_referral?.client_name || '-'}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-bold">GH₵ {(payment.amount || 0).toLocaleString()}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {payment.payment_type === 'percentage'
+                              ? `${payment.payment_rate}%`
+                              : `Fixed`}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            {payment.created_at ? new Date(payment.created_at).toLocaleDateString() : '-'}
+                          </div>
+                          {payment.paid_at && (
+                            <div className="text-xs text-green-600">
+                              Paid: {new Date(payment.paid_at).toLocaleDateString()}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell>
                           {payment.is_paid ? (
@@ -359,8 +710,13 @@ export default function ReferralPaymentsPage() {
                                 setShowPayDialog(true);
                               }}
                             >
-                              Mark Paid
+                              Pay Now
                             </Button>
+                          )}
+                          {payment.is_paid && payment.payment_method && (
+                            <span className="text-xs text-muted-foreground capitalize">
+                              {payment.payment_method.replace('_', ' ')}
+                            </span>
                           )}
                         </TableCell>
                       </TableRow>
@@ -370,82 +726,148 @@ export default function ReferralPaymentsPage() {
               )}
             </CardContent>
           </Card>
-        </div>
+        </TabsContent>
 
-        {/* Top Referrers */}
-        <div>
-          <Card>
-            <CardHeader>
-              <CardTitle>Top Referring Doctors</CardTitle>
-              <CardDescription>By number of referrals</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {topReferrers.length === 0 ? (
-                <div className="text-center py-4 text-muted-foreground">
-                  No referrals yet
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {topReferrers.map((referrer: any, index: number) => (
-                    <div key={referrer.doctor_id} className="flex items-center gap-3">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-bold">
-                        {index + 1}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">{referrer.doctor_name}</div>
-                        <div className="text-xs text-muted-foreground truncate">
-                          {referrer.clinic_name || 'No clinic'}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-bold">{referrer.referral_count}</div>
-                        <div className="text-xs text-muted-foreground">referrals</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Payment Settings Summary */}
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>Payment Rates</CardTitle>
-              <CardDescription>Current payment settings</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {paymentSettings.length === 0 ? (
-                <div className="text-center py-4 text-muted-foreground">
-                  <p>No payment settings configured</p>
-                  <Button
-                    variant="link"
-                    className="mt-2"
-                    onClick={() => setShowSettingsDialog(true)}
+        {/* By Doctor Tab */}
+        <TabsContent value="doctors">
+          <div className="space-y-4">
+            {filteredDoctorSummaries.length === 0 ? (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No referrals found</p>
+                </CardContent>
+              </Card>
+            ) : (
+              filteredDoctorSummaries.map((group) => (
+                <Card key={group.doctor.id}>
+                  <Collapsible
+                    open={expandedDoctors.has(group.doctor.id)}
+                    onOpenChange={() => toggleDoctorExpanded(group.doctor.id)}
                   >
-                    Add setting
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {paymentSettings.map((setting: any) => (
-                    <div key={setting.id} className="flex items-center justify-between p-2 bg-muted rounded">
-                      <div className="text-sm">
-                        {setting.doctor_name}
-                      </div>
-                      <Badge variant="outline">
-                        {setting.payment_type === 'percentage'
-                          ? `${setting.rate}%`
-                          : `GH₵${setting.rate}`}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+                    <CollapsibleTrigger asChild>
+                      <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            {expandedDoctors.has(group.doctor.id) ? (
+                              <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                            )}
+                            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                              <User className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                            <div>
+                              <CardTitle className="text-lg">{group.doctor.name}</CardTitle>
+                              <CardDescription className="flex items-center gap-4">
+                                {group.doctor.clinic_name && (
+                                  <span className="flex items-center gap-1">
+                                    <Building2 className="h-3 w-3" />
+                                    {group.doctor.clinic_name}
+                                  </span>
+                                )}
+                                {group.doctor.phone && (
+                                  <span className="flex items-center gap-1">
+                                    <Phone className="h-3 w-3" />
+                                    {group.doctor.phone}
+                                  </span>
+                                )}
+                              </CardDescription>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-6">
+                            <div className="text-center">
+                              <div className="text-xl font-bold">{group.referralCount}</div>
+                              <div className="text-xs text-muted-foreground">Referrals</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-semibold">
+                                GH₵ {group.totalFees.toLocaleString()}
+                              </div>
+                              <div className="text-xs text-muted-foreground">Total Fees</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-semibold text-green-600">
+                                GH₵ {group.paidAmount.toLocaleString()}
+                              </div>
+                              <div className="text-xs text-muted-foreground">Paid</div>
+                            </div>
+                            {group.unpaidAmount > 0 && (
+                              <div className="text-center">
+                                <div className="text-lg font-semibold text-yellow-600">
+                                  GH₵ {group.unpaidAmount.toLocaleString()}
+                                </div>
+                                <div className="text-xs text-muted-foreground">Outstanding</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </CardHeader>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <CardContent className="pt-0">
+                        <div className="border-t pt-4">
+                          <h4 className="font-medium mb-3">Recent Referrals</h4>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Referral #</TableHead>
+                                <TableHead>Client</TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Service Fee</TableHead>
+                                <TableHead>Status</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {group.referrals.slice(0, 5).map((referral: any) => (
+                                <TableRow key={referral.id}>
+                                  <TableCell className="font-mono text-sm">
+                                    {referral.referral_number}
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="font-medium">{referral.client_name}</div>
+                                    {referral.client_phone && (
+                                      <div className="text-xs text-muted-foreground">{referral.client_phone}</div>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    {referral.referral_date
+                                      ? new Date(referral.referral_date).toLocaleDateString()
+                                      : '-'}
+                                  </TableCell>
+                                  <TableCell>
+                                    GH₵ {(referral.service_fee || 0).toLocaleString()}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge className={
+                                      referral.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                      referral.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-blue-100 text-blue-800'
+                                    }>
+                                      {referral.status}
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                          {group.referrals.length > 5 && (
+                            <div className="text-center mt-3">
+                              <Button variant="link" size="sm">
+                                View all {group.referrals.length} referrals
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </Card>
+              ))
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Mark Paid Dialog */}
       <Dialog open={showPayDialog} onOpenChange={setShowPayDialog}>
@@ -522,12 +944,12 @@ export default function ReferralPaymentsPage() {
           <div className="space-y-4 py-4">
             <div>
               <Label htmlFor="settingDoctor">Doctor (leave empty for default)</Label>
-              <Select value={settingDoctorId} onValueChange={setSettingDoctorId}>
+              <Select value={settingDoctorId || "default"} onValueChange={(val) => setSettingDoctorId(val === "default" ? "" : val)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Default (All Doctors)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Default (All Doctors)</SelectItem>
+                  <SelectItem value="default">Default (All Doctors)</SelectItem>
                   {doctors.map((doc: any) => (
                     <SelectItem key={doc.id} value={doc.id.toString()}>
                       {doc.name} - {doc.clinic_name || 'No clinic'}

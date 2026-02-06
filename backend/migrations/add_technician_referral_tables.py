@@ -152,11 +152,59 @@ def run_migration():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_referral_payments_doctor ON referral_payments(referral_doctor_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_referral_payments_paid ON referral_payments(is_paid)")
         
+        print("Creating scan_pricing table...")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS scan_pricing (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scan_type VARCHAR(20) UNIQUE NOT NULL,
+                price DECIMAL(10, 2) NOT NULL,
+                description VARCHAR(200),
+                is_active BOOLEAN DEFAULT 1,
+                created_by_id INTEGER REFERENCES users(id),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME
+            )
+        """)
+        
+        print("Creating scan_payments table...")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS scan_payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scan_id INTEGER NOT NULL REFERENCES technician_scans(id),
+                amount DECIMAL(10, 2) NOT NULL,
+                is_paid BOOLEAN DEFAULT 0,
+                payment_method VARCHAR(50),
+                payment_date DATETIME,
+                added_to_deficit BOOLEAN DEFAULT 0,
+                deficit_added_at DATETIME,
+                recorded_by_id INTEGER REFERENCES users(id),
+                notes TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_scan_payments_scan ON scan_payments(scan_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_scan_payments_paid ON scan_payments(is_paid)")
+        
+        # Insert default scan pricing
+        print("Inserting default scan pricing...")
+        default_prices = [
+            ('oct', 150.00, 'Optical Coherence Tomography'),
+            ('vft', 100.00, 'Visual Field Test'),
+            ('fundus', 80.00, 'Fundus Photography'),
+            ('pachymeter', 50.00, 'Pachymeter')
+        ]
+        for scan_type, price, description in default_prices:
+            cursor.execute("""
+                INSERT OR IGNORE INTO scan_pricing (scan_type, price, description)
+                VALUES (?, ?, ?)
+            """, (scan_type, price, description))
+        
         conn.commit()
         print("Migration completed successfully!")
         
         # Verify tables were created
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%referral%' OR name LIKE '%technician_scans%'")
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%referral%' OR name LIKE '%technician_scans%' OR name LIKE '%scan_%'")
         tables = cursor.fetchall()
         print(f"Created tables: {[t[0] for t in tables]}")
         

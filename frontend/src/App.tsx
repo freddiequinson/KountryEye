@@ -52,6 +52,8 @@ import ReferralsPage from '@/pages/technician/ReferralsPage'
 import NewReferralPage from '@/pages/technician/NewReferralPage'
 import ScansPage from '@/pages/technician/ScansPage'
 import NewScanPage from '@/pages/technician/NewScanPage'
+import ScanDetailPage from '@/pages/technician/ScanDetailPage'
+import ScanRequestsPage from '@/pages/technician/ScanRequestsPage'
 import ReferralPaymentsPage from '@/pages/admin/ReferralPaymentsPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -131,7 +133,8 @@ function App() {
                   <Route path="/technician/referrals/:referralId" element={<ReferralsPage />} />
                   <Route path="/technician/scans" element={<ScansPage />} />
                   <Route path="/technician/scans/new" element={<NewScanPage />} />
-                  <Route path="/technician/scans/:scanId" element={<ScansPage />} />
+                  <Route path="/technician/scans/:scanId" element={<ScanDetailPage />} />
+                  <Route path="/technician/scan-requests" element={<ScanRequestsPage />} />
                   <Route path="/technician/doctors" element={<ReferralsPage />} />
                   
                   {/* Admin Referral Payments */}

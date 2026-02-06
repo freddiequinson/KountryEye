@@ -1,8 +1,11 @@
+import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth'
 import { AdminDashboard, FrontDeskDashboard, DoctorDashboard, MarketingDashboard } from '@/components/dashboard'
 
 export default function DashboardPage() {
   const { user } = useAuthStore()
+  const navigate = useNavigate()
 
   const getUserRole = (): string => {
     if (user?.is_superuser) return "admin"
@@ -11,6 +14,13 @@ export default function DashboardPage() {
   }
 
   const userRole = getUserRole()
+
+  // Redirect technician to their dedicated dashboard
+  useEffect(() => {
+    if (userRole === "technician") {
+      navigate('/technician', { replace: true })
+    }
+  }, [userRole, navigate])
 
   // Render role-specific dashboard
   if (userRole === "admin") {
@@ -27,6 +37,11 @@ export default function DashboardPage() {
 
   if (userRole === "marketing") {
     return <MarketingDashboard user={user} />
+  }
+
+  if (userRole === "technician") {
+    // Will redirect via useEffect, show nothing while redirecting
+    return null
   }
 
   // Default: show front desk dashboard for other roles

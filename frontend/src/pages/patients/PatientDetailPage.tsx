@@ -124,6 +124,16 @@ export default function PatientDetailPage() {
     },
   });
 
+  // Fetch patient scans
+  const { data: patientScans = [] } = useQuery({
+    queryKey: ['patient-scans', id],
+    queryFn: async () => {
+      const response = await api.get(`/technician/patient/${id}/scans`);
+      return response.data;
+    },
+    enabled: !!id,
+  });
+
   const getConsultationFee = () => {
     if (!visitForm.consultation_type_id) return 0;
     const type = consultationTypes.find((t: any) => t.id.toString() === visitForm.consultation_type_id);
@@ -311,6 +321,10 @@ export default function PatientDetailPage() {
               <TabsTrigger value="records">
                 <FileText className="mr-2 h-4 w-4" />
                 Clinical Records
+              </TabsTrigger>
+              <TabsTrigger value="scans">
+                <Eye className="mr-2 h-4 w-4" />
+                Scans ({patientScans.length})
               </TabsTrigger>
             </TabsList>
             <Button onClick={() => setIsVisitDialogOpen(true)}>
@@ -503,6 +517,104 @@ export default function PatientDetailPage() {
                     </CardContent>
                   </Card>
                 ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="scans" className="mt-4">
+            {patientScans.length === 0 ? (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  No scans recorded for this patient
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Scan #</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Results</TableHead>
+                      <TableHead>Payment</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {patientScans.map((scan: any) => (
+                      <TableRow key={scan.id}>
+                        <TableCell>
+                          {scan.scan_date ? new Date(scan.scan_date).toLocaleDateString() : '-'}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">{scan.scan_number}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={
+                            scan.scan_type === 'oct' ? 'bg-blue-50 text-blue-700' :
+                            scan.scan_type === 'vft' ? 'bg-purple-50 text-purple-700' :
+                            scan.scan_type === 'fundus' ? 'bg-green-50 text-green-700' :
+                            'bg-orange-50 text-orange-700'
+                          }>
+                            {scan.scan_type?.toUpperCase()}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={
+                            scan.status === 'completed' || scan.status === 'reviewed' ? 'success' :
+                            scan.status === 'pending' ? 'secondary' : 'outline'
+                          }>
+                            {scan.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[200px] truncate">
+                          {scan.results_summary || '-'}
+                        </TableCell>
+                        <TableCell>
+                          {scan.payment?.is_paid ? (
+                            <Badge className="bg-green-100 text-green-800">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Paid
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-red-100 text-red-800">Unpaid</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => navigate(`/technician/scans/${scan.id}`)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            {scan.has_pdf && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={async () => {
+                                  try {
+                                    const response = await api.get(`/technician/scans/${scan.id}/pdf`, {
+                                      responseType: 'blob'
+                                    });
+                                    const blob = new Blob([response.data], { type: 'application/pdf' });
+                                    const url = window.URL.createObjectURL(blob);
+                                    window.open(url, '_blank');
+                                  } catch (error) {
+                                    toast({ title: 'Error', description: 'Failed to load PDF', variant: 'destructive' });
+                                  }
+                                }}
+                              >
+                                <FileText className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             )}
           </TabsContent>

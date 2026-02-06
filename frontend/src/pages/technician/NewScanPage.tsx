@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -8,6 +8,9 @@ import {
   Loader2,
   Search,
   User,
+  FileText,
+  X,
+  DollarSign,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -15,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -53,6 +57,19 @@ export default function NewScanPage() {
   // Patient search
   const [patientSearch, setPatientSearch] = useState('');
   const [showPatientSearch, setShowPatientSearch] = useState(false);
+  
+  // PDF upload
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+
+  // Fetch pricing
+  const { data: pricing = [] } = useQuery({
+    queryKey: ['scan-pricing'],
+    queryFn: async () => {
+      const response = await api.get('/technician/scan-pricing');
+      return response.data;
+    },
+  });
 
   // Fetch patients for search
   const { data: patients = [] } = useQuery({
@@ -80,7 +97,23 @@ export default function NewScanPage() {
       const response = await api.post('/technician/scans', data);
       return response.data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      // If there's a PDF file, upload it
+      if (pdfFile) {
+        try {
+          const formData = new FormData();
+          formData.append('file', pdfFile);
+          await api.post(`/technician/scans/${data.id}/upload-pdf`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        } catch (err) {
+          toast({
+            title: 'Warning',
+            description: 'Scan created but PDF upload failed',
+            variant: 'destructive',
+          });
+        }
+      }
       toast({
         title: 'Success',
         description: `Scan ${data.scan_number} created successfully`,
@@ -96,6 +129,26 @@ export default function NewScanPage() {
       });
     },
   });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.type !== 'application/pdf') {
+        toast({ title: 'Error', description: 'Please select a PDF file', variant: 'destructive' });
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast({ title: 'Error', description: 'File size must be less than 10MB', variant: 'destructive' });
+        return;
+      }
+      setPdfFile(file);
+    }
+  };
+
+  const getScanPrice = () => {
+    const p = pricing.find((pr: any) => pr.scan_type === scanType);
+    return p?.price || 0;
+  };
 
   const scanTypeLabels: Record<string, string> = {
     oct: 'Optical Coherence Tomography (OCT)',
@@ -204,19 +257,29 @@ export default function NewScanPage() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(scanTypeLabels).map(([key, label]) => (
-                    <Button
-                      key={key}
-                      type="button"
-                      variant={scanType === key ? 'default' : 'outline'}
-                      className="h-auto py-3 flex-col gap-1"
-                      onClick={() => setScanType(key)}
-                    >
-                      <Eye className="h-5 w-5" />
-                      <span className="text-xs">{label.split('(')[0].trim()}</span>
-                    </Button>
-                  ))}
+                  {Object.entries(scanTypeLabels).map(([key, label]) => {
+                    const price = pricing.find((p: any) => p.scan_type === key)?.price || 0;
+                    return (
+                      <Button
+                        key={key}
+                        type="button"
+                        variant={scanType === key ? 'default' : 'outline'}
+                        className="h-auto py-3 flex-col gap-1 relative"
+                        onClick={() => setScanType(key)}
+                      >
+                        <Eye className="h-5 w-5" />
+                        <span className="text-xs font-medium">{label.split('(')[0].trim()}</span>
+                        <span className="text-xs opacity-70">GH₵ {price}</span>
+                      </Button>
+                    );
+                  })}
                 </div>
+                {scanType && (
+                  <div className="mt-4 p-3 bg-primary/10 rounded-lg flex items-center justify-between">
+                    <span className="text-sm font-medium">Price:</span>
+                    <Badge className="text-lg px-3 py-1">GH₵ {getScanPrice()}</Badge>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -406,6 +469,55 @@ export default function NewScanPage() {
                         rows={2}
                       />
                     </div>
+                  </CardContent>
+                </Card>
+
+                {/* PDF Upload */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Scan PDF
+                    </CardTitle>
+                    <CardDescription>Upload the scan result PDF (optional)</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept=".pdf"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                    
+                    {pdfFile ? (
+                      <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <FileText className="h-8 w-8 text-green-600" />
+                        <div className="flex-1">
+                          <div className="font-medium text-green-800">{pdfFile.name}</div>
+                          <div className="text-xs text-green-600">
+                            {(pdfFile.size / 1024 / 1024).toFixed(2)} MB
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setPdfFile(null)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div
+                        className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">Click to upload PDF</p>
+                        <p className="text-xs text-muted-foreground mt-1">Max 10MB</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </>

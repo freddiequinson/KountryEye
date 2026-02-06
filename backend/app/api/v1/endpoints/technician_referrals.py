@@ -11,6 +11,7 @@ Handles:
 from typing import List, Optional
 from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, desc
 from pydantic import BaseModel
@@ -24,8 +25,9 @@ from app.models.patient import Patient, Visit
 from app.models.clinical import Consultation
 from app.models.technician_referral import (
     ReferralDoctor, ExternalReferral, TechnicianScan,
-    ReferralPaymentSetting, ReferralPayment
+    ReferralPaymentSetting, ReferralPayment, ScanPricing, ScanPayment
 )
+from app.models.revenue import Revenue
 
 router = APIRouter()
 
@@ -786,6 +788,18 @@ async def list_technician_scans(
             if ref:
                 client_name = ref.client_name
         
+        # Get scan price
+        price_result = await db.execute(
+            select(ScanPricing).where(ScanPricing.scan_type == s.scan_type)
+        )
+        pricing = price_result.scalar_one_or_none()
+        
+        # Get payment info
+        payment_result = await db.execute(
+            select(ScanPayment).where(ScanPayment.scan_id == s.id)
+        )
+        payment = payment_result.scalar_one_or_none()
+        
         response.append({
             "id": s.id,
             "scan_number": s.scan_number,
@@ -802,6 +816,13 @@ async def list_technician_scans(
             "scan_date": s.scan_date.isoformat() if s.scan_date else None,
             "status": s.status,
             "has_pdf": bool(s.pdf_file_path),
+            "price": float(pricing.price) if pricing else 0,
+            "payment": {
+                "id": payment.id,
+                "amount": float(payment.amount),
+                "is_paid": payment.is_paid,
+                "added_to_deficit": payment.added_to_deficit
+            } if payment else None,
             "created_at": s.created_at.isoformat() if s.created_at else None
         })
     
@@ -905,6 +926,23 @@ async def get_technician_scan(
                 "client_name": ref.client_name
             }
     
+    # Get payment info
+    payment_info = None
+    payment_result = await db.execute(
+        select(ScanPayment).where(ScanPayment.scan_id == scan_id)
+    )
+    payment = payment_result.scalar_one_or_none()
+    if payment:
+        payment_info = {
+            "id": payment.id,
+            "amount": float(payment.amount) if payment.amount else 0,
+            "is_paid": payment.is_paid,
+            "payment_method": payment.payment_method,
+            "payment_date": payment.payment_date.isoformat() if payment.payment_date else None,
+            "added_to_deficit": payment.added_to_deficit,
+            "notes": payment.notes
+        }
+    
     return {
         "id": scan.id,
         "scan_number": scan.scan_number,
@@ -930,6 +968,7 @@ async def get_technician_scan(
         } if reviewer else None,
         "reviewed_at": scan.reviewed_at.isoformat() if scan.reviewed_at else None,
         "doctor_notes": scan.doctor_notes,
+        "payment": payment_info,
         "created_at": scan.created_at.isoformat() if scan.created_at else None
     }
 
@@ -1045,6 +1084,86 @@ async def upload_scan_pdf(
     await db.commit()
     
     return {"message": "PDF uploaded successfully", "file_path": file_path}
+
+
+@router.get("/scans/{scan_id}/pdf")
+async def get_scan_pdf(
+    scan_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Download/view PDF for a scan"""
+    result = await db.execute(
+        select(TechnicianScan).where(TechnicianScan.id == scan_id)
+    )
+    scan = result.scalar_one_or_none()
+    
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    
+    if not scan.pdf_file_path:
+        raise HTTPException(status_code=404, detail="No PDF uploaded for this scan")
+    
+    if not os.path.exists(scan.pdf_file_path):
+        raise HTTPException(status_code=404, detail="PDF file not found on server")
+    
+    return FileResponse(
+        scan.pdf_file_path,
+        media_type="application/pdf",
+        filename=f"{scan.scan_number}.pdf"
+    )
+
+
+@router.get("/patient/{patient_id}/scans")
+async def get_patient_scans(
+    patient_id: int,
+    status: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get all scans for a patient"""
+    query = select(TechnicianScan).where(TechnicianScan.patient_id == patient_id)
+    
+    if status:
+        query = query.where(TechnicianScan.status == status)
+    
+    query = query.order_by(desc(TechnicianScan.created_at)).offset(skip).limit(limit)
+    result = await db.execute(query)
+    scans = result.scalars().all()
+    
+    response = []
+    for s in scans:
+        # Get payment info
+        payment_result = await db.execute(
+            select(ScanPayment).where(ScanPayment.scan_id == s.id)
+        )
+        payment = payment_result.scalar_one_or_none()
+        
+        # Get scan price
+        price_result = await db.execute(
+            select(ScanPricing).where(ScanPricing.scan_type == s.scan_type)
+        )
+        pricing = price_result.scalar_one_or_none()
+        
+        response.append({
+            "id": s.id,
+            "scan_number": s.scan_number,
+            "scan_type": s.scan_type,
+            "scan_date": s.scan_date.isoformat() if s.scan_date else None,
+            "status": s.status,
+            "results_summary": s.results_summary,
+            "has_pdf": bool(s.pdf_file_path),
+            "price": float(pricing.price) if pricing else 0,
+            "payment": {
+                "is_paid": payment.is_paid if payment else False,
+                "payment_method": payment.payment_method if payment else None,
+            } if payment else None,
+            "created_at": s.created_at.isoformat() if s.created_at else None
+        })
+    
+    return response
 
 
 @router.post("/scans/request")
@@ -1465,3 +1584,426 @@ async def get_consultation_scans(
         }
         for s in scans
     ]
+
+
+# ============ SCAN REQUESTS (FROM DOCTORS) ============
+
+@router.get("/scan-requests")
+async def list_scan_requests(
+    status: Optional[str] = "pending",
+    scan_type: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """List scan requests from doctors - scans with requested_by_id set"""
+    query = select(TechnicianScan).where(TechnicianScan.requested_by_id != None)
+    
+    if status:
+        query = query.where(TechnicianScan.status == status)
+    if scan_type:
+        query = query.where(TechnicianScan.scan_type == scan_type)
+    
+    query = query.order_by(desc(TechnicianScan.requested_at)).offset(skip).limit(limit)
+    result = await db.execute(query)
+    scans = result.scalars().all()
+    
+    response = []
+    for s in scans:
+        # Get patient info
+        patient_info = None
+        if s.patient_id:
+            patient_result = await db.execute(
+                select(Patient).where(Patient.id == s.patient_id)
+            )
+            patient = patient_result.scalar_one_or_none()
+            if patient:
+                patient_info = {
+                    "id": patient.id,
+                    "name": f"{patient.first_name} {patient.last_name}",
+                    "patient_number": patient.patient_number,
+                    "phone": patient.phone
+                }
+        
+        # Get requesting doctor info
+        doctor_info = None
+        if s.requested_by_id:
+            doctor_result = await db.execute(
+                select(User).where(User.id == s.requested_by_id)
+            )
+            doctor = doctor_result.scalar_one_or_none()
+            if doctor:
+                doctor_info = {
+                    "id": doctor.id,
+                    "name": f"{doctor.first_name} {doctor.last_name}"
+                }
+        
+        # Get payment info
+        payment_result = await db.execute(
+            select(ScanPayment).where(ScanPayment.scan_id == s.id)
+        )
+        payment = payment_result.scalar_one_or_none()
+        
+        # Get scan price
+        price_result = await db.execute(
+            select(ScanPricing).where(ScanPricing.scan_type == s.scan_type)
+        )
+        pricing = price_result.scalar_one_or_none()
+        
+        response.append({
+            "id": s.id,
+            "scan_number": s.scan_number,
+            "scan_type": s.scan_type,
+            "patient": patient_info,
+            "requested_by": doctor_info,
+            "requested_at": s.requested_at.isoformat() if s.requested_at else None,
+            "visit_id": s.visit_id,
+            "consultation_id": s.consultation_id,
+            "status": s.status,
+            "notes": s.notes,
+            "price": float(pricing.price) if pricing else 0,
+            "payment": {
+                "id": payment.id,
+                "amount": float(payment.amount),
+                "is_paid": payment.is_paid,
+                "payment_method": payment.payment_method,
+                "payment_date": payment.payment_date.isoformat() if payment.payment_date else None
+            } if payment else None,
+            "created_at": s.created_at.isoformat() if s.created_at else None
+        })
+    
+    return response
+
+
+# ============ SCAN PRICING ============
+
+@router.get("/scan-pricing")
+async def list_scan_pricing(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """List all scan pricing"""
+    result = await db.execute(
+        select(ScanPricing).where(ScanPricing.is_active == True)
+    )
+    pricing = result.scalars().all()
+    
+    return [
+        {
+            "id": p.id,
+            "scan_type": p.scan_type,
+            "price": float(p.price),
+            "description": p.description,
+            "is_active": p.is_active
+        }
+        for p in pricing
+    ]
+
+
+@router.put("/scan-pricing/{scan_type}")
+async def update_scan_pricing(
+    scan_type: str,
+    price: float,
+    description: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Update scan pricing - admin/technician only"""
+    result = await db.execute(
+        select(ScanPricing).where(ScanPricing.scan_type == scan_type)
+    )
+    pricing = result.scalar_one_or_none()
+    
+    if not pricing:
+        # Create new pricing
+        pricing = ScanPricing(
+            scan_type=scan_type,
+            price=price,
+            description=description,
+            created_by_id=current_user.id
+        )
+        db.add(pricing)
+    else:
+        pricing.price = price
+        if description:
+            pricing.description = description
+        pricing.updated_at = datetime.utcnow()
+    
+    await db.commit()
+    return {"message": "Scan pricing updated successfully"}
+
+
+# ============ SCAN PAYMENTS ============
+
+@router.post("/scans/{scan_id}/payment")
+async def create_scan_payment(
+    scan_id: int,
+    is_paid: bool = False,
+    payment_method: Optional[str] = None,
+    notes: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Create or update payment record for a scan"""
+    # Get scan
+    scan_result = await db.execute(
+        select(TechnicianScan).where(TechnicianScan.id == scan_id)
+    )
+    scan = scan_result.scalar_one_or_none()
+    
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    
+    # Get pricing
+    price_result = await db.execute(
+        select(ScanPricing).where(ScanPricing.scan_type == scan.scan_type)
+    )
+    pricing = price_result.scalar_one_or_none()
+    
+    if not pricing:
+        raise HTTPException(status_code=400, detail="No pricing set for this scan type")
+    
+    # Check if payment already exists
+    payment_result = await db.execute(
+        select(ScanPayment).where(ScanPayment.scan_id == scan_id)
+    )
+    payment = payment_result.scalar_one_or_none()
+    
+    if payment:
+        # Update existing payment
+        payment.is_paid = is_paid
+        if is_paid:
+            payment.payment_method = payment_method
+            payment.payment_date = datetime.utcnow()
+        payment.notes = notes
+        payment.recorded_by_id = current_user.id
+        payment.updated_at = datetime.utcnow()
+    else:
+        # Create new payment
+        payment = ScanPayment(
+            scan_id=scan_id,
+            amount=pricing.price,
+            is_paid=is_paid,
+            payment_method=payment_method if is_paid else None,
+            payment_date=datetime.utcnow() if is_paid else None,
+            recorded_by_id=current_user.id
+        )
+        db.add(payment)
+    
+    await db.commit()
+    
+    return {
+        "message": "Payment recorded successfully",
+        "is_paid": is_paid,
+        "amount": float(pricing.price)
+    }
+
+
+@router.post("/scans/{scan_id}/mark-paid")
+async def mark_scan_paid(
+    scan_id: int,
+    payment_method: str,
+    notes: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Mark a scan as paid"""
+    # Get scan
+    scan_result = await db.execute(
+        select(TechnicianScan).where(TechnicianScan.id == scan_id)
+    )
+    scan = scan_result.scalar_one_or_none()
+    
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    
+    # Get pricing
+    price_result = await db.execute(
+        select(ScanPricing).where(ScanPricing.scan_type == scan.scan_type)
+    )
+    pricing = price_result.scalar_one_or_none()
+    amount = float(pricing.price) if pricing else 0
+    
+    # Check if payment exists
+    payment_result = await db.execute(
+        select(ScanPayment).where(ScanPayment.scan_id == scan_id)
+    )
+    payment = payment_result.scalar_one_or_none()
+    
+    was_already_paid = payment and payment.is_paid
+    
+    if payment:
+        payment.is_paid = True
+        payment.payment_method = payment_method
+        payment.payment_date = datetime.utcnow()
+        payment.notes = notes
+        payment.recorded_by_id = current_user.id
+        payment.updated_at = datetime.utcnow()
+    else:
+        payment = ScanPayment(
+            scan_id=scan_id,
+            amount=amount,
+            is_paid=True,
+            payment_method=payment_method,
+            payment_date=datetime.utcnow(),
+            recorded_by_id=current_user.id,
+            notes=notes
+        )
+        db.add(payment)
+    
+    # Record in revenue if not already paid and amount > 0
+    if not was_already_paid and amount > 0:
+        scan_type_labels = {
+            "oct": "OCT Scan",
+            "vft": "Visual Field Test",
+            "fundus": "Fundus Photography",
+            "pachymeter": "Pachymeter"
+        }
+        description = scan_type_labels.get(scan.scan_type, scan.scan_type.upper())
+        
+        # Get patient name if available
+        patient_name = ""
+        if scan.patient_id:
+            patient_result = await db.execute(
+                select(Patient).where(Patient.id == scan.patient_id)
+            )
+            patient = patient_result.scalar_one_or_none()
+            if patient:
+                patient_name = f" - {patient.first_name} {patient.last_name}"
+        
+        revenue = Revenue(
+            category="service",
+            description=f"{description}{patient_name}",
+            amount=amount,
+            payment_method=payment_method,
+            reference_type="scan",
+            reference_id=scan_id,
+            patient_id=scan.patient_id,
+            branch_id=current_user.branch_id,
+            recorded_by_id=current_user.id,
+            notes=f"Scan #{scan.scan_number}"
+        )
+        db.add(revenue)
+    
+    await db.commit()
+    
+    return {"message": "Scan marked as paid", "amount": amount}
+
+
+@router.post("/scans/{scan_id}/add-to-deficit")
+async def add_scan_to_deficit(
+    scan_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Add unpaid scan amount to patient's visit deficit"""
+    # Get scan
+    scan_result = await db.execute(
+        select(TechnicianScan).where(TechnicianScan.id == scan_id)
+    )
+    scan = scan_result.scalar_one_or_none()
+    
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    
+    if not scan.visit_id:
+        raise HTTPException(status_code=400, detail="Scan is not linked to a visit")
+    
+    # Get visit
+    visit_result = await db.execute(
+        select(Visit).where(Visit.id == scan.visit_id)
+    )
+    visit = visit_result.scalar_one_or_none()
+    
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found")
+    
+    # Get pricing
+    price_result = await db.execute(
+        select(ScanPricing).where(ScanPricing.scan_type == scan.scan_type)
+    )
+    pricing = price_result.scalar_one_or_none()
+    amount = float(pricing.price) if pricing else 0
+    
+    # Get or create payment record
+    payment_result = await db.execute(
+        select(ScanPayment).where(ScanPayment.scan_id == scan_id)
+    )
+    payment = payment_result.scalar_one_or_none()
+    
+    if payment and payment.added_to_deficit:
+        raise HTTPException(status_code=400, detail="Already added to deficit")
+    
+    if not payment:
+        payment = ScanPayment(
+            scan_id=scan_id,
+            amount=amount,
+            is_paid=False,
+            recorded_by_id=current_user.id
+        )
+        db.add(payment)
+    
+    # Add to visit deficit
+    current_deficit = float(visit.deficit or 0)
+    visit.deficit = current_deficit + amount
+    
+    # Mark as added to deficit
+    payment.added_to_deficit = True
+    payment.deficit_added_at = datetime.utcnow()
+    payment.updated_at = datetime.utcnow()
+    
+    await db.commit()
+    
+    return {
+        "message": f"GH₵ {amount} added to patient deficit",
+        "amount": amount,
+        "new_deficit": float(visit.deficit)
+    }
+
+
+@router.get("/scan-payments/unpaid")
+async def list_unpaid_scan_payments(
+    skip: int = 0,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """List all unpaid scan payments"""
+    # Get scans that have payment records that are unpaid
+    query = select(TechnicianScan, ScanPayment).join(
+        ScanPayment, ScanPayment.scan_id == TechnicianScan.id
+    ).where(ScanPayment.is_paid == False)
+    
+    query = query.order_by(desc(TechnicianScan.created_at)).offset(skip).limit(limit)
+    result = await db.execute(query)
+    rows = result.all()
+    
+    response = []
+    for scan, payment in rows:
+        # Get patient info
+        patient_info = None
+        if scan.patient_id:
+            patient_result = await db.execute(
+                select(Patient).where(Patient.id == scan.patient_id)
+            )
+            patient = patient_result.scalar_one_or_none()
+            if patient:
+                patient_info = {
+                    "id": patient.id,
+                    "name": f"{patient.first_name} {patient.last_name}",
+                    "patient_number": patient.patient_number
+                }
+        
+        response.append({
+            "scan_id": scan.id,
+            "scan_number": scan.scan_number,
+            "scan_type": scan.scan_type,
+            "patient": patient_info,
+            "visit_id": scan.visit_id,
+            "amount": float(payment.amount),
+            "added_to_deficit": payment.added_to_deficit,
+            "created_at": scan.created_at.isoformat() if scan.created_at else None
+        })
+    
+    return response

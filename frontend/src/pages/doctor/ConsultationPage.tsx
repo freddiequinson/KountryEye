@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Save, Plus, Trash2, Search, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Save, Plus, Trash2, Search, AlertTriangle, Eye, Clock, CheckCircle, FileText } from 'lucide-react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -59,6 +59,9 @@ export default function ConsultationPage() {
     quantity: 1,
     unit_price: 0,
   });
+  const [showScanRequestDialog, setShowScanRequestDialog] = useState(false);
+  const [selectedScanType, setSelectedScanType] = useState<string>('');
+  const [scanNotes, setScanNotes] = useState('');
 
   // Search products for prescription (with stock info) - filter by category type based on item type
   const { data: productResults = [] } = useQuery({
@@ -158,6 +161,26 @@ export default function ConsultationPage() {
     enabled: !!visitId,
   });
 
+  // Fetch scans for this visit/patient
+  const { data: visitScans = [] } = useQuery({
+    queryKey: ['visit-scans', visitId, visit?.patient_id],
+    queryFn: async () => {
+      const response = await api.get(`/technician/scans?visit_id=${visitId}`);
+      return response.data;
+    },
+    enabled: !!visitId,
+  });
+
+  // Fetch patient's past scans (for history)
+  const { data: patientScans = [] } = useQuery({
+    queryKey: ['patient-scans', visit?.patient_id],
+    queryFn: async () => {
+      const response = await api.get(`/technician/scans?patient_id=${visit.patient_id}`);
+      return response.data;
+    },
+    enabled: !!visit?.patient_id,
+  });
+
   // Fetch insurance balance for this visit
   const { data: insuranceBalance } = useQuery({
     queryKey: ['insurance-balance', visitId],
@@ -249,6 +272,42 @@ export default function ConsultationPage() {
       navigate('/doctor/queue');
     },
   });
+
+  // Request scan mutation
+  const requestScanMutation = useMutation({
+    mutationFn: async (data: { scan_type: string; notes?: string }) => {
+      const response = await api.post('/clinical/request-scan', {
+        patient_id: visit?.patient_id,
+        visit_id: parseInt(visitId || '0'),
+        consultation_id: visit?.consultation_id,
+        scan_type: data.scan_type,
+        notes: data.notes,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      toast({ title: 'Scan requested', description: 'The technician will be notified' });
+      setShowScanRequestDialog(false);
+      setSelectedScanType('');
+      setScanNotes('');
+      queryClient.invalidateQueries({ queryKey: ['visit-scans'] });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: 'Failed to request scan', 
+        description: error.response?.data?.detail || 'Please try again',
+        variant: 'destructive' 
+      });
+    },
+  });
+
+  const handleRequestScan = () => {
+    if (!selectedScanType) {
+      toast({ title: 'Please select a scan type', variant: 'destructive' });
+      return;
+    }
+    requestScanMutation.mutate({ scan_type: selectedScanType, notes: scanNotes });
+  };
 
   const addPrescriptionItem = () => {
     if (!newPrescriptionItem.name) return;
@@ -387,6 +446,14 @@ export default function ConsultationPage() {
       <Tabs defaultValue="examination" className="space-y-4">
         <TabsList>
           <TabsTrigger value="examination">Examination</TabsTrigger>
+          <TabsTrigger value="scans" className="relative">
+            Scans
+            {visitScans.filter((s: any) => s.status === 'pending').length > 0 && (
+              <span className="absolute -top-1 -right-1 h-4 w-4 bg-yellow-500 text-white text-xs rounded-full flex items-center justify-center">
+                {visitScans.filter((s: any) => s.status === 'pending').length}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="history">Patient History</TabsTrigger>
           <TabsTrigger value="diagnosis">Diagnosis & Plan</TabsTrigger>
           {aiStatus?.enabled && <TabsTrigger value="ai-summary">AI Summary</TabsTrigger>}
@@ -568,6 +635,183 @@ export default function ConsultationPage() {
               {saveClinicalRecordMutation.isPending ? 'Saving...' : 'Save Examination'}
             </Button>
           </div>
+        </TabsContent>
+
+        {/* Scans Tab */}
+        <TabsContent value="scans" className="space-y-4">
+          {/* Request Scan Card */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Eye className="h-5 w-5" />
+                Request Scan
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Send the patient for a scan. The technician will be notified and results will appear here once completed.
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Button
+                  variant="outline"
+                  className="h-20 flex-col gap-2"
+                  onClick={() => {
+                    setSelectedScanType('oct');
+                    setShowScanRequestDialog(true);
+                  }}
+                >
+                  <Eye className="h-6 w-6 text-blue-600" />
+                  <span>OCT Scan</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-20 flex-col gap-2"
+                  onClick={() => {
+                    setSelectedScanType('vft');
+                    setShowScanRequestDialog(true);
+                  }}
+                >
+                  <Eye className="h-6 w-6 text-purple-600" />
+                  <span>Visual Field Test</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-20 flex-col gap-2"
+                  onClick={() => {
+                    setSelectedScanType('fundus');
+                    setShowScanRequestDialog(true);
+                  }}
+                >
+                  <Eye className="h-6 w-6 text-green-600" />
+                  <span>Fundus Photography</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-20 flex-col gap-2"
+                  onClick={() => {
+                    setSelectedScanType('pachymeter');
+                    setShowScanRequestDialog(true);
+                  }}
+                >
+                  <Eye className="h-6 w-6 text-orange-600" />
+                  <span>Pachymeter</span>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Current Visit Scans */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Scans for This Visit</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {visitScans.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">
+                  No scans requested for this visit yet
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {visitScans.map((scan: any) => (
+                    <div key={scan.id} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                          <Badge className={
+                            scan.scan_type === 'oct' ? 'bg-blue-100 text-blue-800' :
+                            scan.scan_type === 'vft' ? 'bg-purple-100 text-purple-800' :
+                            scan.scan_type === 'fundus' ? 'bg-green-100 text-green-800' :
+                            'bg-orange-100 text-orange-800'
+                          }>
+                            {scan.scan_type?.toUpperCase()}
+                          </Badge>
+                          <span className="font-medium">{scan.scan_number}</span>
+                        </div>
+                        <Badge variant={
+                          scan.status === 'completed' || scan.status === 'reviewed' ? 'default' :
+                          scan.status === 'pending' ? 'secondary' : 'outline'
+                        }>
+                          {scan.status === 'pending' && <Clock className="h-3 w-3 mr-1" />}
+                          {scan.status === 'completed' && <CheckCircle className="h-3 w-3 mr-1" />}
+                          {scan.status}
+                        </Badge>
+                      </div>
+                      
+                      {scan.status === 'pending' && (
+                        <p className="text-sm text-muted-foreground">
+                          Waiting for technician to perform scan...
+                        </p>
+                      )}
+                      
+                      {(scan.status === 'completed' || scan.status === 'reviewed') && (
+                        <div className="mt-3 space-y-2">
+                          {scan.results_summary && (
+                            <div className="bg-muted/50 rounded p-3">
+                              <h5 className="text-sm font-medium mb-1">Results Summary</h5>
+                              <p className="text-sm">{scan.results_summary}</p>
+                            </div>
+                          )}
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            {scan.od_results && Object.keys(scan.od_results).length > 0 && (
+                              <div>
+                                <h5 className="font-medium">OD (Right Eye)</h5>
+                                <pre className="text-xs bg-muted/30 p-2 rounded mt-1 overflow-auto">
+                                  {JSON.stringify(scan.od_results, null, 2)}
+                                </pre>
+                              </div>
+                            )}
+                            {scan.os_results && Object.keys(scan.os_results).length > 0 && (
+                              <div>
+                                <h5 className="font-medium">OS (Left Eye)</h5>
+                                <pre className="text-xs bg-muted/30 p-2 rounded mt-1 overflow-auto">
+                                  {JSON.stringify(scan.os_results, null, 2)}
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                          {scan.has_pdf && (
+                            <Button variant="outline" size="sm" className="mt-2">
+                              <FileText className="h-4 w-4 mr-2" />
+                              View PDF Report
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Patient's Past Scans */}
+          {patientScans.filter((s: any) => !visitScans.some((vs: any) => vs.id === s.id)).length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Previous Scans</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {patientScans
+                    .filter((s: any) => !visitScans.some((vs: any) => vs.id === s.id))
+                    .slice(0, 5)
+                    .map((scan: any) => (
+                      <div key={scan.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline">{scan.scan_type?.toUpperCase()}</Badge>
+                          <span className="text-sm">{scan.scan_number}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {scan.scan_date ? new Date(scan.scan_date).toLocaleDateString() : ''}
+                          </span>
+                        </div>
+                        <Badge variant={scan.status === 'completed' ? 'default' : 'secondary'}>
+                          {scan.status}
+                        </Badge>
+                      </div>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="history">
@@ -1126,6 +1370,68 @@ export default function ConsultationPage() {
               disabled={prescriptionItems.length === 0 || createPrescriptionMutation.isPending}
             >
               {createPrescriptionMutation.isPending ? 'Creating...' : 'Create & Send to Front Desk'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Scan Request Dialog */}
+      <Dialog open={showScanRequestDialog} onOpenChange={setShowScanRequestDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Scan</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-4 bg-muted rounded-lg">
+              <div className="flex items-center gap-3">
+                <Eye className={`h-8 w-8 ${
+                  selectedScanType === 'oct' ? 'text-blue-600' :
+                  selectedScanType === 'vft' ? 'text-purple-600' :
+                  selectedScanType === 'fundus' ? 'text-green-600' :
+                  'text-orange-600'
+                }`} />
+                <div>
+                  <h4 className="font-medium">
+                    {selectedScanType === 'oct' && 'OCT Scan'}
+                    {selectedScanType === 'vft' && 'Visual Field Test'}
+                    {selectedScanType === 'fundus' && 'Fundus Photography'}
+                    {selectedScanType === 'pachymeter' && 'Pachymeter'}
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedScanType === 'oct' && 'Optical Coherence Tomography - Retinal imaging'}
+                    {selectedScanType === 'vft' && 'Visual Field Testing - Peripheral vision assessment'}
+                    {selectedScanType === 'fundus' && 'Fundus Photography - Retinal photography'}
+                    {selectedScanType === 'pachymeter' && 'Pachymeter - Corneal thickness measurement'}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Notes for Technician (optional)</Label>
+              <Textarea
+                value={scanNotes}
+                onChange={(e) => setScanNotes(e.target.value)}
+                placeholder="Any specific instructions or areas of concern..."
+              />
+            </div>
+            
+            <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
+              <strong>Note:</strong> The patient will be sent to the technician for this scan. 
+              Results will appear in the Scans tab once completed. You can continue with other 
+              parts of the consultation while waiting.
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowScanRequestDialog(false);
+              setSelectedScanType('');
+              setScanNotes('');
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={handleRequestScan} disabled={requestScanMutation.isPending}>
+              {requestScanMutation.isPending ? 'Requesting...' : 'Request Scan'}
             </Button>
           </DialogFooter>
         </DialogContent>

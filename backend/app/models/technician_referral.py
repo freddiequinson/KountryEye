@@ -117,8 +117,8 @@ class TechnicianScan(Base):
     visit_id = Column(Integer, ForeignKey("visits.id"), nullable=True)
     consultation_id = Column(Integer, ForeignKey("consultations.id"), nullable=True)
     
-    # Who performed the scan
-    performed_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # Who performed the scan (nullable for scan requests before technician performs)
+    performed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     branch_id = Column(Integer, ForeignKey("branches.id"))
     
     # Scan details
@@ -159,6 +159,7 @@ class TechnicianScan(Base):
     reviewed_by = relationship("User", foreign_keys=[reviewed_by_id])
     requested_by = relationship("User", foreign_keys=[requested_by_id])
     branch = relationship("Branch")
+    payment = relationship("ScanPayment", back_populates="scan", uselist=False)
 
 
 class ReferralPaymentSetting(Base):
@@ -187,6 +188,53 @@ class ReferralPaymentSetting(Base):
     # Relationships
     referral_doctor = relationship("ReferralDoctor", back_populates="payment_settings")
     created_by = relationship("User")
+
+
+class ScanPricing(Base):
+    """Pricing configuration for different scan types"""
+    __tablename__ = "scan_pricing"
+
+    id = Column(Integer, primary_key=True, index=True)
+    scan_type = Column(String(20), unique=True, nullable=False)  # oct, vft, fundus, pachymeter
+    price = Column(Numeric(10, 2), nullable=False)
+    description = Column(String(200))
+    is_active = Column(Boolean, default=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, onupdate=datetime.utcnow)
+
+    created_by = relationship("User")
+
+
+class ScanPayment(Base):
+    """Payment tracking for individual scans - separate from main clinic payments"""
+    __tablename__ = "scan_payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    scan_id = Column(Integer, ForeignKey("technician_scans.id"), nullable=False)
+    
+    # Amount details
+    amount = Column(Numeric(10, 2), nullable=False)
+    
+    # Payment status
+    is_paid = Column(Boolean, default=False)
+    payment_method = Column(String(50))  # cash, mobile_money, etc.
+    payment_date = Column(DateTime, nullable=True)
+    
+    # If unpaid and linked to a visit, this tracks if it was added to patient deficit
+    added_to_deficit = Column(Boolean, default=False)
+    deficit_added_at = Column(DateTime, nullable=True)
+    
+    # Who recorded the payment
+    recorded_by_id = Column(Integer, ForeignKey("users.id"))
+    
+    notes = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, onupdate=datetime.utcnow)
+
+    # Relationships
+    scan = relationship("TechnicianScan", back_populates="payment")
+    recorded_by = relationship("User")
 
 
 class ReferralPayment(Base):

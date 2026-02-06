@@ -90,6 +90,7 @@ const allNavItems: NavItem[] = [
   { title: "Messages", url: "/messages", icon: MessageSquare, permissions: ["messages.view"] },
   // Technician items
   { title: "Technician", url: "/technician", icon: Eye, permissions: ["technician.view"], roles: ["technician"] },
+  { title: "Scan Requests", url: "/technician/scan-requests", icon: ClipboardList, permissions: ["technician.scans"], roles: ["technician"] },
   { title: "Referrals", url: "/technician/referrals", icon: Users, permissions: ["technician.referrals"], roles: ["technician"] },
   { title: "Scans", url: "/technician/scans", icon: Eye, permissions: ["technician.scans"], roles: ["technician"] },
   { title: "Referral Payments", url: "/admin/referral-payments", icon: DollarSign, permissions: ["referrals.payments"] },
@@ -176,8 +177,20 @@ function SidebarInnerContent() {
     })
   }
 
-  const mainItems = filterByPermission(allNavItems.filter(i => 
-    ["/", "/attendance", "/frontdesk", "/sales/pos", "/doctor/queue", "/patients", "/fund-requests", "/messages"].includes(i.url)
+  // For technician role, show technician-specific items
+  const isTechnician = userRole === "technician"
+  
+  const mainItems = filterByPermission(allNavItems.filter(i => {
+    if (isTechnician) {
+      // Technician sees: Dashboard (technician), Attendance, Messages, and technician-specific items
+      return ["/technician", "/attendance", "/messages", "/fund-requests"].includes(i.url)
+    }
+    return ["/", "/attendance", "/frontdesk", "/sales/pos", "/doctor/queue", "/patients", "/fund-requests", "/messages"].includes(i.url)
+  }))
+  
+  // Technician-specific items
+  const technicianItems = filterByPermission(allNavItems.filter(i => 
+    ["/technician/scan-requests", "/technician/referrals", "/technician/scans"].includes(i.url)
   ))
   
   const managementItems = filterByPermission(allNavItems.filter(i => 
@@ -185,7 +198,7 @@ function SidebarInnerContent() {
   ))
   
   const adminItems = filterByPermission(allNavItems.filter(i => 
-    ["/marketing", "/accounting", "/admin/revenue", "/admin/users", "/admin/employees", "/admin/permissions", "/admin/analytics"].includes(i.url)
+    ["/marketing", "/accounting", "/admin/revenue", "/admin/users", "/admin/employees", "/admin/permissions", "/admin/analytics", "/admin/referral-payments"].includes(i.url)
   ))
 
   const getRoleDisplayName = () => {
@@ -200,6 +213,7 @@ function SidebarInnerContent() {
       case "manager": return "Manager"
       case "accounting": return "Accountant"
       case "marketing": return "Marketing"
+      case "technician": return "Clinical Technician"
       default: return "Staff"
     }
   }
@@ -265,6 +279,50 @@ function SidebarInnerContent() {
                               {unreadCount > 99 ? '99+' : unreadCount}
                             </span>
                           )}
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </SidebarGroup>
+          </Collapsible>
+        )}
+
+        {technicianItems.length > 0 && (
+          <Collapsible 
+            open={!isCollapsed && openSection === 'technician'} 
+            onOpenChange={(open) => setOpenSection(open ? 'technician' : null)}
+          >
+            <SidebarGroup>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      tooltip="Technician"
+                      className="w-full justify-center group-data-[collapsible=icon]:justify-center"
+                      data-tour="section-technician"
+                    >
+                      <Eye className="h-4 w-4 shrink-0" />
+                      <span className="flex-1 text-left group-data-[collapsible=icon]:hidden">Technician</span>
+                      <ChevronRight className={`h-4 w-4 shrink-0 transition-transform duration-200 group-data-[collapsible=icon]:hidden ${openSection === 'technician' ? 'rotate-90' : ''}`} />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                </SidebarMenuItem>
+              </SidebarMenu>
+              <CollapsibleContent>
+                <SidebarGroupContent className="pl-4">
+                  <SidebarMenu>
+                    {technicianItems.map((item) => (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton
+                          tooltip={item.title}
+                          isActive={location.pathname === item.url || location.pathname.startsWith(item.url)}
+                          onClick={() => navigate(item.url)}
+                          data-tour={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
+                        >
+                          <item.icon />
+                          <span>{item.title}</span>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     ))}

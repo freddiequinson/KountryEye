@@ -4,12 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
+from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.api.v1.deps import get_current_active_user
 from app.models.user import User
 from app.models.patient import Visit, Patient
 from app.models.clinical import ConsultationType, Consultation, ClinicalRecord, Prescription, PrescriptionItem, ClinicalRecordHistory
+from app.models.technician_referral import TechnicianScan
 from app.schemas.clinical import (
     ConsultationTypeCreate, ConsultationTypeResponse,
     ConsultationCreate, ConsultationResponse,
@@ -875,3 +877,74 @@ async def list_consultation_types(
         {"id": t.id, "name": t.name, "base_fee": float(t.base_fee) if t.base_fee else 0}
         for t in types
     ]
+
+
+# ============ DOCTOR SCAN REQUEST ============
+
+class ScanRequestCreate(BaseModel):
+    patient_id: int
+    visit_id: int
+    consultation_id: Optional[int] = None
+    scan_type: str
+    notes: Optional[str] = None
+
+
+async def generate_scan_number(db: AsyncSession) -> str:
+    """Generate unique scan number"""
+    today = datetime.now().strftime("%Y%m%d")
+    result = await db.execute(
+        select(func.count(TechnicianScan.id))
+        .where(TechnicianScan.scan_number.like(f"SCN-{today}%"))
+    )
+    count = result.scalar() or 0
+    return f"SCN-{today}-{str(count + 1).zfill(4)}"
+
+
+@router.post("/request-scan")
+async def request_scan(
+    data: ScanRequestCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Doctor requests a scan for a patient during consultation"""
+    # Validate scan type
+    valid_types = ["oct", "vft", "fundus", "pachymeter"]
+    if data.scan_type.lower() not in valid_types:
+        raise HTTPException(status_code=400, detail=f"Invalid scan type. Must be one of: {valid_types}")
+    
+    # Verify patient exists
+    patient_result = await db.execute(select(Patient).where(Patient.id == data.patient_id))
+    if not patient_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    # Verify visit exists
+    visit_result = await db.execute(select(Visit).where(Visit.id == data.visit_id))
+    if not visit_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Visit not found")
+    
+    scan_number = await generate_scan_number(db)
+    
+    # Create scan request
+    scan = TechnicianScan(
+        scan_number=scan_number,
+        scan_type=data.scan_type.lower(),
+        patient_id=data.patient_id,
+        visit_id=data.visit_id,
+        consultation_id=data.consultation_id,
+        requested_by_id=current_user.id,
+        requested_at=datetime.utcnow(),
+        branch_id=current_user.branch_id,
+        notes=data.notes,
+        status="pending"
+    )
+    db.add(scan)
+    await db.commit()
+    await db.refresh(scan)
+    
+    return {
+        "id": scan.id,
+        "scan_number": scan.scan_number,
+        "scan_type": scan.scan_type,
+        "status": scan.status,
+        "message": "Scan requested successfully. Technician will be notified."
+    }
