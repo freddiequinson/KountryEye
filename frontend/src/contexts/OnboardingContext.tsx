@@ -61,6 +61,27 @@ export const pageTutorials: Record<string, TutorialStep[]> = {
     { id: 'acc-summary', target: '[data-tour="summary"]', title: 'Financial Summary', description: 'View income, expenses, and profit overview.', position: 'right' },
     { id: 'acc-transactions', target: '[data-tour="transactions"]', title: 'Transactions', description: 'Review all financial transactions.', position: 'bottom' },
   ],
+  '/technician': [
+    { id: 'tech-welcome', target: '[data-tour="page-title"]', title: 'Technician Dashboard', description: 'Your central hub for managing scans and referrals.', position: 'bottom' },
+    { id: 'tech-stats', target: '[data-tour="stats-cards"]', title: 'Today\'s Overview', description: 'View pending scan requests, completed scans, and revenue at a glance.', position: 'bottom' },
+    { id: 'tech-actions', target: '[data-tour="quick-actions"]', title: 'Quick Actions', description: 'Quickly create new scans or register external referrals.', position: 'bottom' },
+  ],
+  '/technician/scans': [
+    { id: 'scans-welcome', target: '[data-tour="page-title"]', title: 'Scans Management', description: 'View and manage all patient scans.', position: 'bottom' },
+    { id: 'scans-list', target: '[data-tour="scans-list"]', title: 'Scan List', description: 'Browse all scans. Filter by type, status, or date.', position: 'right' },
+    { id: 'scans-new', target: '[data-tour="new-scan"]', title: 'New Scan', description: 'Click to create a new scan for a patient.', position: 'left' },
+    { id: 'scans-pricing', target: '[data-tour="pricing"]', title: 'Scan Pricing', description: 'Set prices for each scan type.', position: 'left' },
+  ],
+  '/technician/scan-requests': [
+    { id: 'requests-welcome', target: '[data-tour="page-title"]', title: 'Scan Requests', description: 'View scan requests from doctors.', position: 'bottom' },
+    { id: 'requests-list', target: '[data-tour="requests-list"]', title: 'Pending Requests', description: 'Doctors request scans during consultations. Process them here.', position: 'right' },
+    { id: 'requests-filter', target: '[data-tour="filter"]', title: 'Filter Requests', description: 'Filter by scan type or status to find specific requests.', position: 'bottom' },
+  ],
+  '/technician/referrals': [
+    { id: 'ref-welcome', target: '[data-tour="page-title"]', title: 'External Referrals', description: 'Manage patients referred from external doctors.', position: 'bottom' },
+    { id: 'ref-list', target: '[data-tour="referrals-list"]', title: 'Referral List', description: 'View all external referrals and their status.', position: 'right' },
+    { id: 'ref-new', target: '[data-tour="new-referral"]', title: 'New Referral', description: 'Register a new patient referral from an external doctor.', position: 'left' },
+  ],
 };
 
 // Main onboarding tutorial steps for each role

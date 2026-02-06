@@ -29,6 +29,9 @@ import {
   Video,
   Lightbulb,
   ChevronRight,
+  Eye,
+  Scan,
+  UserPlus,
 } from 'lucide-react';
 
 interface HelpSection {
@@ -421,6 +424,78 @@ const frontdeskHelpSections: HelpSection[] = [
   },
 ];
 
+const technicianHelpSections: HelpSection[] = [
+  {
+    id: 'technician-dashboard',
+    title: 'Technician Dashboard',
+    icon: <Eye className="h-5 w-5" />,
+    description: 'Overview of your daily technician tasks and pending work.',
+    details: [
+      'View pending scan requests from doctors',
+      'See today\'s completed scans',
+      'Track external referrals',
+      'Monitor scan revenue',
+      'Quick access to new scan and referral forms',
+    ],
+    tips: [
+      'Check the dashboard at the start of each shift',
+      'Prioritize pending scan requests from doctors',
+    ],
+  },
+  {
+    id: 'scans',
+    title: 'Scans Management',
+    icon: <Scan className="h-5 w-5" />,
+    description: 'Perform and manage OCT, VFT, Fundus, and Pachymeter scans.',
+    details: [
+      'Create new scans for patients',
+      'Upload scan result PDFs',
+      'Record scan findings and summaries',
+      'Mark scans as completed or reviewed',
+      'Process scan payments',
+      'Set scan pricing for each type',
+    ],
+    tips: [
+      'Always upload the PDF result after completing a scan',
+      'Add detailed notes for the reviewing doctor',
+    ],
+  },
+  {
+    id: 'scan-requests',
+    title: 'Scan Requests',
+    icon: <ClipboardList className="h-5 w-5" />,
+    description: 'View and process scan requests from doctors.',
+    details: [
+      'See all pending scan requests',
+      'View requesting doctor and patient info',
+      'Accept and perform requested scans',
+      'Mark requests as completed',
+      'Process payments for completed scans',
+    ],
+    tips: [
+      'Process scan requests promptly',
+      'Notify the doctor when scan is ready for review',
+    ],
+  },
+  {
+    id: 'referrals',
+    title: 'External Referrals',
+    icon: <UserPlus className="h-5 w-5" />,
+    description: 'Manage patients referred from external doctors.',
+    details: [
+      'Register external referral doctors',
+      'Record patient referrals with scan requests',
+      'Track referral sources and payments',
+      'Manage referral doctor commissions',
+      'Generate referral reports',
+    ],
+    tips: [
+      'Keep referral doctor contact info updated',
+      'Track referral payments for accurate commission calculation',
+    ],
+  },
+];
+
 const marketingHelpSections: HelpSection[] = [
   {
     id: 'marketing',
@@ -492,6 +567,18 @@ const faqs = [
     question: 'How do I submit a fund request?',
     answer: 'Go to Memos/Fund Requests page. Click "New Request", fill in the amount, purpose, and attach any supporting documents. Submit for approval by your manager.',
   },
+  {
+    question: 'How do I perform a scan for a patient?',
+    answer: 'Go to Technician > Scans and click "New Scan". Select the patient, scan type (OCT, VFT, Fundus, or Pachymeter), and fill in the details. After performing the scan, upload the PDF result and add any findings.',
+  },
+  {
+    question: 'How do I view scan requests from doctors?',
+    answer: 'Go to Technician > Scan Requests to see all pending scan requests. You can filter by status or scan type. Click on a request to view details and process it.',
+  },
+  {
+    question: 'How do I record an external referral?',
+    answer: 'Go to Technician > Referrals and click "New Referral". Select or add the referring doctor, enter patient details, and specify the requested scans. The referral will be tracked for payment and commission purposes.',
+  },
 ];
 
 // Page tutorials available
@@ -505,6 +592,10 @@ const availablePageTutorials = [
   { path: '/admin/employees', title: 'Employees', icon: <Users className="h-4 w-4" /> },
   { path: '/marketing', title: 'Marketing', icon: <Megaphone className="h-4 w-4" /> },
   { path: '/accounting', title: 'Accounting', icon: <BarChart3 className="h-4 w-4" /> },
+  { path: '/technician', title: 'Technician Dashboard', icon: <Eye className="h-4 w-4" /> },
+  { path: '/technician/scans', title: 'Scans', icon: <Scan className="h-4 w-4" /> },
+  { path: '/technician/scan-requests', title: 'Scan Requests', icon: <ClipboardList className="h-4 w-4" /> },
+  { path: '/technician/referrals', title: 'Referrals', icon: <UserPlus className="h-4 w-4" /> },
 ];
 
 export default function HelpPage() {
@@ -541,6 +632,8 @@ export default function HelpPage() {
         return frontdeskHelpSections;
       case 'marketing':
         return marketingHelpSections;
+      case 'technician':
+        return technicianHelpSections;
       default:
         return frontdeskHelpSections;
     }
@@ -561,6 +654,8 @@ export default function HelpPage() {
         return 'Front Desk';
       case 'marketing':
         return 'Marketing';
+      case 'technician':
+        return 'Technician';
       default:
         return 'Staff';
     }

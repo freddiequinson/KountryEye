@@ -37,6 +37,7 @@ import {
   MessageSquare,
   Eye,
   Scan,
+  Search,
 } from "lucide-react"
 
 import { useAuthStore } from "@/stores/auth"
@@ -94,6 +95,7 @@ const allNavItems: NavItem[] = [
   { title: "Referrals", url: "/technician/referrals", icon: Users, permissions: ["technician.referrals"], roles: ["technician"] },
   { title: "Scans", url: "/technician/scans", icon: Eye, permissions: ["technician.scans"], roles: ["technician"] },
   { title: "Referral Payments", url: "/admin/referral-payments", icon: DollarSign, permissions: ["referrals.payments"] },
+  { title: "Search", url: "/admin/search", icon: Search, permissions: ["analytics.view"] },
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -198,7 +200,7 @@ function SidebarInnerContent() {
   ))
   
   const adminItems = filterByPermission(allNavItems.filter(i => 
-    ["/marketing", "/accounting", "/admin/revenue", "/admin/users", "/admin/employees", "/admin/permissions", "/admin/analytics", "/admin/referral-payments"].includes(i.url)
+    ["/marketing", "/accounting", "/admin/revenue", "/admin/users", "/admin/employees", "/admin/permissions", "/admin/analytics", "/admin/referral-payments", "/admin/search"].includes(i.url)
   ))
 
   const getRoleDisplayName = () => {

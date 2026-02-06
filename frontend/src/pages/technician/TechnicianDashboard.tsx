@@ -77,12 +77,12 @@ export default function TechnicianDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Technician Dashboard</h1>
+          <h1 className="text-3xl font-bold" data-tour="page-title">Technician Dashboard</h1>
           <p className="text-muted-foreground">
             Welcome back, {user?.first_name}! Manage referrals and scans.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2" data-tour="quick-actions">
           <Button onClick={() => navigate('/technician/referrals/new')}>
             <Plus className="h-4 w-4 mr-2" />
             New Referral
@@ -95,7 +95,7 @@ export default function TechnicianDashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="stats-cards">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Referrals</CardTitle>

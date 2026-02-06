@@ -134,17 +134,17 @@ export default function ScansPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Technician Scans</h1>
+          <h1 className="text-3xl font-bold" data-tour="page-title">Technician Scans</h1>
           <p className="text-muted-foreground">
             OCT, Visual Field Test, Fundus Photography, and Pachymeter scans
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowPricingDialog(true)}>
+          <Button variant="outline" onClick={() => setShowPricingDialog(true)} data-tour="pricing">
             <Settings className="h-4 w-4 mr-2" />
             Pricing
           </Button>
-          <Button onClick={() => navigate('/technician/scans/new')}>
+          <Button onClick={() => navigate('/technician/scans/new')} data-tour="new-scan">
             <Plus className="h-4 w-4 mr-2" />
             New Scan
           </Button>
