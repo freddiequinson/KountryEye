@@ -15,6 +15,7 @@ import {
   LogOut,
   Clock,
   User,
+  Download,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,6 +55,16 @@ export default function CheckoutPage() {
     queryKey: ['checkout-summary', visitId],
     queryFn: async () => {
       const response = await api.get(`/checkout/visits/${visitId}/checkout-summary`);
+      return response.data;
+    },
+    enabled: !!visitId,
+  });
+
+  // Fetch prescriptions for this visit
+  const { data: prescriptions = [] } = useQuery({
+    queryKey: ['visit-prescriptions', visitId],
+    queryFn: async () => {
+      const response = await api.get(`/clinical/visits/${visitId}/prescriptions`);
       return response.data;
     },
     enabled: !!visitId,
@@ -316,6 +327,53 @@ export default function CheckoutPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Optical Prescriptions - for download */}
+        {prescriptions.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Eye className="h-5 w-5" />
+                Optical Prescriptions ({prescriptions.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {prescriptions.map((prescription: any) => (
+                  <div key={prescription.id} className="flex justify-between items-center p-3 bg-purple-50/50 rounded border">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {prescription.prescription_type || 'Optical'}
+                        </Badge>
+                        <span className="font-medium">
+                          {prescription.items?.map((i: any) => i.name).join(', ') || 'Spectacles Prescription'}
+                        </span>
+                      </div>
+                      {(prescription.sphere_od || prescription.sphere_os) && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          OD: {prescription.sphere_od || '-'} / {prescription.cylinder_od || '-'} | 
+                          OS: {prescription.sphere_os || '-'} / {prescription.cylinder_os || '-'} | 
+                          Add: {prescription.add_power || '-'}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        window.open(`${api.defaults.baseURL}/clinical/prescriptions/${prescription.id}/download-pdf`, '_blank');
+                      }}
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      Download PDF
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Summary */}

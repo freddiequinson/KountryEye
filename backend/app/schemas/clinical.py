@@ -120,16 +120,24 @@ class PrescriptionBase(BaseModel):
     sphere_od: Optional[str] = None
     cylinder_od: Optional[str] = None
     axis_od: Optional[str] = None
+    va_od: Optional[str] = None
     sphere_os: Optional[str] = None
     cylinder_os: Optional[str] = None
     axis_os: Optional[str] = None
+    va_os: Optional[str] = None
     add_power: Optional[str] = None
     pd: Optional[str] = None
+    segment_height: Optional[str] = None
     lens_type: Optional[str] = None
     lens_material: Optional[str] = None
     lens_coating: Optional[str] = None
     frame_type: Optional[str] = None
+    frame_code: Optional[str] = None
+    frame_size: Optional[str] = None
     notes: Optional[str] = None
+    remarks: Optional[str] = None
+    dispensed_by_name: Optional[str] = None
+    delivery_date: Optional[datetime] = None
 
 
 class PrescriptionCreate(PrescriptionBase):

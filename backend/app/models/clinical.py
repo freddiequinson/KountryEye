@@ -134,18 +134,26 @@ class Prescription(Base):
     sphere_od = Column(String(20))
     cylinder_od = Column(String(20))
     axis_od = Column(String(20))
+    va_od = Column(String(20))  # Visual Acuity OD for prescription
     sphere_os = Column(String(20))
     cylinder_os = Column(String(20))
     axis_os = Column(String(20))
+    va_os = Column(String(20))  # Visual Acuity OS for prescription
     add_power = Column(String(20))
     pd = Column(String(20))
+    segment_height = Column(String(20))
     
-    lens_type = Column(String(100))
-    lens_material = Column(String(100))
-    lens_coating = Column(String(100))
+    lens_type = Column(String(100))  # SV, Bifocal, Progressive
+    lens_material = Column(String(100))  # CR-39, Poly, Hi-index
+    lens_coating = Column(String(100))  # ARC, Blue-cut, Photochromic, None, Fashion, Sun
     frame_type = Column(String(100))
+    frame_code = Column(String(100))
+    frame_size = Column(String(50))
     
     notes = Column(Text)
+    remarks = Column(Text)
+    dispensed_by_name = Column(String(200))
+    delivery_date = Column(DateTime)
     is_dispensed = Column(Boolean, default=False)
     dispensed_at = Column(DateTime)
     

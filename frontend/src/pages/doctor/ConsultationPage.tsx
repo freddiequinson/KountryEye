@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Save, Plus, Trash2, Search, AlertTriangle, Eye, Clock, CheckCircle, FileText } from 'lucide-react';
+import { ArrowLeft, Save, Plus, Trash2, Search, AlertTriangle, Eye, Clock, CheckCircle, FileText, Download } from 'lucide-react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1008,26 +1008,51 @@ export default function ConsultationPage() {
             <CardContent className="space-y-4 pt-4">
               {/* Existing Optical Prescriptions */}
               {visitPrescriptions.some((p: any) => p.items.some((i: any) => ['spectacle', 'lens', 'other'].includes(i.item_type))) ? (
-                <div className="space-y-2">
-                  {visitPrescriptions.map((prescription: any) => (
-                    prescription.items
-                      .filter((item: any) => ['spectacle', 'lens', 'other'].includes(item.item_type))
-                      .map((item: any) => (
-                        <div key={item.id} className="flex justify-between items-center p-3 bg-purple-50/50 rounded border">
-                          <div>
-                            <Badge variant="outline" className="mr-2 text-xs">{item.item_type}</Badge>
-                            <span className="font-medium">{item.name}</span>
-                            {item.description && <p className="text-sm text-muted-foreground mt-1">{item.description}</p>}
-                            {item.is_external && <Badge variant="outline" className="ml-2 text-xs">External</Badge>}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm">Qty: {item.quantity}</span>
-                            <Badge variant={prescription.status === 'paid' ? 'success' : 'secondary'} className="text-xs">
-                              {prescription.status}
-                            </Badge>
-                          </div>
+                <div className="space-y-3">
+                  {visitPrescriptions
+                    .filter((p: any) => p.items.some((i: any) => ['spectacle', 'lens', 'other'].includes(i.item_type)))
+                    .map((prescription: any) => (
+                    <div key={prescription.id} className="p-3 bg-purple-50/50 rounded border">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1">
+                          {prescription.items
+                            .filter((item: any) => ['spectacle', 'lens', 'other'].includes(item.item_type))
+                            .map((item: any) => (
+                              <div key={item.id} className="flex items-center gap-2 mb-1">
+                                <Badge variant="outline" className="text-xs">{item.item_type}</Badge>
+                                <span className="font-medium">{item.name}</span>
+                                <span className="text-sm text-muted-foreground">Qty: {item.quantity}</span>
+                                {item.is_external && <Badge variant="outline" className="text-xs">External</Badge>}
+                              </div>
+                            ))}
                         </div>
-                      ))
+                        <div className="flex items-center gap-2">
+                          <Badge variant={prescription.status === 'paid' ? 'success' : 'secondary'} className="text-xs">
+                            {prescription.status}
+                          </Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              window.open(`${api.defaults.baseURL}/clinical/prescriptions/${prescription.id}/download-pdf`, '_blank');
+                            }}
+                            title="Download Prescription PDF"
+                          >
+                            <Download className="h-4 w-4 mr-1" />
+                            PDF
+                          </Button>
+                        </div>
+                      </div>
+                      {/* Show prescription details if available */}
+                      {(prescription.sphere_od || prescription.sphere_os) && (
+                        <div className="text-xs text-muted-foreground mt-2 pt-2 border-t grid grid-cols-4 gap-2">
+                          <span>OD: {prescription.sphere_od || '-'} / {prescription.cylinder_od || '-'} x {prescription.axis_od || '-'}</span>
+                          <span>OS: {prescription.sphere_os || '-'} / {prescription.cylinder_os || '-'} x {prescription.axis_os || '-'}</span>
+                          <span>Add: {prescription.add_power || '-'}</span>
+                          <span>PD: {prescription.pd || '-'}</span>
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               ) : (

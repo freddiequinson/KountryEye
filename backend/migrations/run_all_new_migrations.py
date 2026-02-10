@@ -138,6 +138,34 @@ def migrate():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_branch_assignments_current ON branch_assignments(user_id, is_current)")
     print("   Created indexes")
     
+    # 8. Add new prescription fields for spectacles prescription form
+    print("\n8. Adding new prescription fields...")
+    columns = get_columns(cursor, 'prescriptions')
+    if 'va_od' not in columns:
+        cursor.execute("ALTER TABLE prescriptions ADD COLUMN va_od VARCHAR(20)")
+        print("   Added va_od")
+    if 'va_os' not in columns:
+        cursor.execute("ALTER TABLE prescriptions ADD COLUMN va_os VARCHAR(20)")
+        print("   Added va_os")
+    if 'segment_height' not in columns:
+        cursor.execute("ALTER TABLE prescriptions ADD COLUMN segment_height VARCHAR(20)")
+        print("   Added segment_height")
+    if 'frame_code' not in columns:
+        cursor.execute("ALTER TABLE prescriptions ADD COLUMN frame_code VARCHAR(100)")
+        print("   Added frame_code")
+    if 'frame_size' not in columns:
+        cursor.execute("ALTER TABLE prescriptions ADD COLUMN frame_size VARCHAR(50)")
+        print("   Added frame_size")
+    if 'remarks' not in columns:
+        cursor.execute("ALTER TABLE prescriptions ADD COLUMN remarks TEXT")
+        print("   Added remarks")
+    if 'dispensed_by_name' not in columns:
+        cursor.execute("ALTER TABLE prescriptions ADD COLUMN dispensed_by_name VARCHAR(200)")
+        print("   Added dispensed_by_name")
+    if 'delivery_date' not in columns:
+        cursor.execute("ALTER TABLE prescriptions ADD COLUMN delivery_date DATETIME")
+        print("   Added delivery_date")
+    
     conn.commit()
     conn.close()
     

@@ -1,6 +1,7 @@
 from typing import List, Optional
 from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
@@ -9,6 +10,7 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.api.v1.deps import get_current_active_user
 from app.models.user import User
+from app.utils.pdf_generator import generate_spectacles_prescription_pdf
 from app.models.patient import Visit, Patient
 from app.models.clinical import ConsultationType, Consultation, ClinicalRecord, Prescription, PrescriptionItem, ClinicalRecordHistory
 from app.models.technician_referral import TechnicianScan
@@ -947,3 +949,115 @@ async def request_scan(
         "status": scan.status,
         "message": "Scan requested successfully. Technician will be notified."
     }
+
+
+@router.get("/prescriptions/{prescription_id}/download-pdf")
+async def download_prescription_pdf(
+    prescription_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Download spectacles prescription as PDF"""
+    # Get prescription with related data
+    result = await db.execute(
+        select(Prescription)
+        .options(
+            joinedload(Prescription.patient),
+            joinedload(Prescription.consultation).joinedload(Consultation.doctor),
+            joinedload(Prescription.consultation).joinedload(Consultation.visit)
+        )
+        .where(Prescription.id == prescription_id)
+    )
+    prescription = result.unique().scalar_one_or_none()
+    
+    if not prescription:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    
+    # Get patient info
+    patient = prescription.patient
+    consultation = prescription.consultation
+    visit = consultation.visit if consultation else None
+    doctor = consultation.doctor if consultation else None
+    
+    # Calculate patient age
+    patient_age = ""
+    if patient and patient.date_of_birth:
+        today = date.today()
+        age = today.year - patient.date_of_birth.year - ((today.month, today.day) < (patient.date_of_birth.month, patient.date_of_birth.day))
+        patient_age = str(age)
+    
+    # Determine patient type based on visit count
+    patient_type = "New"
+    if patient:
+        visit_count_result = await db.execute(
+            select(func.count(Visit.id)).where(Visit.patient_id == patient.id)
+        )
+        visit_count = visit_count_result.scalar() or 0
+        if visit_count > 1:
+            patient_type = "Returning"
+    
+    # Get VisionCare member status from visit
+    visioncare_member = False
+    if visit and hasattr(visit, 'visioncare_member'):
+        visioncare_member = visit.visioncare_member or False
+    
+    # Get branch info
+    branch_address = "GOIL FUEL STATION - BASKET, SPINTEX RD, ACCRA"
+    branch_phone = "0548503833 / 0548481866"
+    if current_user.branch:
+        branch_address = current_user.branch.address or branch_address
+        branch_phone = current_user.branch.phone or branch_phone
+    
+    # Build prescription data for PDF
+    prescription_data = {
+        "patient": {
+            "name": f"{patient.first_name} {patient.last_name}" if patient else "",
+            "age": patient_age,
+            "sex": patient.gender if patient else "",
+            "phone": patient.phone if patient else "",
+        },
+        "patient_type": patient_type,
+        "visioncare_member": visioncare_member,
+        "date": prescription.created_at.strftime("%Y-%m-%d") if prescription.created_at else datetime.now().strftime("%Y-%m-%d"),
+        "branch_address": branch_address,
+        "branch_phone": branch_phone,
+        "optometrist_name": f"{doctor.first_name} {doctor.last_name}" if doctor else "",
+        
+        # Prescription values
+        "sphere_od": prescription.sphere_od or "",
+        "cylinder_od": prescription.cylinder_od or "",
+        "axis_od": prescription.axis_od or "",
+        "va_od": prescription.va_od or "",
+        "sphere_os": prescription.sphere_os or "",
+        "cylinder_os": prescription.cylinder_os or "",
+        "axis_os": prescription.axis_os or "",
+        "va_os": prescription.va_os or "",
+        "add_power": prescription.add_power or "",
+        "pd": prescription.pd or "",
+        "segment_height": prescription.segment_height or "",
+        
+        # Lens and frame info
+        "lens_type": prescription.lens_type or "",
+        "lens_material": prescription.lens_material or "",
+        "lens_coating": prescription.lens_coating or "",
+        "frame_code": prescription.frame_code or "",
+        "frame_size": prescription.frame_size or "",
+        "dispensed_by_name": prescription.dispensed_by_name or "",
+        "delivery_date": prescription.delivery_date.strftime("%Y-%m-%d") if prescription.delivery_date else "",
+        "remarks": prescription.remarks or "",
+    }
+    
+    # Generate PDF
+    pdf_bytes = generate_spectacles_prescription_pdf(prescription_data)
+    
+    # Return PDF response
+    patient_name = f"{patient.first_name}_{patient.last_name}" if patient else "patient"
+    filename = f"prescription_{patient_name}_{prescription.created_at.strftime('%Y%m%d') if prescription.created_at else 'unknown'}.pdf"
+    
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
