@@ -107,6 +107,14 @@ export default function ConsultationPage() {
       visual_acuity_os: '',
       iop_od: '',
       iop_os: '',
+      refraction_od_sphere: '',
+      refraction_od_cylinder: '',
+      refraction_od_axis: '',
+      refraction_os_sphere: '',
+      refraction_os_cylinder: '',
+      refraction_os_axis: '',
+      refraction_add: '',
+      refraction_pd: '',
       anterior_segment_od: '',
       anterior_segment_os: '',
       posterior_segment_od: '',
@@ -120,12 +128,54 @@ export default function ConsultationPage() {
     };
   });
 
+  // Optical prescription form state (pre-filled from refraction data)
+  const [opticalPrescription, setOpticalPrescription] = useState({
+    sphere_od: '',
+    cylinder_od: '',
+    axis_od: '',
+    va_od: '',
+    sphere_os: '',
+    cylinder_os: '',
+    axis_os: '',
+    va_os: '',
+    add_power: '',
+    pd: '',
+    segment_height: '',
+    lens_type: '',
+    lens_material: '',
+    lens_coating: '',
+    frame_code: '',
+    frame_size: '',
+    dispensed_by_name: '',
+    delivery_date: '',
+    remarks: '',
+  });
+
   // Save to session storage whenever clinical record changes
   useEffect(() => {
     if (visitId) {
       sessionStorage.setItem(`consultation-${visitId}`, JSON.stringify(clinicalRecord));
     }
   }, [clinicalRecord, visitId]);
+
+  // Pre-fill optical prescription from refraction data
+  useEffect(() => {
+    setOpticalPrescription(prev => ({
+      ...prev,
+      sphere_od: clinicalRecord.refraction_od_sphere || prev.sphere_od,
+      cylinder_od: clinicalRecord.refraction_od_cylinder || prev.cylinder_od,
+      axis_od: clinicalRecord.refraction_od_axis || prev.axis_od,
+      va_od: clinicalRecord.visual_acuity_od || prev.va_od,
+      sphere_os: clinicalRecord.refraction_os_sphere || prev.sphere_os,
+      cylinder_os: clinicalRecord.refraction_os_cylinder || prev.cylinder_os,
+      axis_os: clinicalRecord.refraction_os_axis || prev.axis_os,
+      va_os: clinicalRecord.visual_acuity_os || prev.va_os,
+      add_power: clinicalRecord.refraction_add || prev.add_power,
+      pd: clinicalRecord.refraction_pd || prev.pd,
+    }));
+  }, [clinicalRecord.refraction_od_sphere, clinicalRecord.refraction_od_cylinder, clinicalRecord.refraction_od_axis,
+      clinicalRecord.refraction_os_sphere, clinicalRecord.refraction_os_cylinder, clinicalRecord.refraction_os_axis,
+      clinicalRecord.refraction_add, clinicalRecord.refraction_pd, clinicalRecord.visual_acuity_od, clinicalRecord.visual_acuity_os]);
 
   const { data: visit, isLoading: visitLoading } = useQuery({
     queryKey: ['visit', visitId],
@@ -264,6 +314,49 @@ export default function ConsultationPage() {
       toast({ title: 'Failed to create prescription', variant: 'destructive' });
     },
   });
+
+  // Save optical prescription mutation
+  const saveOpticalPrescriptionMutation = useMutation({
+    mutationFn: (data: typeof opticalPrescription) =>
+      api.post(`/clinical/visits/${visitId}/optical-prescription`, data),
+    onSuccess: () => {
+      toast({ title: 'Optical prescription saved successfully' });
+      queryClient.invalidateQueries({ queryKey: ['visit-prescriptions', visitId] });
+      // Reset form after save
+      setOpticalPrescription({
+        sphere_od: '',
+        cylinder_od: '',
+        axis_od: '',
+        va_od: '',
+        sphere_os: '',
+        cylinder_os: '',
+        axis_os: '',
+        va_os: '',
+        add_power: '',
+        pd: '',
+        segment_height: '',
+        lens_type: '',
+        lens_material: '',
+        lens_coating: '',
+        frame_code: '',
+        frame_size: '',
+        dispensed_by_name: '',
+        delivery_date: '',
+        remarks: '',
+      });
+    },
+    onError: () => {
+      toast({ title: 'Failed to save optical prescription', variant: 'destructive' });
+    },
+  });
+
+  const handleSaveOpticalPrescription = () => {
+    if (!opticalPrescription.sphere_od && !opticalPrescription.sphere_os) {
+      toast({ title: 'Please enter at least one prescription value', variant: 'destructive' });
+      return;
+    }
+    saveOpticalPrescriptionMutation.mutate(opticalPrescription);
+  };
 
   const completeConsultationMutation = useMutation({
     mutationFn: () => api.patch(`/clinical/visits/${visitId}/status`, { status: 'completed' }),
@@ -574,6 +667,109 @@ export default function ConsultationPage() {
                       />
                     </div>
                   </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Refraction Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Refraction</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h4 className="font-medium">Right Eye (OD)</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-2">
+                      <Label>Sphere (SPH)</Label>
+                      <Input
+                        value={clinicalRecord.refraction_od_sphere}
+                        onChange={(e) =>
+                          setClinicalRecord({ ...clinicalRecord, refraction_od_sphere: e.target.value })
+                        }
+                        placeholder="e.g., -2.00"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Cylinder (CYL)</Label>
+                      <Input
+                        value={clinicalRecord.refraction_od_cylinder}
+                        onChange={(e) =>
+                          setClinicalRecord({ ...clinicalRecord, refraction_od_cylinder: e.target.value })
+                        }
+                        placeholder="e.g., -0.50"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Axis</Label>
+                      <Input
+                        value={clinicalRecord.refraction_od_axis}
+                        onChange={(e) =>
+                          setClinicalRecord({ ...clinicalRecord, refraction_od_axis: e.target.value })
+                        }
+                        placeholder="e.g., 180"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <h4 className="font-medium">Left Eye (OS)</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-2">
+                      <Label>Sphere (SPH)</Label>
+                      <Input
+                        value={clinicalRecord.refraction_os_sphere}
+                        onChange={(e) =>
+                          setClinicalRecord({ ...clinicalRecord, refraction_os_sphere: e.target.value })
+                        }
+                        placeholder="e.g., -2.00"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Cylinder (CYL)</Label>
+                      <Input
+                        value={clinicalRecord.refraction_os_cylinder}
+                        onChange={(e) =>
+                          setClinicalRecord({ ...clinicalRecord, refraction_os_cylinder: e.target.value })
+                        }
+                        placeholder="e.g., -0.50"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Axis</Label>
+                      <Input
+                        value={clinicalRecord.refraction_os_axis}
+                        onChange={(e) =>
+                          setClinicalRecord({ ...clinicalRecord, refraction_os_axis: e.target.value })
+                        }
+                        placeholder="e.g., 180"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-6 mt-4">
+                <div className="space-y-2">
+                  <Label>Add (Near)</Label>
+                  <Input
+                    value={clinicalRecord.refraction_add}
+                    onChange={(e) =>
+                      setClinicalRecord({ ...clinicalRecord, refraction_add: e.target.value })
+                    }
+                    placeholder="e.g., +2.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>PD (mm)</Label>
+                  <Input
+                    value={clinicalRecord.refraction_pd}
+                    onChange={(e) =>
+                      setClinicalRecord({ ...clinicalRecord, refraction_pd: e.target.value })
+                    }
+                    placeholder="e.g., 64"
+                  />
                 </div>
               </div>
             </CardContent>
@@ -993,87 +1189,167 @@ export default function ConsultationPage() {
             </CardContent>
           </Card>
 
-          {/* Optical Prescription Section (Glasses/Lens) */}
+          {/* Optical Prescription Form */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between bg-purple-50">
-              <CardTitle className="text-purple-800">Optical Prescription (Glasses & Lens)</CardTitle>
-              <Button variant="outline" size="sm" onClick={() => {
-                setNewPrescriptionItem({ ...newPrescriptionItem, item_type: 'spectacle' });
-                setIsPrescriptionDialogOpen(true);
-              }}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Optical Rx
-              </Button>
+            <CardHeader className="bg-purple-50">
+              <CardTitle className="text-purple-800">Spectacles Prescription Form</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4 pt-4">
-              {/* Existing Optical Prescriptions */}
-              {visitPrescriptions.some((p: any) => p.items.some((i: any) => ['spectacle', 'lens', 'other'].includes(i.item_type))) ? (
-                <div className="space-y-3">
+            <CardContent className="space-y-6 pt-4">
+              {/* Saved Prescriptions */}
+              {visitPrescriptions.filter((p: any) => p.sphere_od || p.sphere_os).length > 0 && (
+                <div className="space-y-3 mb-4">
+                  <h4 className="font-medium text-sm text-purple-700">Saved Prescriptions</h4>
                   {visitPrescriptions
-                    .filter((p: any) => p.items.some((i: any) => ['spectacle', 'lens', 'other'].includes(i.item_type)))
+                    .filter((p: any) => p.sphere_od || p.sphere_os)
                     .map((prescription: any) => (
-                    <div key={prescription.id} className="p-3 bg-purple-50/50 rounded border">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex-1">
-                          {prescription.items
-                            .filter((item: any) => ['spectacle', 'lens', 'other'].includes(item.item_type))
-                            .map((item: any) => (
-                              <div key={item.id} className="flex items-center gap-2 mb-1">
-                                <Badge variant="outline" className="text-xs">{item.item_type}</Badge>
-                                <span className="font-medium">{item.name}</span>
-                                <span className="text-sm text-muted-foreground">Qty: {item.quantity}</span>
-                                {item.is_external && <Badge variant="outline" className="text-xs">External</Badge>}
-                              </div>
-                            ))}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant={prescription.status === 'paid' ? 'success' : 'secondary'} className="text-xs">
-                            {prescription.status}
-                          </Badge>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              window.open(`${api.defaults.baseURL}/clinical/prescriptions/${prescription.id}/download-pdf`, '_blank');
-                            }}
-                            title="Download Prescription PDF"
-                          >
-                            <Download className="h-4 w-4 mr-1" />
-                            PDF
-                          </Button>
-                        </div>
+                    <div key={prescription.id} className="p-3 bg-purple-50/50 rounded border flex justify-between items-center">
+                      <div className="text-sm">
+                        <span className="font-medium">OD:</span> {prescription.sphere_od || '-'} / {prescription.cylinder_od || '-'} x {prescription.axis_od || '-'} |
+                        <span className="font-medium ml-2">OS:</span> {prescription.sphere_os || '-'} / {prescription.cylinder_os || '-'} x {prescription.axis_os || '-'} |
+                        <span className="font-medium ml-2">Add:</span> {prescription.add_power || '-'} |
+                        <span className="font-medium ml-2">PD:</span> {prescription.pd || '-'}
                       </div>
-                      {/* Show prescription details if available */}
-                      {(prescription.sphere_od || prescription.sphere_os) && (
-                        <div className="text-xs text-muted-foreground mt-2 pt-2 border-t grid grid-cols-4 gap-2">
-                          <span>OD: {prescription.sphere_od || '-'} / {prescription.cylinder_od || '-'} x {prescription.axis_od || '-'}</span>
-                          <span>OS: {prescription.sphere_os || '-'} / {prescription.cylinder_os || '-'} x {prescription.axis_os || '-'}</span>
-                          <span>Add: {prescription.add_power || '-'}</span>
-                          <span>PD: {prescription.pd || '-'}</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-sm text-center py-4">No optical prescriptions yet</p>
-              )}
-              
-              {/* New Optical Items (not yet saved) */}
-              {prescriptionItems.filter(item => ['spectacle', 'lens', 'other'].includes(item.item_type)).length > 0 && (
-                <div className="border-t pt-3 mt-3">
-                  <h5 className="text-sm font-medium text-purple-700 mb-2">New Optical Rx (unsaved)</h5>
-                  {prescriptionItems.filter(item => ['spectacle', 'lens', 'other'].includes(item.item_type)).map((item, index) => (
-                    <div key={index} className="flex justify-between items-center p-2 bg-purple-100/50 rounded mb-1">
-                      <div>
-                        <Badge variant="outline" className="mr-2 text-xs">{item.item_type}</Badge>
-                        <span className="font-medium">{item.name}</span>
-                      </div>
-                      <span className="text-sm">Qty: {item.quantity}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          window.open(`${api.defaults.baseURL}/clinical/prescriptions/${prescription.id}/download-pdf`, '_blank');
+                        }}
+                      >
+                        <Download className="h-4 w-4 mr-1" />
+                        Download PDF
+                      </Button>
                     </div>
                   ))}
                 </div>
               )}
+
+              {/* Prescription Values Table */}
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-green-500 text-white">
+                    <tr>
+                      <th className="p-2 text-left font-medium">Eye</th>
+                      <th className="p-2 text-center font-medium">SPH</th>
+                      <th className="p-2 text-center font-medium">CYL</th>
+                      <th className="p-2 text-center font-medium">AXIS</th>
+                      <th className="p-2 text-center font-medium">VA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b">
+                      <td className="p-2 font-medium">Right (OD)</td>
+                      <td className="p-1"><Input value={opticalPrescription.sphere_od} onChange={(e) => setOpticalPrescription({...opticalPrescription, sphere_od: e.target.value})} className="text-center" /></td>
+                      <td className="p-1"><Input value={opticalPrescription.cylinder_od} onChange={(e) => setOpticalPrescription({...opticalPrescription, cylinder_od: e.target.value})} className="text-center" /></td>
+                      <td className="p-1"><Input value={opticalPrescription.axis_od} onChange={(e) => setOpticalPrescription({...opticalPrescription, axis_od: e.target.value})} className="text-center" /></td>
+                      <td className="p-1"><Input value={opticalPrescription.va_od} onChange={(e) => setOpticalPrescription({...opticalPrescription, va_od: e.target.value})} className="text-center" /></td>
+                    </tr>
+                    <tr className="border-b">
+                      <td className="p-2 font-medium">Left (OS)</td>
+                      <td className="p-1"><Input value={opticalPrescription.sphere_os} onChange={(e) => setOpticalPrescription({...opticalPrescription, sphere_os: e.target.value})} className="text-center" /></td>
+                      <td className="p-1"><Input value={opticalPrescription.cylinder_os} onChange={(e) => setOpticalPrescription({...opticalPrescription, cylinder_os: e.target.value})} className="text-center" /></td>
+                      <td className="p-1"><Input value={opticalPrescription.axis_os} onChange={(e) => setOpticalPrescription({...opticalPrescription, axis_os: e.target.value})} className="text-center" /></td>
+                      <td className="p-1"><Input value={opticalPrescription.va_os} onChange={(e) => setOpticalPrescription({...opticalPrescription, va_os: e.target.value})} className="text-center" /></td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 font-medium">Add (Near)</td>
+                      <td className="p-1"><Input value={opticalPrescription.add_power} onChange={(e) => setOpticalPrescription({...opticalPrescription, add_power: e.target.value})} className="text-center" /></td>
+                      <td className="p-1" colSpan={3}></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* PD, Segment Height, Lens Options */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>PD (mm)</Label>
+                  <Input value={opticalPrescription.pd} onChange={(e) => setOpticalPrescription({...opticalPrescription, pd: e.target.value})} placeholder="e.g., 64" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Segment Height</Label>
+                  <Input value={opticalPrescription.segment_height} onChange={(e) => setOpticalPrescription({...opticalPrescription, segment_height: e.target.value})} placeholder="e.g., 18" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Lens Type</Label>
+                  <Select value={opticalPrescription.lens_type} onValueChange={(v) => setOpticalPrescription({...opticalPrescription, lens_type: v})}>
+                    <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="SV">SV (Single Vision)</SelectItem>
+                      <SelectItem value="Bifocal">Bifocal</SelectItem>
+                      <SelectItem value="Progressive">Progressive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Lens Material</Label>
+                  <Select value={opticalPrescription.lens_material} onValueChange={(v) => setOpticalPrescription({...opticalPrescription, lens_material: v})}>
+                    <SelectTrigger><SelectValue placeholder="Select material" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CR-39">CR-39</SelectItem>
+                      <SelectItem value="Poly">Polycarbonate</SelectItem>
+                      <SelectItem value="Hi-index">Hi-index</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Coating</Label>
+                  <Select value={opticalPrescription.lens_coating} onValueChange={(v) => setOpticalPrescription({...opticalPrescription, lens_coating: v})}>
+                    <SelectTrigger><SelectValue placeholder="Select coating" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ARC">ARC</SelectItem>
+                      <SelectItem value="Blue-cut">Blue-cut</SelectItem>
+                      <SelectItem value="Photochromic">Photochromic</SelectItem>
+                      <SelectItem value="None">None</SelectItem>
+                      <SelectItem value="Fashion">Fashion</SelectItem>
+                      <SelectItem value="Sun">Sun</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Frame Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Frame Code</Label>
+                  <Input value={opticalPrescription.frame_code} onChange={(e) => setOpticalPrescription({...opticalPrescription, frame_code: e.target.value})} placeholder="Frame code" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Frame Size</Label>
+                  <Input value={opticalPrescription.frame_size} onChange={(e) => setOpticalPrescription({...opticalPrescription, frame_size: e.target.value})} placeholder="e.g., 52-18-140" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Dispensed By</Label>
+                  <Input value={opticalPrescription.dispensed_by_name} onChange={(e) => setOpticalPrescription({...opticalPrescription, dispensed_by_name: e.target.value})} placeholder="Name of dispenser" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Delivery Date</Label>
+                  <Input type="date" value={opticalPrescription.delivery_date} onChange={(e) => setOpticalPrescription({...opticalPrescription, delivery_date: e.target.value})} />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Remarks</Label>
+                <Textarea value={opticalPrescription.remarks} onChange={(e) => setOpticalPrescription({...opticalPrescription, remarks: e.target.value})} placeholder="Additional notes or instructions..." />
+              </div>
+
+              {/* Save Prescription Button */}
+              <div className="flex justify-end">
+                <Button 
+                  onClick={handleSaveOpticalPrescription}
+                  disabled={saveOpticalPrescriptionMutation?.isPending || (!opticalPrescription.sphere_od && !opticalPrescription.sphere_os)}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  {saveOpticalPrescriptionMutation?.isPending ? 'Saving...' : 'Save Prescription'}
+                </Button>
+              </div>
             </CardContent>
           </Card>
 

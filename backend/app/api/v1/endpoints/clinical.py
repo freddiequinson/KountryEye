@@ -635,6 +635,26 @@ async def get_visit_prescriptions(
             "status": p.status,
             "is_dispensed": p.is_dispensed,
             "created_at": p.created_at.isoformat() if p.created_at else None,
+            # Optical prescription fields
+            "sphere_od": p.sphere_od,
+            "cylinder_od": p.cylinder_od,
+            "axis_od": p.axis_od,
+            "va_od": getattr(p, 'va_od', None),
+            "sphere_os": p.sphere_os,
+            "cylinder_os": p.cylinder_os,
+            "axis_os": p.axis_os,
+            "va_os": getattr(p, 'va_os', None),
+            "add_power": p.add_power,
+            "pd": p.pd,
+            "segment_height": getattr(p, 'segment_height', None),
+            "lens_type": p.lens_type,
+            "lens_material": p.lens_material,
+            "lens_coating": p.lens_coating,
+            "frame_code": getattr(p, 'frame_code', None),
+            "frame_size": getattr(p, 'frame_size', None),
+            "dispensed_by_name": getattr(p, 'dispensed_by_name', None),
+            "delivery_date": p.delivery_date.isoformat() if getattr(p, 'delivery_date', None) else None,
+            "remarks": getattr(p, 'remarks', None),
             "items": [
                 {
                     "id": item.id,
@@ -716,6 +736,66 @@ async def create_prescription_for_visit(
     
     await db.commit()
     return {"message": "Prescription created", "prescription_id": prescription.id}
+
+
+@router.post("/visits/{visit_id}/optical-prescription")
+async def create_optical_prescription(
+    visit_id: int,
+    prescription_data: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Create an optical/spectacles prescription with full form data"""
+    # Get visit
+    result = await db.execute(
+        select(Visit).options(joinedload(Visit.patient)).where(Visit.id == visit_id)
+    )
+    visit = result.unique().scalar_one_or_none()
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found")
+    
+    # Create prescription with optical data
+    prescription = Prescription(
+        visit_id=visit_id,
+        patient_id=visit.patient_id,
+        prescribed_by_id=current_user.id,
+        prescription_type="optical",
+        status="pending",
+        # Prescription values
+        sphere_od=prescription_data.get("sphere_od"),
+        cylinder_od=prescription_data.get("cylinder_od"),
+        axis_od=prescription_data.get("axis_od"),
+        va_od=prescription_data.get("va_od"),
+        sphere_os=prescription_data.get("sphere_os"),
+        cylinder_os=prescription_data.get("cylinder_os"),
+        axis_os=prescription_data.get("axis_os"),
+        va_os=prescription_data.get("va_os"),
+        add_power=prescription_data.get("add_power"),
+        pd=prescription_data.get("pd"),
+        segment_height=prescription_data.get("segment_height"),
+        # Lens and frame info
+        lens_type=prescription_data.get("lens_type"),
+        lens_material=prescription_data.get("lens_material"),
+        lens_coating=prescription_data.get("lens_coating"),
+        frame_code=prescription_data.get("frame_code"),
+        frame_size=prescription_data.get("frame_size"),
+        dispensed_by_name=prescription_data.get("dispensed_by_name"),
+        remarks=prescription_data.get("remarks"),
+    )
+    
+    # Handle delivery date
+    delivery_date_str = prescription_data.get("delivery_date")
+    if delivery_date_str:
+        try:
+            prescription.delivery_date = datetime.strptime(delivery_date_str, "%Y-%m-%d")
+        except ValueError:
+            pass
+    
+    db.add(prescription)
+    await db.commit()
+    await db.refresh(prescription)
+    
+    return {"message": "Optical prescription saved", "prescription_id": prescription.id}
 
 
 @router.get("/patients/{patient_id}/history")
