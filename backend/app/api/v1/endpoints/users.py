@@ -263,30 +263,23 @@ async def get_user_branches(
     """Get all branches the current user has access to"""
     from app.models.branch import Branch
     
-    # Get user's primary branch
-    branches = []
-    if current_user.branch:
-        branches.append({
-            "id": current_user.branch.id,
-            "name": current_user.branch.name,
-            "is_primary": True
-        })
-    
-    # Get additional branches from user's additional_branches relationship
-    if hasattr(current_user, 'additional_branches') and current_user.additional_branches:
-        for branch in current_user.additional_branches:
-            if branch.id != current_user.branch_id:
-                branches.append({
-                    "id": branch.id,
-                    "name": branch.name,
-                    "is_primary": False
-                })
-    
     # If superuser, return all branches
     if current_user.is_superuser:
         result = await db.execute(select(Branch).where(Branch.is_active == True).order_by(Branch.name))
         all_branches = result.scalars().all()
-        branches = [{"id": b.id, "name": b.name, "is_primary": b.id == current_user.branch_id} for b in all_branches]
+        return [{"id": b.id, "name": b.name, "is_primary": b.id == current_user.branch_id} for b in all_branches]
+    
+    # Get user's primary branch by querying directly
+    branches = []
+    if current_user.branch_id:
+        branch_result = await db.execute(select(Branch).where(Branch.id == current_user.branch_id))
+        primary_branch = branch_result.scalar_one_or_none()
+        if primary_branch:
+            branches.append({
+                "id": primary_branch.id,
+                "name": primary_branch.name,
+                "is_primary": True
+            })
     
     return branches
 

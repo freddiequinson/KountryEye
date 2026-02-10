@@ -31,6 +31,7 @@ import FrontDeskDashboard from '@/pages/dashboards/FrontDeskDashboard'
 import DoctorDashboard from '@/pages/dashboards/DoctorDashboard'
 import MarketingDashboard from '@/pages/dashboards/MarketingDashboard'
 import SettingsPage from '@/pages/admin/SettingsPage'
+import TerminalPage from '@/pages/admin/TerminalPage'
 import RevenuePage from '@/pages/admin/RevenuePage'
 import PatientSelfRegisterPage from '@/pages/public/PatientSelfRegisterPage'
 import CategoriesPage from '@/pages/inventory/CategoriesPage'
@@ -112,6 +113,7 @@ function App() {
                   <Route path="/dashboard/marketing" element={<MarketingDashboard />} />
                   <Route path="/admin/settings" element={<SettingsPage />} />
                   <Route path="/admin/users" element={<SettingsPage />} />
+                  <Route path="/admin/terminal" element={<TerminalPage />} />
                   <Route path="/admin/revenue" element={<RevenuePage />} />
                   <Route path="/admin/employees" element={<EmployeesPage />} />
                   <Route path="/admin/employees/:employeeId" element={<EmployeeDetailPage />} />

@@ -361,8 +361,17 @@ export default function CheckoutPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        window.open(`${api.defaults.baseURL}/clinical/prescriptions/${prescription.id}/download-pdf`, '_blank');
+                      onClick={async () => {
+                        try {
+                          const response = await api.get(`/clinical/prescriptions/${prescription.id}/download-pdf`, {
+                            responseType: 'blob',
+                          });
+                          const blob = new Blob([response.data], { type: 'application/pdf' });
+                          const url = window.URL.createObjectURL(blob);
+                          window.open(url, '_blank');
+                        } catch {
+                          toast({ title: 'Failed to download prescription', variant: 'destructive' });
+                        }
                       }}
                     >
                       <Download className="h-4 w-4 mr-1" />

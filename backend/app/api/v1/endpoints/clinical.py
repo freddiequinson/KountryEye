@@ -775,8 +775,9 @@ async def create_optical_prescription(
         segment_height=prescription_data.get("segment_height"),
         # Lens and frame info
         lens_type=prescription_data.get("lens_type"),
-        lens_material=prescription_data.get("lens_material"),
-        lens_coating=prescription_data.get("lens_coating"),
+        # Handle arrays for lens_material and lens_coating - join with comma
+        lens_material=", ".join(prescription_data.get("lens_material", [])) if isinstance(prescription_data.get("lens_material"), list) else prescription_data.get("lens_material"),
+        lens_coating=", ".join(prescription_data.get("lens_coating", [])) if isinstance(prescription_data.get("lens_coating"), list) else prescription_data.get("lens_coating"),
         frame_code=prescription_data.get("frame_code"),
         frame_size=prescription_data.get("frame_size"),
         dispensed_by_name=prescription_data.get("dispensed_by_name"),

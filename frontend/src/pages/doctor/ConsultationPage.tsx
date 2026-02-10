@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Save, Plus, Trash2, Search, AlertTriangle, Eye, Clock, CheckCircle, FileText, Download } from 'lucide-react';
 import api from '@/lib/api';
+import { useAuthStore } from '@/stores/auth';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,6 +28,9 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 
+const LENS_MATERIALS = ['CR-39', 'Polycarbonate', 'Hi-index', 'Glass', 'Trivex'];
+const LENS_COATINGS = ['ARC', 'Blue-cut', 'Photochromic', 'Scratch-resistant', 'UV Protection', 'Fashion', 'Sun'];
+
 interface PrescriptionItem {
   id?: number;
   product_id?: number;
@@ -45,6 +50,7 @@ export default function ConsultationPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuthStore();
 
   const [isPrescriptionDialogOpen, setIsPrescriptionDialogOpen] = useState(false);
   const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionItem[]>([]);
@@ -142,11 +148,11 @@ export default function ConsultationPage() {
     pd: '',
     segment_height: '',
     lens_type: '',
-    lens_material: '',
-    lens_coating: '',
+    lens_material: [] as string[],
+    lens_coating: [] as string[],
     frame_code: '',
     frame_size: '',
-    dispensed_by_name: '',
+    dispensed_by_name: user ? `${user.first_name} ${user.last_name}`.trim() : '',
     delivery_date: '',
     remarks: '',
   });
@@ -336,11 +342,11 @@ export default function ConsultationPage() {
         pd: '',
         segment_height: '',
         lens_type: '',
-        lens_material: '',
-        lens_coating: '',
+        lens_material: [],
+        lens_coating: [],
         frame_code: '',
         frame_size: '',
-        dispensed_by_name: '',
+        dispensed_by_name: user ? `${user.first_name} ${user.last_name}`.trim() : '',
         delivery_date: '',
         remarks: '',
       });
@@ -356,6 +362,20 @@ export default function ConsultationPage() {
       return;
     }
     saveOpticalPrescriptionMutation.mutate(opticalPrescription);
+  };
+
+  // Download PDF with authentication
+  const handleDownloadPrescriptionPdf = async (prescriptionId: number) => {
+    try {
+      const response = await api.get(`/clinical/prescriptions/${prescriptionId}/download-pdf`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (error) {
+      toast({ title: 'Failed to download prescription', variant: 'destructive' });
+    }
   };
 
   const completeConsultationMutation = useMutation({
@@ -1212,9 +1232,7 @@ export default function ConsultationPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          window.open(`${api.defaults.baseURL}/clinical/prescriptions/${prescription.id}/download-pdf`, '_blank');
-                        }}
+                        onClick={() => handleDownloadPrescriptionPdf(prescription.id)}
                       >
                         <Download className="h-4 w-4 mr-1" />
                         Download PDF
@@ -1285,29 +1303,44 @@ export default function ConsultationPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Lens Material</Label>
-                  <Select value={opticalPrescription.lens_material} onValueChange={(v) => setOpticalPrescription({...opticalPrescription, lens_material: v})}>
-                    <SelectTrigger><SelectValue placeholder="Select material" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="CR-39">CR-39</SelectItem>
-                      <SelectItem value="Poly">Polycarbonate</SelectItem>
-                      <SelectItem value="Hi-index">Hi-index</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label>Lens Material (select multiple)</Label>
+                  <div className="flex flex-wrap gap-3 p-2 border rounded-md">
+                    {LENS_MATERIALS.map((material) => (
+                      <label key={material} className="flex items-center gap-1.5 cursor-pointer">
+                        <Checkbox
+                          checked={opticalPrescription.lens_material.includes(material)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setOpticalPrescription({...opticalPrescription, lens_material: [...opticalPrescription.lens_material, material]});
+                            } else {
+                              setOpticalPrescription({...opticalPrescription, lens_material: opticalPrescription.lens_material.filter(m => m !== material)});
+                            }
+                          }}
+                        />
+                        <span className="text-sm">{material}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Coating</Label>
-                  <Select value={opticalPrescription.lens_coating} onValueChange={(v) => setOpticalPrescription({...opticalPrescription, lens_coating: v})}>
-                    <SelectTrigger><SelectValue placeholder="Select coating" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ARC">ARC</SelectItem>
-                      <SelectItem value="Blue-cut">Blue-cut</SelectItem>
-                      <SelectItem value="Photochromic">Photochromic</SelectItem>
-                      <SelectItem value="None">None</SelectItem>
-                      <SelectItem value="Fashion">Fashion</SelectItem>
-                      <SelectItem value="Sun">Sun</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label>Coating (select multiple)</Label>
+                  <div className="flex flex-wrap gap-3 p-2 border rounded-md">
+                    {LENS_COATINGS.map((coating) => (
+                      <label key={coating} className="flex items-center gap-1.5 cursor-pointer">
+                        <Checkbox
+                          checked={opticalPrescription.lens_coating.includes(coating)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setOpticalPrescription({...opticalPrescription, lens_coating: [...opticalPrescription.lens_coating, coating]});
+                            } else {
+                              setOpticalPrescription({...opticalPrescription, lens_coating: opticalPrescription.lens_coating.filter(c => c !== coating)});
+                            }
+                          }}
+                        />
+                        <span className="text-sm">{coating}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
 

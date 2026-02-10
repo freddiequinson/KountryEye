@@ -1,11 +1,17 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import text, select
 from sqlalchemy.orm import selectinload
-from app.core.database import async_session_maker, engine, Base
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import async_session_maker, engine, Base, get_db
 from app.core.security import get_password_hash
 from app.models import User, Role, Branch, ConsultationType, ProductCategory, IncomeCategory, ExpenseCategory, AssetCategory
 from app.models.user import Permission
+from app.api.v1.deps import get_current_active_user
+import subprocess
+import os
+from typing import Optional
+from datetime import datetime
 
 router = APIRouter()
 
@@ -264,3 +270,83 @@ async def seed_permissions_and_roles(session):
             role.permissions = permissions
     
     await session.commit()
+
+
+@router.get("/logs")
+async def get_system_logs(
+    lines: int = Query(default=100, le=500),
+    filter_type: Optional[str] = Query(default=None, description="Filter: error, warning, info"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get system logs - admin only"""
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        # Try to get logs from journalctl (Linux)
+        cmd = f"journalctl -u kountryeye -n {lines} --no-pager"
+        if filter_type == "error":
+            cmd += " | grep -i error"
+        elif filter_type == "warning":
+            cmd += " | grep -i warning"
+        
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        log_lines = result.stdout.strip().split('\n') if result.stdout else []
+        errors = result.stderr.strip() if result.stderr else None
+        
+        # Parse log lines into structured format
+        parsed_logs = []
+        for line in log_lines:
+            if not line.strip():
+                continue
+            
+            # Try to detect log level
+            level = "info"
+            if "error" in line.lower():
+                level = "error"
+            elif "warning" in line.lower() or "warn" in line.lower():
+                level = "warning"
+            elif "debug" in line.lower():
+                level = "debug"
+            
+            parsed_logs.append({
+                "timestamp": datetime.utcnow().isoformat(),
+                "level": level,
+                "message": line
+            })
+        
+        return {
+            "logs": parsed_logs,
+            "total": len(parsed_logs),
+            "errors": errors
+        }
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Log retrieval timed out")
+    except Exception as e:
+        # Fallback: return error info
+        return {
+            "logs": [{
+                "timestamp": datetime.utcnow().isoformat(),
+                "level": "error",
+                "message": f"Could not retrieve logs: {str(e)}"
+            }],
+            "total": 1,
+            "errors": str(e)
+        }
+
+
+@router.get("/health")
+async def health_check():
+    """Simple health check endpoint"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat()
+    }
