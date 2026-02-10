@@ -96,6 +96,8 @@ const allNavItems: NavItem[] = [
   { title: "Scans", url: "/technician/scans", icon: Eye, permissions: ["technician.scans"], roles: ["technician"] },
   { title: "Referral Payments", url: "/admin/referral-payments", icon: DollarSign, permissions: ["referrals.payments"] },
   { title: "Search", url: "/admin/search", icon: Search, permissions: ["analytics.view"] },
+  { title: "Audit Logs", url: "/admin/audit-logs", icon: ClipboardList, permissions: ["analytics.view"] },
+  { title: "Settings", url: "/admin/settings", icon: Settings, permissions: ["settings.manage"] },
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -150,9 +152,7 @@ function SidebarInnerContent() {
   // If user has no permissions assigned, they should still see basic navigation
   const hasNoPermissions = userPermissions.length === 0 && !user?.is_superuser
   
-  // Debug: log permissions
-  console.log('User permissions:', userPermissions, 'Role:', userRole, 'Is superuser:', user?.is_superuser, 'Has no permissions:', hasNoPermissions)
-  
+    
   // Check if user has any of the required permissions
   const hasPermission = (permCodes: string[] | undefined): boolean => {
     if (!permCodes || permCodes.length === 0) return true
@@ -200,7 +200,7 @@ function SidebarInnerContent() {
   ))
   
   const adminItems = filterByPermission(allNavItems.filter(i => 
-    ["/marketing", "/accounting", "/admin/revenue", "/admin/users", "/admin/employees", "/admin/permissions", "/admin/analytics", "/admin/referral-payments", "/admin/search"].includes(i.url)
+    ["/marketing", "/accounting", "/admin/revenue", "/admin/users", "/admin/employees", "/admin/permissions", "/admin/analytics", "/admin/referral-payments", "/admin/search", "/admin/audit-logs"].includes(i.url)
   ))
 
   const getRoleDisplayName = () => {

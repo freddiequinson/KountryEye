@@ -17,7 +17,11 @@ interface User {
   permissions?: string[]
   created_at?: string
   last_login?: string
+  branch_verification_required?: boolean
+  branch_confirmed_at?: string
 }
+
+export type { User }
 
 interface AuthState {
   user: User | null

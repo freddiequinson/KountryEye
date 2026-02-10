@@ -682,6 +682,7 @@ async def create_sale(
         receipt_number=generate_receipt_number(sale_in.branch_id),
         branch_id=sale_in.branch_id,
         patient_id=sale_in.patient_id,
+        visit_id=sale_in.visit_id,
         prescription_id=sale_in.prescription_id,
         cashier_id=current_user.id,
         subtotal=subtotal,
@@ -690,6 +691,8 @@ async def create_sale(
         discount_reason=sale_in.discount_reason,
         total_amount=total_amount,
         payment_method=sale_in.payment_method,
+        payment_status="completed",
+        paid_amount=total_amount,
         notes=sale_in.notes
     )
     db.add(sale)

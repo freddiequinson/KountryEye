@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, Calendar, FileText, Eye, AlertCircle, CheckCircle, History, Edit, CreditCard } from 'lucide-react';
@@ -55,7 +55,7 @@ export default function PatientDetailPage() {
     notes: '',
   });
   const [visitForm, setVisitForm] = useState({
-    visit_type: 'full_checkup',
+    visit_type: 'initial',
     reason: '',
     notes: '',
     consultation_type_id: '',
@@ -65,6 +65,28 @@ export default function PatientDetailPage() {
     insurance_number: '',
     insurance_limit: '',
   });
+  const [visitTypeInfo, setVisitTypeInfo] = useState<{
+    visit_type: string;
+    reason: string;
+    previous_visits_count: number;
+  } | null>(null);
+
+  // Auto-detect visit type when dialog opens
+  useEffect(() => {
+    const detectVisitType = async () => {
+      if (id && isVisitDialogOpen) {
+        try {
+          const response = await api.get(`/patients/${id}/detect-visit-type`);
+          const detected = response.data;
+          setVisitTypeInfo(detected);
+          setVisitForm(prev => ({ ...prev, visit_type: detected.visit_type }));
+        } catch (error) {
+          console.error('Failed to detect visit type:', error);
+        }
+      }
+    };
+    detectVisitType();
+  }, [id, isVisitDialogOpen]);
 
   const { data: patient, isLoading: patientLoading } = useQuery({
     queryKey: ['patient', id],
@@ -628,6 +650,11 @@ export default function PatientDetailPage() {
             <form onSubmit={handleCreateVisit} className="space-y-4">
               <div className="space-y-2">
                 <Label>Visit Type</Label>
+                {visitTypeInfo && (
+                  <p className="text-xs text-muted-foreground mb-1">
+                    Auto-detected: <span className="font-medium text-primary">{visitTypeInfo.visit_type.toUpperCase()}</span> - {visitTypeInfo.reason}
+                  </p>
+                )}
                 <Select
                   value={visitForm.visit_type}
                   onValueChange={(value) =>
@@ -638,155 +665,139 @@ export default function PatientDetailPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="enquiry">Enquiry Only</SelectItem>
-                    <SelectItem value="full_checkup">Full Check-up</SelectItem>
+                    <SelectItem value="initial">Initial Visit (First Time)</SelectItem>
+                    <SelectItem value="review">Review Visit (Within 7 Days)</SelectItem>
+                    <SelectItem value="subsequent">Subsequent Visit (After 7 Days)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              {visitForm.visit_type === 'enquiry' && (
-                <div className="space-y-2">
-                  <Label>Purpose of Visit</Label>
-                  <Textarea
-                    value={visitForm.reason}
-                    onChange={(e) =>
-                      setVisitForm({ ...visitForm, reason: e.target.value })
-                    }
-                    placeholder="What is the enquiry about?"
-                  />
+              <div className="space-y-2">
+                <Label>Consultation Type</Label>
+                <Select
+                  value={visitForm.consultation_type_id}
+                  onValueChange={(value) =>
+                    setVisitForm({ ...visitForm, consultation_type_id: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select consultation type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {consultationTypes.map((type: any) => (
+                      <SelectItem key={type.id} value={type.id.toString()}>
+                        {type.name} - GH₵{type.base_fee?.toLocaleString()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Payment Type</Label>
+                <Select
+                  value={visitForm.payment_type}
+                  onValueChange={(value) => setVisitForm({ ...visitForm, payment_type: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="insurance">Insurance</SelectItem>
+                    <SelectItem value="visioncare">VisionCare Membership</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {visitForm.payment_type === 'insurance' && (
+                <div className="space-y-4 p-4 border rounded-md">
+                  <div className="space-y-2">
+                    <Label>Insurance Provider</Label>
+                    <input
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={visitForm.insurance_provider}
+                      onChange={(e) =>
+                        setVisitForm({ ...visitForm, insurance_provider: e.target.value })
+                      }
+                      placeholder="e.g., NHIS, Acacia Health"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Insurance ID</Label>
+                      <input
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={visitForm.insurance_id}
+                        onChange={(e) =>
+                          setVisitForm({ ...visitForm, insurance_id: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Membership Number</Label>
+                      <input
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={visitForm.insurance_number}
+                        onChange={(e) =>
+                          setVisitForm({ ...visitForm, insurance_number: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Insurance Limit (GH₵)</Label>
+                    <input
+                      type="number"
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={visitForm.insurance_limit}
+                      onChange={(e) =>
+                        setVisitForm({ ...visitForm, insurance_limit: e.target.value })
+                      }
+                      placeholder="Enter insurance coverage limit"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Maximum amount insurance will cover. Costs exceeding this will be paid by patient.
+                    </p>
+                  </div>
+                  {visitForm.insurance_limit && visitForm.consultation_type_id && (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                      <div className="text-sm space-y-1">
+                        <div className="flex justify-between">
+                          <span>Insurance Limit:</span>
+                          <span className="font-medium">GH₵{parseFloat(visitForm.insurance_limit).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Consultation Fee:</span>
+                          <span className="font-medium">GH₵{getConsultationFee().toLocaleString()}</span>
+                        </div>
+                        {parseFloat(visitForm.insurance_limit) < getConsultationFee() && (
+                          <div className="flex justify-between text-red-600 font-medium pt-1 border-t">
+                            <span>Patient Top-up Required:</span>
+                            <span>GH₵{(getConsultationFee() - parseFloat(visitForm.insurance_limit)).toLocaleString()}</span>
+                          </div>
+                        )}
+                        {parseFloat(visitForm.insurance_limit) >= getConsultationFee() && (
+                          <div className="flex justify-between text-green-600 font-medium pt-1 border-t">
+                            <span>Remaining for Medications:</span>
+                            <span>GH₵{(parseFloat(visitForm.insurance_limit) - getConsultationFee()).toLocaleString()}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {visitForm.visit_type === 'full_checkup' && (
-                <>
-                  <div className="space-y-2">
-                    <Label>Consultation Type</Label>
-                    <Select
-                      value={visitForm.consultation_type_id}
-                      onValueChange={(value) =>
-                        setVisitForm({ ...visitForm, consultation_type_id: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select consultation type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {consultationTypes.map((type: any) => (
-                          <SelectItem key={type.id} value={type.id.toString()}>
-                            {type.name} - GH₵{type.base_fee?.toLocaleString()}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+              {visitForm.consultation_type_id && (
+                <div className="p-4 bg-muted rounded-md">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Consultation Fee</span>
+                    <span className="text-lg font-bold">
+                      GH₵{getConsultationFee().toLocaleString()}
+                    </span>
                   </div>
-
-                  <div className="space-y-2">
-                    <Label>Payment Type</Label>
-                    <Select
-                      value={visitForm.payment_type}
-                      onValueChange={(value) => setVisitForm({ ...visitForm, payment_type: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="insurance">Insurance</SelectItem>
-                        <SelectItem value="visioncare">VisionCare Membership</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {visitForm.payment_type === 'insurance' && (
-                    <div className="space-y-4 p-4 border rounded-md">
-                      <div className="space-y-2">
-                        <Label>Insurance Provider</Label>
-                        <input
-                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                          value={visitForm.insurance_provider}
-                          onChange={(e) =>
-                            setVisitForm({ ...visitForm, insurance_provider: e.target.value })
-                          }
-                          placeholder="e.g., NHIS, Acacia Health"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Insurance ID</Label>
-                          <input
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            value={visitForm.insurance_id}
-                            onChange={(e) =>
-                              setVisitForm({ ...visitForm, insurance_id: e.target.value })
-                            }
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Membership Number</Label>
-                          <input
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            value={visitForm.insurance_number}
-                            onChange={(e) =>
-                              setVisitForm({ ...visitForm, insurance_number: e.target.value })
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Insurance Limit (GH₵)</Label>
-                        <input
-                          type="number"
-                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                          value={visitForm.insurance_limit}
-                          onChange={(e) =>
-                            setVisitForm({ ...visitForm, insurance_limit: e.target.value })
-                          }
-                          placeholder="Enter insurance coverage limit"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Maximum amount insurance will cover. Costs exceeding this will be paid by patient.
-                        </p>
-                      </div>
-                      {visitForm.insurance_limit && visitForm.consultation_type_id && (
-                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                          <div className="text-sm space-y-1">
-                            <div className="flex justify-between">
-                              <span>Insurance Limit:</span>
-                              <span className="font-medium">GH₵{parseFloat(visitForm.insurance_limit).toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Consultation Fee:</span>
-                              <span className="font-medium">GH₵{getConsultationFee().toLocaleString()}</span>
-                            </div>
-                            {parseFloat(visitForm.insurance_limit) < getConsultationFee() && (
-                              <div className="flex justify-between text-red-600 font-medium pt-1 border-t">
-                                <span>Patient Top-up Required:</span>
-                                <span>GH₵{(getConsultationFee() - parseFloat(visitForm.insurance_limit)).toLocaleString()}</span>
-                              </div>
-                            )}
-                            {parseFloat(visitForm.insurance_limit) >= getConsultationFee() && (
-                              <div className="flex justify-between text-green-600 font-medium pt-1 border-t">
-                                <span>Remaining for Medications:</span>
-                                <span>GH₵{(parseFloat(visitForm.insurance_limit) - getConsultationFee()).toLocaleString()}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {visitForm.consultation_type_id && (
-                    <div className="p-4 bg-muted rounded-md">
-                      <div className="flex justify-between items-center">
-                        <span className="font-medium">Consultation Fee</span>
-                        <span className="text-lg font-bold">
-                          GH₵{getConsultationFee().toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </>
+                </div>
               )}
 
               <DialogFooter>

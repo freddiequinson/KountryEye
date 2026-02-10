@@ -56,6 +56,8 @@ import ScanDetailPage from '@/pages/technician/ScanDetailPage'
 import ScanRequestsPage from '@/pages/technician/ScanRequestsPage'
 import ReferralPaymentsPage from '@/pages/admin/ReferralPaymentsPage'
 import GlobalSearchPage from '@/pages/admin/GlobalSearchPage'
+import AuditLogsPage from '@/pages/admin/AuditLogsPage'
+import CheckoutPage from '@/pages/frontdesk/CheckoutPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -104,6 +106,7 @@ function App() {
                   <Route path="/doctor/consultation/:visitId" element={<ConsultationPage />} />
                   <Route path="/frontdesk" element={<FrontDeskPage />} />
                   <Route path="/frontdesk/register" element={<PatientRegistrationPage />} />
+                  <Route path="/frontdesk/checkout/:visitId" element={<CheckoutPage />} />
                   <Route path="/dashboard/frontdesk" element={<FrontDeskDashboard />} />
                   <Route path="/dashboard/doctor" element={<DoctorDashboard />} />
                   <Route path="/dashboard/marketing" element={<MarketingDashboard />} />
@@ -141,6 +144,7 @@ function App() {
                   {/* Admin Referral Payments */}
                   <Route path="/admin/referral-payments" element={<ReferralPaymentsPage />} />
                   <Route path="/admin/search" element={<GlobalSearchPage />} />
+                  <Route path="/admin/audit-logs" element={<AuditLogsPage />} />
                 </Routes>
               </DashboardLayout>
             </ProtectedRoute>

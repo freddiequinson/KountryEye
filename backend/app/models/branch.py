@@ -1,8 +1,26 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Time
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Time, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime, time
 
 from app.core.database import Base
+
+
+class BranchAssignmentHistory(Base):
+    """Tracks staff branch assignment changes"""
+    __tablename__ = "branch_assignment_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    previous_branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    assigned_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    notes = Column(Text)
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User", foreign_keys=[user_id])
+    branch = relationship("Branch", foreign_keys=[branch_id])
+    previous_branch = relationship("Branch", foreign_keys=[previous_branch_id])
+    assigned_by = relationship("User", foreign_keys=[assigned_by_id])
 
 
 class Branch(Base):

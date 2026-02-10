@@ -140,6 +140,16 @@ export default function EmployeeDetailPage() {
     enabled: !!employeeId,
   });
 
+  // Branch assignment history
+  const { data: branchHistory = [] } = useQuery({
+    queryKey: ['employee-branch-history', employeeId],
+    queryFn: async () => {
+      const response = await api.get(`/branch-assignments/users/${employeeId}/branch-history`);
+      return response.data;
+    },
+    enabled: !!employeeId,
+  });
+
   // Mutations
   const resetPasswordMutation = useMutation({
     mutationFn: () => api.post(`/employees/${employeeId}/reset-password`),
@@ -419,6 +429,10 @@ export default function EmployeeDetailPage() {
           <TabsTrigger value="tasks">
             <ListTodo className="mr-2 h-4 w-4" />
             Tasks
+          </TabsTrigger>
+          <TabsTrigger value="branch-history">
+            <Building2 className="mr-2 h-4 w-4" />
+            Branch History
           </TabsTrigger>
         </TabsList>
 
@@ -758,6 +772,109 @@ export default function EmployeeDetailPage() {
                   )}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Branch History Tab */}
+        <TabsContent value="branch-history" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Branch Assignment History
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {branchHistory.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">
+                  No branch assignment history available
+                </p>
+              ) : (
+                <div className="relative">
+                  {/* Timeline */}
+                  <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
+                  
+                  <div className="space-y-6">
+                    {branchHistory.map((assignment: any, index: number) => (
+                      <div key={assignment.id} className="relative pl-10">
+                        {/* Timeline dot */}
+                        <div className={`absolute left-2.5 w-3 h-3 rounded-full border-2 ${
+                          assignment.is_current 
+                            ? 'bg-primary border-primary' 
+                            : 'bg-background border-muted-foreground'
+                        }`} />
+                        
+                        <div className={`p-4 rounded-lg border ${
+                          assignment.is_current ? 'bg-primary/5 border-primary/20' : 'bg-muted/30'
+                        }`}>
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Building2 className="h-4 w-4 text-primary" />
+                              <span className="font-semibold">{assignment.branch_name}</span>
+                              {assignment.is_current && (
+                                <Badge variant="default" className="text-xs">Current</Badge>
+                              )}
+                            </div>
+                            <div className="text-right text-sm text-muted-foreground">
+                              {assignment.effective_from && (
+                                <span>
+                                  {new Date(assignment.effective_from).toLocaleDateString()}
+                                  {assignment.effective_until && (
+                                    <> - {new Date(assignment.effective_until).toLocaleDateString()}</>
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            <p>
+                              <strong>Assigned by:</strong> {assignment.assigned_by_name}
+                            </p>
+                            <p>
+                              <strong>Assigned on:</strong>{' '}
+                              {assignment.assigned_at 
+                                ? new Date(assignment.assigned_at).toLocaleString() 
+                                : 'N/A'}
+                            </p>
+                            {assignment.notes && (
+                              <p>
+                                <strong>Notes:</strong> {assignment.notes}
+                              </p>
+                            )}
+                          </div>
+                          
+                          {/* Verification status */}
+                          <div className="mt-3 pt-3 border-t">
+                            {assignment.verified ? (
+                              <div className="flex items-center gap-2 text-sm text-green-600">
+                                <Badge variant="success" className="text-xs">Verified</Badge>
+                                <span>
+                                  on {assignment.verified_at 
+                                    ? new Date(assignment.verified_at).toLocaleString() 
+                                    : 'N/A'}
+                                </span>
+                              </div>
+                            ) : assignment.verification_note?.startsWith('ISSUE REPORTED:') ? (
+                              <div className="text-sm">
+                                <Badge variant="destructive" className="text-xs">Issue Reported</Badge>
+                                <p className="mt-1 text-red-600">
+                                  {assignment.verification_note.replace('ISSUE REPORTED: ', '')}
+                                </p>
+                              </div>
+                            ) : assignment.is_current ? (
+                              <Badge variant="warning" className="text-xs">Pending Verification</Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-xs">Not Verified</Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

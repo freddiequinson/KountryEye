@@ -852,6 +852,22 @@ export default function ProductDetailPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
+              <Label>Branch *</Label>
+              <Select
+                value={stockAdjustForm.branch_id}
+                onValueChange={(v) => setStockAdjustForm({ ...stockAdjustForm, branch_id: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((b: any) => (
+                    <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label>Adjustment Type</Label>
               <Select
                 value={stockAdjustForm.adjustment_type}

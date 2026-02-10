@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, UserPlus, Clock, ListTodo, Eye, Trash2, UserCheck, UserX, EyeOff } from 'lucide-react';
+import { Search, UserPlus, Clock, ListTodo, Eye, Trash2, UserCheck, UserX, EyeOff, Building2 } from 'lucide-react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -61,6 +61,12 @@ export default function EmployeesPage() {
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
   const [showInactive, setShowInactive] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<Employee | null>(null);
+  const [branchAssignEmployee, setBranchAssignEmployee] = useState<Employee | null>(null);
+  const [branchAssignForm, setBranchAssignForm] = useState({
+    branch_id: '',
+    effective_from: new Date().toISOString().split('T')[0],
+    notes: '',
+  });
 
   const [employeeForm, setEmployeeForm] = useState({
     email: '',
@@ -208,6 +214,36 @@ export default function EmployeesPage() {
       assigned_to_id: '',
       priority: 'medium',
       due_date: '',
+    });
+  };
+
+  // Branch assignment mutation
+  const assignBranchMutation = useMutation({
+    mutationFn: ({ userId, data }: { userId: number; data: any }) => 
+      api.post(`/branch-assignments/users/${userId}/assign-branch`, data),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      setBranchAssignEmployee(null);
+      setBranchAssignForm({ branch_id: '', effective_from: new Date().toISOString().split('T')[0], notes: '' });
+      toast({ 
+        title: 'Branch assigned successfully',
+        description: response.data.message
+      });
+    },
+    onError: () => {
+      toast({ title: 'Failed to assign branch', variant: 'destructive' });
+    },
+  });
+
+  const handleAssignBranch = () => {
+    if (!branchAssignEmployee || !branchAssignForm.branch_id) return;
+    assignBranchMutation.mutate({
+      userId: branchAssignEmployee.id,
+      data: {
+        branch_id: parseInt(branchAssignForm.branch_id),
+        effective_from: new Date(branchAssignForm.effective_from).toISOString(),
+        notes: branchAssignForm.notes || null,
+      }
     });
   };
 
@@ -403,6 +439,22 @@ export default function EmployeesPage() {
                             title="View details"
                           >
                             <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setBranchAssignEmployee(employee);
+                              setBranchAssignForm({
+                                branch_id: employee.branch_id?.toString() || '',
+                                effective_from: new Date().toISOString().split('T')[0],
+                                notes: '',
+                              });
+                            }}
+                            title="Assign Branch"
+                          >
+                            <Building2 className="h-4 w-4" />
                           </Button>
                           <Button
                             variant={employee.is_active ? "outline" : "default"}
@@ -760,6 +812,78 @@ export default function EmployeesPage() {
               disabled={deleteEmployeeMutation.isPending}
             >
               {deleteEmployeeMutation.isPending ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Branch Assignment Dialog */}
+      <Dialog open={!!branchAssignEmployee} onOpenChange={() => setBranchAssignEmployee(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Assign Branch
+            </DialogTitle>
+            <DialogDescription>
+              Assign {branchAssignEmployee?.first_name} {branchAssignEmployee?.last_name} to a new branch.
+              {branchAssignEmployee?.branch && (
+                <span className="block mt-1">
+                  Current branch: <Badge variant="outline">{branchAssignEmployee.branch.name}</Badge>
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label>New Branch *</Label>
+              <Select
+                value={branchAssignForm.branch_id}
+                onValueChange={(value) => setBranchAssignForm({ ...branchAssignForm, branch_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((branch: any) => (
+                    <SelectItem key={branch.id} value={branch.id.toString()}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Effective From *</Label>
+              <Input
+                type="date"
+                value={branchAssignForm.effective_from}
+                onChange={(e) => setBranchAssignForm({ ...branchAssignForm, effective_from: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                The date when this assignment takes effect
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Notes (Reason for rotation)</Label>
+              <Textarea
+                value={branchAssignForm.notes}
+                onChange={(e) => setBranchAssignForm({ ...branchAssignForm, notes: e.target.value })}
+                placeholder="e.g., Monthly rotation, covering for leave, permanent transfer..."
+              />
+            </div>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-sm text-amber-800">
+            <strong>Security Note:</strong> When this employee logs in next, they will be required to verify 
+            they are at the assigned branch before they can continue working.
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setBranchAssignEmployee(null)}>Cancel</Button>
+            <Button 
+              onClick={handleAssignBranch}
+              disabled={!branchAssignForm.branch_id || !branchAssignForm.effective_from || assignBranchMutation.isPending}
+            >
+              {assignBranchMutation.isPending ? 'Assigning...' : 'Assign Branch'}
             </Button>
           </DialogFooter>
         </DialogContent>

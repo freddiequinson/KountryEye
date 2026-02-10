@@ -33,6 +33,7 @@ export default function POSPage() {
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [selectedVisit, setSelectedVisit] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState('');
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
@@ -74,6 +75,18 @@ export default function POSPage() {
     enabled: customerSearch.length >= 2,
   });
 
+  // Fetch active visits for selected patient
+  const { data: patientVisits = [] } = useQuery({
+    queryKey: ['patient-active-visits', selectedCustomer?.id],
+    queryFn: async () => {
+      const response = await api.get(`/checkout/patients/${selectedCustomer.id}/active-visits`);
+      return response.data;
+    },
+    enabled: !!selectedCustomer?.id,
+    staleTime: 0, // Always refetch
+    refetchOnMount: true,
+  });
+
   const createSaleMutation = useMutation({
     mutationFn: (data: any) => api.post('/sales/create', data),
     onSuccess: (response) => {
@@ -101,6 +114,7 @@ export default function POSPage() {
       
       setCart([]);
       setSelectedCustomer(null);
+      setSelectedVisit(null);
       setDiscountPercent(0);
       setIsPaymentDialogOpen(false);
       setAmountPaid('');
@@ -190,6 +204,7 @@ export default function POSPage() {
     createSaleMutation.mutate({
       branch_id: 1, // TODO: Get from user's current branch
       patient_id: selectedCustomer?.id || null,
+      visit_id: selectedVisit?.id || null,
       items: cart.map(item => ({
         product_id: item.product_id,
         quantity: item.quantity,
@@ -295,6 +310,31 @@ export default function POSPage() {
             )}
           </div>
         </div>
+
+        {/* Visit Selection - shows when patient has active visits */}
+        {selectedCustomer && patientVisits.length > 0 && (
+          <div className="px-4 pb-2">
+            <Label className="text-xs text-muted-foreground mb-1 block">Link to Active Visit (Optional)</Label>
+            <select
+              className="w-full p-2 border rounded-md text-sm bg-blue-50"
+              value={selectedVisit?.id || ''}
+              onChange={(e) => {
+                const visit = patientVisits.find((v: any) => v.id === parseInt(e.target.value));
+                setSelectedVisit(visit || null);
+              }}
+            >
+              <option value="">Walk-in Purchase (no visit)</option>
+              {patientVisits.map((visit: any) => (
+                <option key={visit.id} value={visit.id}>
+                  {visit.visit_number} - {visit.visit_date?.split('T')[0]} ({visit.status})
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Link to visit if patient is here for consultation. Leave as walk-in for direct purchases.
+            </p>
+          </div>
+        )}
 
         {/* Cart Items */}
         <div className="flex-1 overflow-auto p-4">

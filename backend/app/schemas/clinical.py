@@ -7,6 +7,9 @@ class ConsultationTypeBase(BaseModel):
     name: str
     description: Optional[str] = None
     base_fee: float = 0
+    initial_fee: float = 0
+    review_fee: float = 0
+    subsequent_fee: float = 0
 
 
 class ConsultationTypeCreate(ConsultationTypeBase):

@@ -92,6 +92,7 @@ class SaleItemCreate(BaseModel):
 class SaleCreate(BaseModel):
     branch_id: int
     patient_id: Optional[int] = None
+    visit_id: Optional[int] = None
     prescription_id: Optional[int] = None
     items: List[SaleItemCreate]
     discount_amount: float = 0

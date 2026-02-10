@@ -77,6 +77,7 @@ class Sale(Base):
     receipt_number = Column(String(50), unique=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     patient_id = Column(Integer, ForeignKey("patients.id"))
+    visit_id = Column(Integer, ForeignKey("visits.id"))  # Link sale to a visit for checkout
     prescription_id = Column(Integer, ForeignKey("prescriptions.id"))
     cashier_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     
@@ -98,6 +99,7 @@ class Sale(Base):
 
     branch = relationship("Branch")
     patient = relationship("Patient")
+    visit = relationship("Visit")
     prescription = relationship("Prescription")
     cashier = relationship("User")
     items = relationship("SaleItem", back_populates="sale")

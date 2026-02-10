@@ -500,6 +500,84 @@ def generate_visit_number(branch_id: int, count: int) -> str:
     return f"V-{branch_id:02d}-{today.strftime('%Y%m%d')}-{count:04d}"
 
 
+@router.get("/{patient_id}/detect-visit-type")
+async def detect_visit_type(
+    patient_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Intelligently detect visit type based on patient history:
+    - INITIAL: First ever visit for this patient
+    - REVIEW: Visit within review_period_days of last visit (default 7 days)
+    - SUBSEQUENT: Any other return visit
+    """
+    from app.models.settings import VisitFeeSettings
+    from datetime import timedelta
+    
+    # Get patient
+    result = await db.execute(select(Patient).where(Patient.id == patient_id))
+    patient = result.scalar_one_or_none()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    # Get visit fee settings for review period
+    settings_result = await db.execute(
+        select(VisitFeeSettings).where(
+            or_(
+                VisitFeeSettings.branch_id == patient.branch_id,
+                VisitFeeSettings.branch_id == None
+            )
+        ).order_by(VisitFeeSettings.branch_id.desc())
+    )
+    settings = settings_result.scalar_one_or_none()
+    review_period_days = settings.review_period_days if settings else 7
+    
+    # Get patient's previous visits
+    visits_result = await db.execute(
+        select(Visit)
+        .where(Visit.patient_id == patient_id)
+        .order_by(Visit.visit_date.desc())
+    )
+    visits = visits_result.scalars().all()
+    
+    if not visits:
+        # No previous visits - this is initial
+        return {
+            "visit_type": "initial",
+            "reason": "First visit for this patient",
+            "previous_visits_count": 0,
+            "last_visit_date": None,
+            "review_period_days": review_period_days
+        }
+    
+    last_visit = visits[0]
+    last_visit_date = last_visit.visit_date
+    
+    if last_visit_date:
+        days_since_last = (datetime.now() - last_visit_date).days
+        
+        if days_since_last <= review_period_days:
+            return {
+                "visit_type": "review",
+                "reason": f"Within {review_period_days} days of last visit ({days_since_last} days ago)",
+                "previous_visits_count": len(visits),
+                "last_visit_date": last_visit_date.isoformat(),
+                "days_since_last_visit": days_since_last,
+                "review_period_days": review_period_days
+            }
+    
+    # More than review period - subsequent visit
+    return {
+        "visit_type": "subsequent",
+        "reason": f"Return visit after review period",
+        "previous_visits_count": len(visits),
+        "last_visit_date": last_visit_date.isoformat() if last_visit_date else None,
+        "days_since_last_visit": (datetime.now() - last_visit_date).days if last_visit_date else None,
+        "review_period_days": review_period_days
+    }
+
+
 @router.post("/visits", response_model=VisitResponse)
 async def create_visit(
     visit_in: VisitCreate,
@@ -549,13 +627,8 @@ async def create_visit(
     status = "pending_payment"
     visioncare_member_id = None
     
-    # Enquiry visits don't need to wait for doctor - mark as completed immediately
     visit_type = visit_data.get('visit_type', '')
-    if visit_type == 'enquiry':
-        status = "completed"
-        payment_status = "paid"  # No payment needed for enquiry
-        consultation_fee = Decimal("0")
-    elif payment_type == "insurance":
+    if payment_type == "insurance":
         # Get insurance limit from request
         insurance_limit = Decimal(str(visit_data.get('insurance_limit', 0) or 0))
         
@@ -734,6 +807,45 @@ async def pay_for_visit(
     }
 
 
+@router.get("/visits/pending-payment")
+async def get_pending_payment_visits(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    from datetime import date
+    from sqlalchemy.orm import joinedload
+    
+    today = date.today()
+    # Include visits with pending_payment status OR partial payment status (balance remaining)
+    # This ensures partial payments still show up until fully paid
+    query = select(Visit).options(joinedload(Visit.patient)).where(
+        func.date(Visit.visit_date) == today,
+        or_(
+            Visit.status == "pending_payment",
+            Visit.payment_status == "partial"
+        )
+    ).order_by(Visit.visit_date.asc())
+    
+    result = await db.execute(query)
+    visits = result.unique().scalars().all()
+    
+    return [
+        {
+            "id": v.id,
+            "visit_number": v.visit_number,
+            "patient_id": v.patient_id,
+            "patient_name": f"{v.patient.first_name} {v.patient.last_name}" if v.patient else "Unknown",
+            "patient_number": v.patient.patient_number if v.patient else "",
+            "consultation_fee": float(v.consultation_fee) if v.consultation_fee else 0,
+            "amount_paid": float(v.amount_paid) if v.amount_paid else 0,
+            "balance": float((v.consultation_fee or 0) - (v.amount_paid or 0)),
+            "payment_status": v.payment_status or "unpaid",
+            "visit_date": v.visit_date.isoformat() if v.visit_date else "",
+        }
+        for v in visits
+    ]
+
+
 @router.get("/visits/{visit_id}")
 async def get_visit(
     visit_id: int,
@@ -768,46 +880,6 @@ async def get_visit(
     }
 
 
-@router.get("/visits/pending-payment")
-async def get_pending_payment_visits(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    from datetime import date
-    from sqlalchemy.orm import joinedload
-    
-    today = date.today()
-    # Include visits with pending_payment status OR partial payment status (balance remaining)
-    # This ensures partial payments still show up until fully paid
-    query = select(Visit).options(joinedload(Visit.patient)).where(
-        func.date(Visit.visit_date) == today,
-        Visit.visit_type != "enquiry",  # Exclude enquiry visits - they don't require payment
-        or_(
-            Visit.status == "pending_payment",
-            Visit.payment_status == "partial"
-        )
-    ).order_by(Visit.visit_date.asc())
-    
-    result = await db.execute(query)
-    visits = result.unique().scalars().all()
-    
-    return [
-        {
-            "id": v.id,
-            "visit_number": v.visit_number,
-            "patient_id": v.patient_id,
-            "patient_name": f"{v.patient.first_name} {v.patient.last_name}" if v.patient else "Unknown",
-            "patient_number": v.patient.patient_number if v.patient else "",
-            "consultation_fee": float(v.consultation_fee) if v.consultation_fee else 0,
-            "amount_paid": float(v.amount_paid) if v.amount_paid else 0,
-            "balance": float((v.consultation_fee or 0) - (v.amount_paid or 0)),
-            "payment_status": v.payment_status or "unpaid",
-            "visit_date": v.visit_date.isoformat() if v.visit_date else "",
-        }
-        for v in visits
-    ]
-
-
 @router.post("/visits/{visit_id}/payment")
 async def record_visit_payment(
     visit_id: int,
@@ -831,12 +903,14 @@ async def record_visit_payment(
     new_paid = current_paid + float(amount)
     visit.amount_paid = new_paid
     
-    # Update payment status
+    # Update payment status and visit status
     consultation_fee = float(visit.consultation_fee or 0)
     if new_paid >= consultation_fee:
         visit.payment_status = "paid"
+        visit.status = "waiting"  # Move to doctor queue after full payment
     elif new_paid > 0:
         visit.payment_status = "partial"
+        visit.status = "waiting"  # Also move to queue for partial payments
     
     await db.commit()
     
@@ -847,6 +921,7 @@ async def record_visit_payment(
         "consultation_fee": consultation_fee,
         "balance": consultation_fee - new_paid,
         "payment_status": visit.payment_status,
+        "status": visit.status,
     }
 
 

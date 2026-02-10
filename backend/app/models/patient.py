@@ -7,8 +7,10 @@ from app.core.database import Base
 
 
 class VisitType(str, enum.Enum):
-    ENQUIRY = "enquiry"
-    FULL_CHECKUP = "full_checkup"
+    INITIAL = "initial"  # First time visit - patient just registered
+    REVIEW = "review"  # Return visit within 7 days
+    SUBSEQUENT = "subsequent"  # Return visit after 7 days
+    FULL_CHECKUP = "full_checkup"  # Legacy - kept for backward compatibility
 
 
 class Sex(str, enum.Enum):
@@ -87,6 +89,7 @@ class Visit(Base):
     consultation_type_id = Column(Integer, ForeignKey("consultation_types.id"))
     
     visit_date = Column(DateTime, default=datetime.utcnow)
+    checkout_time = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     patient = relationship("Patient", back_populates="visits")

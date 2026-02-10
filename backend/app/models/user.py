@@ -79,9 +79,37 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_login = Column(DateTime)
+    branch_confirmed_at = Column(DateTime)  # When user last confirmed their branch assignment
+    branch_verification_required = Column(Boolean, default=False)  # True when branch changed by admin
     
     role = relationship("Role", back_populates="users")
     branch = relationship("Branch", back_populates="employees")
     extra_permissions = relationship("Permission", secondary=UserPermission, back_populates="users")
     denied_permissions = relationship("Permission", secondary=UserDeniedPermission)  # Permissions denied from role
     additional_branches = relationship("Branch", secondary=UserBranch)  # Additional branches user can access
+    branch_assignments = relationship("BranchAssignment", back_populates="user", foreign_keys="BranchAssignment.user_id")
+
+
+class BranchAssignment(Base):
+    """Track branch assignment history for staff rotation"""
+    __tablename__ = "branch_assignments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    assigned_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # Admin who made the assignment
+    
+    assigned_at = Column(DateTime, default=datetime.utcnow)  # When the assignment was made
+    effective_from = Column(DateTime, nullable=False)  # When the assignment takes effect
+    effective_until = Column(DateTime, nullable=True)  # When assignment ended (null if current)
+    
+    is_current = Column(Boolean, default=True)  # Is this the current assignment
+    verified = Column(Boolean, default=False)  # Has the user verified they are at this branch
+    verified_at = Column(DateTime, nullable=True)  # When user verified
+    verification_note = Column(Text, nullable=True)  # Note if user reported issue
+    
+    notes = Column(Text, nullable=True)  # Admin notes for the assignment (reason for rotation)
+    
+    user = relationship("User", back_populates="branch_assignments", foreign_keys=[user_id])
+    branch = relationship("Branch")
+    assigned_by = relationship("User", foreign_keys=[assigned_by_id])

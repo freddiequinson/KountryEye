@@ -253,3 +253,98 @@ async def list_roles(
     result = await db.execute(select(Role).order_by(Role.name))
     roles = result.scalars().all()
     return [{"id": r.id, "name": r.name, "description": r.description} for r in roles]
+
+
+@router.get("/me/branches")
+async def get_user_branches(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get all branches the current user has access to"""
+    from app.models.branch import Branch
+    
+    # Get user's primary branch
+    branches = []
+    if current_user.branch:
+        branches.append({
+            "id": current_user.branch.id,
+            "name": current_user.branch.name,
+            "is_primary": True
+        })
+    
+    # Get additional branches from user's additional_branches relationship
+    if hasattr(current_user, 'additional_branches') and current_user.additional_branches:
+        for branch in current_user.additional_branches:
+            if branch.id != current_user.branch_id:
+                branches.append({
+                    "id": branch.id,
+                    "name": branch.name,
+                    "is_primary": False
+                })
+    
+    # If superuser, return all branches
+    if current_user.is_superuser:
+        result = await db.execute(select(Branch).where(Branch.is_active == True).order_by(Branch.name))
+        all_branches = result.scalars().all()
+        branches = [{"id": b.id, "name": b.name, "is_primary": b.id == current_user.branch_id} for b in all_branches]
+    
+    return branches
+
+
+@router.post("/me/switch-branch/{branch_id}")
+async def switch_user_branch(
+    branch_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Switch the current user's active branch"""
+    from app.models.branch import Branch
+    
+    # Verify the branch exists
+    result = await db.execute(select(Branch).where(Branch.id == branch_id))
+    branch = result.scalar_one_or_none()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+    
+    # Check if user has access to this branch
+    has_access = False
+    if current_user.is_superuser:
+        has_access = True
+    elif current_user.branch_id == branch_id:
+        has_access = True
+    elif hasattr(current_user, 'additional_branches') and current_user.additional_branches:
+        has_access = any(b.id == branch_id for b in current_user.additional_branches)
+    
+    if not has_access:
+        raise HTTPException(status_code=403, detail="You don't have access to this branch")
+    
+    # Update user's current branch
+    current_user.branch_id = branch_id
+    await db.commit()
+    await db.refresh(current_user)
+    
+    # Return updated user info
+    permissions = []
+    if current_user.role and current_user.role.permissions:
+        permissions.extend([p.code for p in current_user.role.permissions])
+    if current_user.extra_permissions:
+        permissions.extend([p.code for p in current_user.extra_permissions])
+    
+    return {
+        "message": "Branch switched successfully",
+        "user": {
+            "id": current_user.id,
+            "email": current_user.email,
+            "first_name": current_user.first_name,
+            "last_name": current_user.last_name,
+            "phone": current_user.phone,
+            "is_active": current_user.is_active,
+            "role_id": current_user.role_id,
+            "branch_id": current_user.branch_id,
+            "is_superuser": current_user.is_superuser,
+            "created_at": current_user.created_at,
+            "role": {"id": current_user.role.id, "name": current_user.role.name} if current_user.role else None,
+            "branch": {"id": branch.id, "name": branch.name},
+            "permissions": list(set(permissions))
+        }
+    }

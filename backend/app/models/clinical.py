@@ -11,7 +11,10 @@ class ConsultationType(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     description = Column(Text)
-    base_fee = Column(Numeric(10, 2), default=0)
+    base_fee = Column(Numeric(10, 2), default=0)  # Default/initial visit fee
+    initial_fee = Column(Numeric(10, 2), default=0)  # First time visit fee
+    review_fee = Column(Numeric(10, 2), default=0)  # Return within 7 days
+    subsequent_fee = Column(Numeric(10, 2), default=0)  # Return after 7 days
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -78,6 +81,8 @@ class ClinicalRecord(Base):
     anterior_segment_os = Column(Text)
     posterior_segment_od = Column(Text)
     posterior_segment_os = Column(Text)
+    retina_od = Column(Text)
+    retina_os = Column(Text)
     
     diagnosis = Column(Text)
     differential_diagnosis = Column(Text)

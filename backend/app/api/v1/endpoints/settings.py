@@ -9,7 +9,7 @@ import io
 from app.core.database import get_db
 from app.api.v1.deps import get_current_active_user
 from app.models.user import User
-from app.models.settings import SystemSetting, VisionCareMember
+from app.models.settings import SystemSetting, VisionCareMember, VisitFeeSettings
 
 router = APIRouter()
 
@@ -240,3 +240,99 @@ async def delete_visioncare_member(
     member.is_active = False
     await db.commit()
     return {"message": "Member deactivated"}
+
+
+# ============================================
+# VISIT FEE SETTINGS
+# ============================================
+
+@router.get("/visit-fees")
+async def get_visit_fee_settings(
+    branch_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get visit fee settings (global or branch-specific)"""
+    if branch_id:
+        result = await db.execute(
+            select(VisitFeeSettings).where(VisitFeeSettings.branch_id == branch_id)
+        )
+    else:
+        result = await db.execute(
+            select(VisitFeeSettings).where(VisitFeeSettings.branch_id.is_(None))
+        )
+    
+    settings = result.scalar_one_or_none()
+    
+    if not settings:
+        # Return defaults if no settings exist
+        return {
+            "id": None,
+            "branch_id": branch_id,
+            "initial_visit_fee": 50.00,
+            "review_visit_fee": 30.00,
+            "subsequent_visit_fee": 40.00,
+            "review_period_days": 7
+        }
+    
+    return {
+        "id": settings.id,
+        "branch_id": settings.branch_id,
+        "initial_visit_fee": float(settings.initial_visit_fee or 0),
+        "review_visit_fee": float(settings.review_visit_fee or 0),
+        "subsequent_visit_fee": float(settings.subsequent_visit_fee or 0),
+        "review_period_days": settings.review_period_days or 7
+    }
+
+
+@router.put("/visit-fees")
+async def update_visit_fee_settings(
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Update visit fee settings (admin only)"""
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    branch_id = data.get("branch_id")
+    
+    if branch_id:
+        result = await db.execute(
+            select(VisitFeeSettings).where(VisitFeeSettings.branch_id == branch_id)
+        )
+    else:
+        result = await db.execute(
+            select(VisitFeeSettings).where(VisitFeeSettings.branch_id.is_(None))
+        )
+    
+    settings = result.scalar_one_or_none()
+    
+    if not settings:
+        settings = VisitFeeSettings(branch_id=branch_id)
+        db.add(settings)
+    
+    if "initial_visit_fee" in data:
+        settings.initial_visit_fee = data["initial_visit_fee"]
+    if "review_visit_fee" in data:
+        settings.review_visit_fee = data["review_visit_fee"]
+    if "subsequent_visit_fee" in data:
+        settings.subsequent_visit_fee = data["subsequent_visit_fee"]
+    if "review_period_days" in data:
+        settings.review_period_days = data["review_period_days"]
+    
+    settings.updated_by_id = current_user.id
+    settings.updated_at = datetime.utcnow()
+    
+    await db.commit()
+    await db.refresh(settings)
+    
+    return {
+        "message": "Visit fee settings updated",
+        "id": settings.id,
+        "branch_id": settings.branch_id,
+        "initial_visit_fee": float(settings.initial_visit_fee or 0),
+        "review_visit_fee": float(settings.review_visit_fee or 0),
+        "subsequent_visit_fee": float(settings.subsequent_visit_fee or 0),
+        "review_period_days": settings.review_period_days
+    }

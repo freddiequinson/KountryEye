@@ -1,8 +1,26 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Numeric, ForeignKey
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
+
+
+class VisitFeeSettings(Base):
+    """Settings for visit type fees - initial, review, subsequent"""
+    __tablename__ = "visit_fee_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)  # Null = global default
+    
+    initial_visit_fee = Column(Numeric(10, 2), default=0)  # First time visit
+    review_visit_fee = Column(Numeric(10, 2), default=0)  # Return within 7 days
+    subsequent_visit_fee = Column(Numeric(10, 2), default=0)  # Return after 7 days
+    review_period_days = Column(Integer, default=7)  # Days to consider as review visit
+    
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by_id = Column(Integer, ForeignKey("users.id"))
+    
+    branch = relationship("Branch")
 
 
 class SystemSetting(Base):

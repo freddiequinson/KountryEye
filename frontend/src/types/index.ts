@@ -52,7 +52,7 @@ export interface Visit {
   patient_id: number;
   branch_id: number;
   recorded_by_id: number;
-  visit_type: 'enquiry' | 'full_checkup';
+  visit_type: 'initial' | 'review' | 'subsequent' | 'full_checkup';
   reason?: string;
   notes?: string;
   status: string;

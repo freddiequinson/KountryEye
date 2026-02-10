@@ -391,9 +391,8 @@ async def get_doctor_queue(
     current_user: User = Depends(get_current_active_user)
 ):
     today = date.today()
-    query = select(Visit).options(joinedload(Visit.patient)).where(
-        func.date(Visit.visit_date) == today,
-        Visit.visit_type == "full_checkup"
+    query = select(Visit).options(joinedload(Visit.patient), joinedload(Visit.consultation_type)).where(
+        func.date(Visit.visit_date) == today
     )
     
     if status == "all":
@@ -428,7 +427,7 @@ async def get_doctor_queue(
             "consultation_fee": consultation_fee,
             "amount_paid": amount_paid,
             "balance": balance,
-            "consultation_type": "",
+            "consultation_type": visit.consultation_type.name if visit.consultation_type else "",
             "wait_time_minutes": max(0, wait_minutes),
             "visit_date": visit.visit_date.isoformat() if visit.visit_date else "",
         })

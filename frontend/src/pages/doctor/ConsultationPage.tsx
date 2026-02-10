@@ -111,6 +111,8 @@ export default function ConsultationPage() {
       anterior_segment_os: '',
       posterior_segment_od: '',
       posterior_segment_os: '',
+      retina_od: '',
+      retina_os: '',
       diagnosis: '',
       management_plan: '',
       follow_up_date: '',
@@ -603,6 +605,16 @@ export default function ConsultationPage() {
                       }
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label>Retina</Label>
+                    <Textarea
+                      value={clinicalRecord.retina_od}
+                      onChange={(e) =>
+                        setClinicalRecord({ ...clinicalRecord, retina_od: e.target.value })
+                      }
+                      placeholder="Retina examination findings..."
+                    />
+                  </div>
                 </div>
                 <div className="space-y-4">
                   <h4 className="font-medium">Left Eye (OS)</h4>
@@ -622,6 +634,16 @@ export default function ConsultationPage() {
                       onChange={(e) =>
                         setClinicalRecord({ ...clinicalRecord, posterior_segment_os: e.target.value })
                       }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Retina</Label>
+                    <Textarea
+                      value={clinicalRecord.retina_os}
+                      onChange={(e) =>
+                        setClinicalRecord({ ...clinicalRecord, retina_os: e.target.value })
+                      }
+                      placeholder="Retina examination findings..."
                     />
                   </div>
                 </div>

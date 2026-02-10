@@ -85,6 +85,9 @@ interface ConsultationType {
   id: number;
   name: string;
   description?: string;
+  initial_fee?: number;
+  review_fee?: number;
+  subsequent_fee?: number;
   base_fee: number;
   is_active: boolean;
 }
@@ -138,6 +141,9 @@ export default function SettingsPage() {
     name: '',
     description: '',
     base_fee: 0,
+    initial_fee: 0,
+    review_fee: 0,
+    subsequent_fee: 0,
   });
 
   const [visionCareMemberForm, setVisionCareMemberForm] = useState({
@@ -468,7 +474,7 @@ export default function SettingsPage() {
   };
 
   const resetConsultationTypeForm = () => {
-    setConsultationTypeForm({ name: '', description: '', base_fee: 0 });
+    setConsultationTypeForm({ name: '', description: '', base_fee: 0, initial_fee: 0, review_fee: 0, subsequent_fee: 0 });
   };
 
   // Open edit dialogs
@@ -504,6 +510,9 @@ export default function SettingsPage() {
       name: type.name,
       description: type.description || '',
       base_fee: type.base_fee,
+      initial_fee: type.initial_fee || 0,
+      review_fee: type.review_fee || 0,
+      subsequent_fee: type.subsequent_fee || 0,
     });
     setIsConsultationTypeDialogOpen(true);
   };
@@ -1237,16 +1246,53 @@ export default function SettingsPage() {
                 onChange={(e) => setConsultationTypeForm({ ...consultationTypeForm, description: e.target.value })}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Base Fee (GH₵)</Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={consultationTypeForm.base_fee === 0 ? '' : consultationTypeForm.base_fee}
-                onChange={(e) => setConsultationTypeForm({ ...consultationTypeForm, base_fee: e.target.value === '' ? 0 : parseFloat(e.target.value) })}
-                placeholder="0.00"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Initial Visit Fee (GH₵)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={consultationTypeForm.initial_fee === 0 ? '' : consultationTypeForm.initial_fee}
+                  onChange={(e) => setConsultationTypeForm({ ...consultationTypeForm, initial_fee: e.target.value === '' ? 0 : parseFloat(e.target.value) })}
+                  placeholder="First time patients"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Review Fee (GH₵)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={consultationTypeForm.review_fee === 0 ? '' : consultationTypeForm.review_fee}
+                  onChange={(e) => setConsultationTypeForm({ ...consultationTypeForm, review_fee: e.target.value === '' ? 0 : parseFloat(e.target.value) })}
+                  placeholder="Within 7 days"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Subsequent Fee (GH₵)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={consultationTypeForm.subsequent_fee === 0 ? '' : consultationTypeForm.subsequent_fee}
+                  onChange={(e) => setConsultationTypeForm({ ...consultationTypeForm, subsequent_fee: e.target.value === '' ? 0 : parseFloat(e.target.value) })}
+                  placeholder="After 7 days"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Base Fee (GH₵)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={consultationTypeForm.base_fee === 0 ? '' : consultationTypeForm.base_fee}
+                  onChange={(e) => setConsultationTypeForm({ ...consultationTypeForm, base_fee: e.target.value === '' ? 0 : parseFloat(e.target.value) })}
+                  placeholder="Default fallback"
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>
