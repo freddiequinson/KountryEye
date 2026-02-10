@@ -283,64 +283,105 @@ async def get_system_logs(
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    try:
-        # Try to get logs from journalctl (Linux)
-        cmd = f"journalctl -u kountryeye -n {lines} --no-pager"
-        if filter_type == "error":
-            cmd += " | grep -i error"
-        elif filter_type == "warning":
-            cmd += " | grep -i warning"
-        
-        result = subprocess.run(
-            cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        log_lines = result.stdout.strip().split('\n') if result.stdout else []
-        errors = result.stderr.strip() if result.stderr else None
-        
-        # Parse log lines into structured format
-        parsed_logs = []
-        for line in log_lines:
-            if not line.strip():
-                continue
+    parsed_logs = []
+    errors = None
+    
+    # Try multiple log sources
+    log_sources = [
+        "/var/log/kountryeye/app.log",
+        "/var/www/kountryeye/backend/app.log",
+        "/var/log/syslog",
+    ]
+    
+    log_file = None
+    for source in log_sources:
+        if os.path.exists(source):
+            log_file = source
+            break
+    
+    if log_file:
+        try:
+            # Read last N lines from log file
+            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                all_lines = f.readlines()
+                log_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
             
-            # Try to detect log level
-            level = "info"
-            if "error" in line.lower():
-                level = "error"
-            elif "warning" in line.lower() or "warn" in line.lower():
-                level = "warning"
-            elif "debug" in line.lower():
-                level = "debug"
-            
-            parsed_logs.append({
-                "timestamp": datetime.utcnow().isoformat(),
-                "level": level,
-                "message": line
-            })
+            for line in log_lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Apply filter
+                if filter_type == "error" and "error" not in line.lower():
+                    continue
+                elif filter_type == "warning" and "warning" not in line.lower() and "warn" not in line.lower():
+                    continue
+                
+                # Detect log level
+                level = "info"
+                if "error" in line.lower() or "exception" in line.lower() or "traceback" in line.lower():
+                    level = "error"
+                elif "warning" in line.lower() or "warn" in line.lower():
+                    level = "warning"
+                elif "debug" in line.lower():
+                    level = "debug"
+                
+                parsed_logs.append({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "level": level,
+                    "message": line
+                })
+        except Exception as e:
+            errors = f"Error reading log file: {str(e)}"
+    
+    # If no file logs, try to get recent API request logs from memory
+    if not parsed_logs:
+        # Add some system info as fallback
+        parsed_logs.append({
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": "info",
+            "message": f"System is running. Log file not found at: {', '.join(log_sources)}"
+        })
+        parsed_logs.append({
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": "info",
+            "message": f"Current working directory: {os.getcwd()}"
+        })
+        parsed_logs.append({
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": "info",
+            "message": f"Python version: {subprocess.run(['python3', '--version'], capture_output=True, text=True).stdout.strip() if os.name != 'nt' else 'N/A'}"
+        })
         
-        return {
-            "logs": parsed_logs,
-            "total": len(parsed_logs),
-            "errors": errors
-        }
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="Log retrieval timed out")
-    except Exception as e:
-        # Fallback: return error info
-        return {
-            "logs": [{
-                "timestamp": datetime.utcnow().isoformat(),
-                "level": "error",
-                "message": f"Could not retrieve logs: {str(e)}"
-            }],
-            "total": 1,
-            "errors": str(e)
-        }
+        # Try journalctl with full path
+        try:
+            result = subprocess.run(
+                ["/usr/bin/journalctl", "-u", "kountryeye", "-n", str(lines), "--no-pager"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.stdout:
+                for line in result.stdout.strip().split('\n'):
+                    if line.strip():
+                        level = "info"
+                        if "error" in line.lower():
+                            level = "error"
+                        elif "warning" in line.lower():
+                            level = "warning"
+                        parsed_logs.append({
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "level": level,
+                            "message": line
+                        })
+        except Exception:
+            pass
+    
+    return {
+        "logs": parsed_logs,
+        "total": len(parsed_logs),
+        "errors": errors
+    }
 
 
 @router.get("/health")
