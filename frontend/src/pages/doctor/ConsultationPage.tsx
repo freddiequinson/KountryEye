@@ -1006,8 +1006,24 @@ export default function ConsultationPage() {
                               </div>
                             )}
                           </div>
-                          {scan.has_pdf && (
-                            <Button variant="outline" size="sm" className="mt-2">
+                          {scan.has_pdf && scan.pdf_url && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="mt-2"
+                              onClick={async () => {
+                                try {
+                                  const response = await api.get(`/technician/scans/${scan.id}/pdf`, {
+                                    responseType: 'blob',
+                                  });
+                                  const blob = new Blob([response.data], { type: 'application/pdf' });
+                                  const url = window.URL.createObjectURL(blob);
+                                  window.open(url, '_blank');
+                                } catch {
+                                  toast({ title: 'Failed to load PDF', variant: 'destructive' });
+                                }
+                              }}
+                            >
                               <FileText className="h-4 w-4 mr-2" />
                               View PDF Report
                             </Button>
