@@ -1006,7 +1006,7 @@ export default function ConsultationPage() {
                               </div>
                             )}
                           </div>
-                          {scan.has_pdf && scan.pdf_url && (
+                          {scan.has_pdf && (
                             <Button 
                               variant="outline" 
                               size="sm" 

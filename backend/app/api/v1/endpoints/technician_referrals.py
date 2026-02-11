@@ -728,9 +728,9 @@ async def list_technician_scans(
     """List technician scans with filters"""
     query = select(TechnicianScan)
     
-    if scan_type:
+    if scan_type and scan_type != 'all':
         query = query.where(TechnicianScan.scan_type == scan_type)
-    if status:
+    if status and status != 'all':
         query = query.where(TechnicianScan.status == status)
     if patient_id:
         query = query.where(TechnicianScan.patient_id == patient_id)
@@ -1005,6 +1005,8 @@ async def complete_scan(
     current_user: User = Depends(get_current_active_user)
 ):
     """Mark a scan as completed"""
+    from app.models.communication import Notification
+    
     result = await db.execute(
         select(TechnicianScan).where(TechnicianScan.id == scan_id)
     )
@@ -1015,6 +1017,29 @@ async def complete_scan(
     
     scan.status = "completed"
     scan.updated_at = datetime.utcnow()
+    
+    # Notify the requesting doctor if this was a doctor-requested scan
+    if scan.requested_by_id:
+        # Get patient name for notification
+        patient_name = "Patient"
+        if scan.patient_id:
+            patient_result = await db.execute(
+                select(Patient).where(Patient.id == scan.patient_id)
+            )
+            patient = patient_result.scalar_one_or_none()
+            if patient:
+                patient_name = f"{patient.first_name} {patient.last_name}"
+        
+        notification = Notification(
+            user_id=scan.requested_by_id,
+            title="Scan Completed",
+            message=f"{scan.scan_type.upper()} scan for {patient_name} has been completed and is ready for review.",
+            notification_type="scan_completed",
+            reference_type="scan",
+            reference_id=scan.id
+        )
+        db.add(notification)
+    
     await db.commit()
     
     return {"message": "Scan marked as completed"}
@@ -1590,7 +1615,7 @@ async def get_consultation_scans(
 
 @router.get("/scan-requests")
 async def list_scan_requests(
-    status: Optional[str] = "pending",
+    status: Optional[str] = None,
     scan_type: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
@@ -1600,7 +1625,7 @@ async def list_scan_requests(
     """List scan requests from doctors - scans with requested_by_id set"""
     query = select(TechnicianScan).where(TechnicianScan.requested_by_id != None)
     
-    if status:
+    if status and status != 'all':
         query = query.where(TechnicianScan.status == status)
     if scan_type:
         query = query.where(TechnicianScan.scan_type == scan_type)
