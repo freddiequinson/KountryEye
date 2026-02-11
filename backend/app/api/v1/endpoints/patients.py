@@ -331,7 +331,7 @@ async def get_visits(
         except ValueError:
             pass
     
-    query = select(Visit).options(joinedload(Visit.patient))
+    query = select(Visit).options(joinedload(Visit.patient), joinedload(Visit.consultation_type))
     
     # Handle period filter
     if period:
@@ -370,6 +370,7 @@ async def get_visits(
             "patient_number": v.patient.patient_number if v.patient else "",
             "visit_type": v.visit_type.value if hasattr(v.visit_type, 'value') else str(v.visit_type),
             "status": v.status,
+            "consultation_type": v.consultation_type.name if v.consultation_type else "",
             "consultation_fee": float(v.consultation_fee) if v.consultation_fee else 0,
             "amount_paid": float(v.amount_paid) if v.amount_paid else 0,
             "payment_status": v.payment_status or "unpaid",
@@ -646,10 +647,10 @@ async def create_visit(
                 insurance_used = insurance_limit
                 insurance_coverage = insurance_limit
                 patient_topup = consultation_fee - insurance_limit
-                # Patient needs to pay topup before proceeding
-                amount_paid = Decimal("0")
-                payment_status = "unpaid"
-                status = "pending_payment"
+                # Insurance portion is paid, patient needs to pay topup
+                amount_paid = insurance_limit  # Insurance has paid its portion
+                payment_status = "partial"  # Partial payment - insurance paid, patient owes balance
+                status = "pending_payment"  # Still pending until patient pays topup
         else:
             # No limit specified, insurance covers full amount (legacy behavior)
             insurance_coverage = consultation_fee

@@ -411,6 +411,7 @@ export default function FrontDeskPage() {
           createVisitMutation.mutate({
             patient_id: selectedPatient.id,
             ...visitForm,
+            visit_type: visitTypeInfo?.visit_type || visitForm.visit_type,
             consultation_type_id: visitForm.consultation_type_id ? parseInt(visitForm.consultation_type_id) : null,
             insurance_limit: visitForm.insurance_limit ? parseFloat(visitForm.insurance_limit) : null,
           });
@@ -423,6 +424,7 @@ export default function FrontDeskPage() {
       createVisitMutation.mutate({
         patient_id: selectedPatient.id,
         ...visitForm,
+        visit_type: visitTypeInfo?.visit_type || visitForm.visit_type,
         consultation_type_id: visitForm.consultation_type_id ? parseInt(visitForm.consultation_type_id) : null,
         insurance_limit: visitForm.insurance_limit ? parseFloat(visitForm.insurance_limit) : null,
       });
@@ -961,25 +963,22 @@ export default function FrontDeskPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Visit Type</Label>
-              {visitTypeInfo && (
-                <p className="text-xs text-muted-foreground mb-1">
-                  Auto-detected: <span className="font-medium text-primary">{visitTypeInfo.visit_type.toUpperCase()}</span> - {visitTypeInfo.reason}
-                </p>
-              )}
-              <Select
-                value={visitForm.visit_type}
-                onValueChange={(value) => setVisitForm({ ...visitForm, visit_type: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="initial">Initial Visit (First Time)</SelectItem>
-                  <SelectItem value="review">Review Visit (Within 7 Days)</SelectItem>
-                  <SelectItem value="subsequent">Subsequent Visit (After 7 Days)</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Visit Type (Auto-detected)</Label>
+              <div className="p-3 bg-muted rounded-md border">
+                {visitTypeInfo ? (
+                  <div>
+                    <span className="font-semibold text-primary">
+                      {visitTypeInfo.visit_type === 'initial' ? 'Initial Visit' : 
+                       visitTypeInfo.visit_type === 'review' ? 'Review Visit' : 
+                       visitTypeInfo.visit_type === 'subsequent' ? 'Subsequent Visit' : 
+                       visitTypeInfo.visit_type.toUpperCase()}
+                    </span>
+                    <p className="text-xs text-muted-foreground mt-1">{visitTypeInfo.reason}</p>
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">Select a patient to detect visit type</span>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -1014,6 +1013,7 @@ export default function FrontDeskPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="momo">Mobile Money</SelectItem>
                   <SelectItem value="insurance">Insurance</SelectItem>
                   <SelectItem value="visioncare">VisionCare Membership</SelectItem>
                 </SelectContent>

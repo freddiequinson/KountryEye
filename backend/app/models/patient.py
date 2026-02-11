@@ -11,6 +11,7 @@ class VisitType(str, enum.Enum):
     REVIEW = "review"  # Return visit within 7 days
     SUBSEQUENT = "subsequent"  # Return visit after 7 days
     FULL_CHECKUP = "full_checkup"  # Legacy - kept for backward compatibility
+    ENQUIRY = "enquiry"  # General enquiry visit
 
 
 class Sex(str, enum.Enum):

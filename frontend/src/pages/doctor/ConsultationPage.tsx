@@ -560,7 +560,9 @@ export default function ConsultationPage() {
 
       <Tabs defaultValue="examination" className="space-y-4">
         <TabsList>
+          <TabsTrigger value="history">Patient History</TabsTrigger>
           <TabsTrigger value="examination">Examination</TabsTrigger>
+          <TabsTrigger value="diagnosis">Diagnosis & Plan</TabsTrigger>
           <TabsTrigger value="scans" className="relative">
             Scans
             {visitScans.filter((s: any) => s.status === 'pending').length > 0 && (
@@ -569,8 +571,6 @@ export default function ConsultationPage() {
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="history">Patient History</TabsTrigger>
-          <TabsTrigger value="diagnosis">Diagnosis & Plan</TabsTrigger>
           {aiStatus?.enabled && <TabsTrigger value="ai-summary">AI Summary</TabsTrigger>}
         </TabsList>
 

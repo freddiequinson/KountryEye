@@ -1746,7 +1746,10 @@ async def create_scan_payment(
     current_user: User = Depends(get_current_active_user)
 ):
     """Create or update payment record for a scan"""
-    # Get scan
+    from decimal import Decimal
+    from app.models.patient import Visit
+    
+    # Get scan with visit info
     scan_result = await db.execute(
         select(TechnicianScan).where(TechnicianScan.id == scan_id)
     )
@@ -1764,18 +1767,51 @@ async def create_scan_payment(
     if not pricing:
         raise HTTPException(status_code=400, detail="No pricing set for this scan type")
     
+    scan_amount = Decimal(str(pricing.price))
+    insurance_covered = Decimal("0")
+    patient_pays = scan_amount
+    
+    # Check if visit uses insurance and has remaining balance
+    if scan.visit_id:
+        visit_result = await db.execute(
+            select(Visit).where(Visit.id == scan.visit_id)
+        )
+        visit = visit_result.scalar_one_or_none()
+        
+        if visit and visit.payment_type == "insurance" and visit.insurance_limit:
+            insurance_limit = Decimal(str(visit.insurance_limit or 0))
+            insurance_used = Decimal(str(visit.insurance_used or 0))
+            insurance_remaining = insurance_limit - insurance_used
+            
+            if insurance_remaining > 0:
+                # Deduct from insurance
+                if scan_amount <= insurance_remaining:
+                    insurance_covered = scan_amount
+                    patient_pays = Decimal("0")
+                else:
+                    insurance_covered = insurance_remaining
+                    patient_pays = scan_amount - insurance_remaining
+                
+                # Update visit insurance_used
+                visit.insurance_used = insurance_used + insurance_covered
+                if patient_pays > 0:
+                    visit.patient_topup = Decimal(str(visit.patient_topup or 0)) + patient_pays
+    
     # Check if payment already exists
     payment_result = await db.execute(
         select(ScanPayment).where(ScanPayment.scan_id == scan_id)
     )
     payment = payment_result.scalar_one_or_none()
     
+    actual_is_paid = is_paid or (patient_pays == 0 and insurance_covered > 0)
+    
     if payment:
         # Update existing payment
-        payment.is_paid = is_paid
-        if is_paid:
-            payment.payment_method = payment_method
+        payment.is_paid = actual_is_paid
+        if actual_is_paid:
+            payment.payment_method = payment_method or ("insurance" if insurance_covered > 0 else None)
             payment.payment_date = datetime.utcnow()
+            payment.payment_status = "paid"
         payment.notes = notes
         payment.recorded_by_id = current_user.id
         payment.updated_at = datetime.utcnow()
@@ -1784,9 +1820,10 @@ async def create_scan_payment(
         payment = ScanPayment(
             scan_id=scan_id,
             amount=pricing.price,
-            is_paid=is_paid,
-            payment_method=payment_method if is_paid else None,
-            payment_date=datetime.utcnow() if is_paid else None,
+            is_paid=actual_is_paid,
+            payment_method=payment_method or ("insurance" if insurance_covered > 0 else None),
+            payment_date=datetime.utcnow() if actual_is_paid else None,
+            payment_status="paid" if actual_is_paid else "pending",
             recorded_by_id=current_user.id
         )
         db.add(payment)
@@ -1795,8 +1832,10 @@ async def create_scan_payment(
     
     return {
         "message": "Payment recorded successfully",
-        "is_paid": is_paid,
-        "amount": float(pricing.price)
+        "is_paid": actual_is_paid,
+        "amount": float(pricing.price),
+        "insurance_covered": float(insurance_covered),
+        "patient_pays": float(patient_pays)
     }
 
 

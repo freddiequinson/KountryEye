@@ -411,8 +411,13 @@ async def get_doctor_queue(
     visits = result.unique().scalars().all()
     
     queue_items = []
+    now = datetime.utcnow()
     for visit in visits:
-        wait_minutes = int((datetime.utcnow() - visit.visit_date).total_seconds() / 60) if visit.status == "waiting" else 0
+        # Calculate wait time - use visit_date as the start time
+        wait_minutes = 0
+        if visit.visit_date and visit.status in ["waiting", "in_consultation"]:
+            time_diff = now - visit.visit_date
+            wait_minutes = max(0, int(time_diff.total_seconds() / 60))
         consultation_fee = float(visit.consultation_fee) if visit.consultation_fee else 0
         amount_paid = float(visit.amount_paid) if visit.amount_paid else 0
         balance = max(0, consultation_fee - amount_paid)
