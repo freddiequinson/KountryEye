@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Terminal, RefreshCw, Filter, AlertCircle, Info, AlertTriangle, Trash2 } from 'lucide-react';
+import { Terminal, RefreshCw, Filter, AlertCircle, Info, AlertTriangle, Trash2, Download, BarChart3 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -49,6 +49,38 @@ export default function TerminalPage() {
     enabled: isAdmin,
     refetchInterval: autoRefresh ? 5000 : false,
   });
+
+  // Fetch error summary
+  const { data: errorSummary } = useQuery({
+    queryKey: ['error-summary'],
+    queryFn: async () => {
+      const response = await api.get('/system/logs/errors-summary');
+      return response.data;
+    },
+    enabled: isAdmin,
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  // Download error logs
+  const handleDownloadLogs = async () => {
+    try {
+      const response = await api.get('/system/logs/download', {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: 'text/plain' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `kountryeye_errors_${new Date().toISOString().slice(0, 10)}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast({ title: 'Error logs downloaded successfully' });
+    } catch {
+      toast({ title: 'Failed to download logs', variant: 'destructive' });
+    }
+  };
 
   // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
@@ -111,6 +143,14 @@ export default function TerminalPage() {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadLogs}
+          >
+            <Download className="h-4 w-4 mr-1" />
+            Download Errors
+          </Button>
           <Button
             variant={autoRefresh ? 'default' : 'outline'}
             size="sm"
@@ -175,6 +215,38 @@ export default function TerminalPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Error Summary */}
+      {errorSummary && errorSummary.total_errors > 0 && (
+        <Card className="border-orange-300 bg-orange-50">
+          <CardHeader className="py-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Error Summary ({errorSummary.total_errors} errors detected)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex flex-wrap gap-2 mb-3">
+              {Object.entries(errorSummary.error_types || {}).map(([type, count]) => (
+                <Badge key={type} variant="outline" className="bg-white">
+                  {type.replace('_', ' ')}: {count as number}
+                </Badge>
+              ))}
+            </div>
+            {errorSummary.recent_errors?.length > 0 && (
+              <div className="space-y-1 max-h-32 overflow-auto">
+                <p className="text-xs font-medium text-muted-foreground">Recent Errors:</p>
+                {errorSummary.recent_errors.slice(0, 5).map((err: { type: string; message: string }, i: number) => (
+                  <div key={i} className="text-xs p-2 bg-white rounded border border-red-200 truncate">
+                    <Badge variant="destructive" className="mr-2 text-[10px]">{err.type}</Badge>
+                    {err.message.slice(0, 200)}...
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Terminal Output */}
       <Card className="flex-1 bg-gray-900 text-gray-100 overflow-hidden">

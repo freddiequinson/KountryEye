@@ -391,3 +391,120 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat()
     }
+
+
+@router.get("/logs/download")
+async def download_error_logs(
+    current_user: User = Depends(get_current_active_user)
+):
+    """Download error logs as a text file - admin only"""
+    from fastapi.responses import Response
+    
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    error_logs = []
+    
+    # Try multiple log sources
+    log_sources = [
+        "/var/log/kountryeye/app.log",
+        "/var/www/kountryeye/backend/app.log",
+        "/var/log/syslog",
+    ]
+    
+    for source in log_sources:
+        if os.path.exists(source):
+            try:
+                with open(source, 'r', encoding='utf-8', errors='ignore') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and ("error" in line.lower() or "exception" in line.lower() or "traceback" in line.lower()):
+                            error_logs.append(line)
+            except Exception as e:
+                error_logs.append(f"Error reading {source}: {str(e)}")
+    
+    # Create downloadable content
+    content = f"KountryEye Error Logs - Generated: {datetime.utcnow().isoformat()}\n"
+    content += "=" * 80 + "\n\n"
+    
+    if error_logs:
+        content += "\n".join(error_logs[-500:])  # Last 500 error lines
+    else:
+        content += "No errors found in log files."
+    
+    return Response(
+        content=content,
+        media_type="text/plain",
+        headers={
+            "Content-Disposition": f"attachment; filename=kountryeye_errors_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.txt"
+        }
+    )
+
+
+@router.get("/logs/errors-summary")
+async def get_errors_summary(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get summary of recent errors for quick tracking - admin only"""
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    error_summary = {
+        "total_errors": 0,
+        "error_types": {},
+        "recent_errors": [],
+        "log_source": None
+    }
+    
+    log_sources = [
+        "/var/log/kountryeye/app.log",
+        "/var/www/kountryeye/backend/app.log",
+    ]
+    
+    for source in log_sources:
+        if os.path.exists(source):
+            error_summary["log_source"] = source
+            try:
+                with open(source, 'r', encoding='utf-8', errors='ignore') as f:
+                    lines = f.readlines()[-1000:]  # Last 1000 lines
+                
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    is_error = False
+                    error_type = "general"
+                    
+                    if "error" in line.lower():
+                        is_error = True
+                        if "500" in line:
+                            error_type = "500_internal"
+                        elif "404" in line:
+                            error_type = "404_not_found"
+                        elif "422" in line:
+                            error_type = "422_validation"
+                        elif "database" in line.lower() or "sql" in line.lower():
+                            error_type = "database"
+                        elif "permission" in line.lower():
+                            error_type = "permission"
+                    elif "exception" in line.lower() or "traceback" in line.lower():
+                        is_error = True
+                        error_type = "exception"
+                    
+                    if is_error:
+                        error_summary["total_errors"] += 1
+                        error_summary["error_types"][error_type] = error_summary["error_types"].get(error_type, 0) + 1
+                        
+                        if len(error_summary["recent_errors"]) < 20:
+                            error_summary["recent_errors"].append({
+                                "type": error_type,
+                                "message": line[:500]  # Truncate long messages
+                            })
+                
+                break
+            except Exception as e:
+                error_summary["error"] = str(e)
+    
+    return error_summary

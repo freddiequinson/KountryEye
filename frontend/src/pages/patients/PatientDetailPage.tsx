@@ -243,6 +243,7 @@ export default function PatientDetailPage() {
     const consultationFee = getConsultationFee();
     createVisitMutation.mutate({
       ...visitForm,
+      visit_type: visitTypeInfo?.visit_type || visitForm.visit_type,
       patient_id: Number(id),
       consultation_type_id: visitForm.consultation_type_id ? parseInt(visitForm.consultation_type_id) : null,
       consultation_fee: consultationFee,
@@ -649,27 +650,22 @@ export default function PatientDetailPage() {
             </DialogHeader>
             <form onSubmit={handleCreateVisit} className="space-y-4">
               <div className="space-y-2">
-                <Label>Visit Type</Label>
-                {visitTypeInfo && (
-                  <p className="text-xs text-muted-foreground mb-1">
-                    Auto-detected: <span className="font-medium text-primary">{visitTypeInfo.visit_type.toUpperCase()}</span> - {visitTypeInfo.reason}
-                  </p>
-                )}
-                <Select
-                  value={visitForm.visit_type}
-                  onValueChange={(value) =>
-                    setVisitForm({ ...visitForm, visit_type: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="initial">Initial Visit (First Time)</SelectItem>
-                    <SelectItem value="review">Review Visit (Within 7 Days)</SelectItem>
-                    <SelectItem value="subsequent">Subsequent Visit (After 7 Days)</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Visit Type (Auto-detected)</Label>
+                <div className="p-3 bg-muted rounded-md border">
+                  {visitTypeInfo ? (
+                    <div>
+                      <span className="font-semibold text-primary">
+                        {visitTypeInfo.visit_type === 'initial' ? 'Initial Visit' : 
+                         visitTypeInfo.visit_type === 'review' ? 'Review Visit' : 
+                         visitTypeInfo.visit_type === 'subsequent' ? 'Subsequent Visit' : 
+                         visitTypeInfo.visit_type.toUpperCase()}
+                      </span>
+                      <p className="text-xs text-muted-foreground mt-1">{visitTypeInfo.reason}</p>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">Detecting visit type...</span>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">
