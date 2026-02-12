@@ -256,8 +256,8 @@ export default function FrontDeskPage() {
       });
       toast({ title: 'Visit recorded successfully' });
       
-      // If cash payment, switch to visit payments tab to collect payment
-      if (paymentType === 'cash') {
+      // If cash or mobile money payment, switch to visit payments tab to collect payment
+      if (paymentType === 'cash' || paymentType === 'momo') {
         setActiveTab('visit-payments');
         // Auto-open payment dialog for the new visit
         setTimeout(() => {

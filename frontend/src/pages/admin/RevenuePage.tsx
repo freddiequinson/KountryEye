@@ -54,6 +54,7 @@ export default function RevenuePage() {
   const [showInsuranceDialog, setShowInsuranceDialog] = useState(false);
   const [showCashDialog, setShowCashDialog] = useState(false);
   const [showVCDialog, setShowVCDialog] = useState(false);
+  const [showMomoDialog, setShowMomoDialog] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
@@ -324,7 +325,7 @@ export default function RevenuePage() {
         </div>
 
       {/* Payment Method Breakdown */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card 
           className="cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => setShowCashDialog(true)}
@@ -335,6 +336,21 @@ export default function RevenuePage() {
           <CardContent>
             <div className="text-xl font-bold text-green-600">
               {formatCurrency(summary?.by_payment_method?.cash || 0)}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Click to view details</p>
+          </CardContent>
+        </Card>
+
+        <Card 
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => setShowMomoDialog(true)}
+        >
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Mobile Money</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-bold text-yellow-600">
+              {formatCurrency((summary?.by_payment_method?.momo || 0) + (summary?.by_payment_method?.mobile_money || 0))}
             </div>
             <p className="text-xs text-muted-foreground mt-1">Click to view details</p>
           </CardContent>
@@ -634,6 +650,51 @@ export default function RevenuePage() {
               ) : (
                 revenues
                   .filter((r: Revenue) => r.payment_method === 'visioncare')
+                  .map((revenue: Revenue) => (
+                    <TableRow key={revenue.id}>
+                      <TableCell>{new Date(revenue.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>{revenue.description}</TableCell>
+                      <TableCell>
+                        <Badge variant={getCategoryBadge(revenue.category)}>
+                          {formatCategory(revenue.category)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatCurrency(revenue.amount)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+              )}
+            </TableBody>
+          </Table>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mobile Money Payments Dialog */}
+      <Dialog open={showMomoDialog} onOpenChange={setShowMomoDialog}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Mobile Money Payments Details</DialogTitle>
+          </DialogHeader>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {revenues.filter((r: Revenue) => r.payment_method === 'momo' || r.payment_method === 'mobile_money').length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                    No mobile money payments found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                revenues
+                  .filter((r: Revenue) => r.payment_method === 'momo' || r.payment_method === 'mobile_money')
                   .map((revenue: Revenue) => (
                     <TableRow key={revenue.id}>
                       <TableCell>{new Date(revenue.created_at).toLocaleDateString()}</TableCell>

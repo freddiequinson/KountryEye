@@ -865,17 +865,35 @@ async def process_prescription_payment(
     current_user: User = Depends(get_current_active_user)
 ):
     from decimal import Decimal
+    from app.models.revenue import Revenue
+    from sqlalchemy.orm import joinedload
     
-    result = await db.execute(select(Prescription).where(Prescription.id == prescription_id))
-    prescription = result.scalar_one_or_none()
+    result = await db.execute(
+        select(Prescription)
+        .options(joinedload(Prescription.patient))
+        .where(Prescription.id == prescription_id)
+    )
+    prescription = result.unique().scalar_one_or_none()
     if not prescription:
         raise HTTPException(status_code=404, detail="Prescription not found")
     
+    payment_method = payment_data.get("payment_method", "cash")
+    
+    # Calculate prescription total
+    prescription_total = Decimal("0")
+    items_result = await db.execute(
+        select(PrescriptionItem).where(PrescriptionItem.prescription_id == prescription_id)
+    )
+    items = items_result.scalars().all()
+    for item in items:
+        prescription_total += Decimal(str(item.unit_price or 0)) * Decimal(str(item.quantity or 1))
+    
     prescription.status = "paid"
-    prescription.payment_method = payment_data.get("payment_method")
+    prescription.payment_method = payment_method
     prescription.paid_at = datetime.utcnow()
     
     # Track insurance usage if this is an insurance visit
+    visit = None
     if prescription.consultation_id:
         consultation_result = await db.execute(
             select(Consultation).where(Consultation.id == prescription.consultation_id)
@@ -887,15 +905,6 @@ async def process_prescription_payment(
             )
             visit = visit_result.scalar_one_or_none()
             if visit and visit.payment_type == "insurance" and visit.insurance_limit:
-                # Calculate prescription total
-                prescription_total = Decimal("0")
-                items_result = await db.execute(
-                    select(PrescriptionItem).where(PrescriptionItem.prescription_id == prescription_id)
-                )
-                items = items_result.scalars().all()
-                for item in items:
-                    prescription_total += Decimal(str(item.unit_price or 0)) * Decimal(str(item.quantity or 1))
-                
                 # Update insurance used
                 current_used = Decimal(str(visit.insurance_used or 0))
                 new_used = current_used + prescription_total
@@ -908,8 +917,27 @@ async def process_prescription_payment(
                 else:
                     visit.insurance_used = new_used
     
+    # Record revenue for prescription payment
+    if prescription_total > 0:
+        patient_name = ""
+        if prescription.patient:
+            patient_name = f" - {prescription.patient.first_name} {prescription.patient.last_name}"
+        
+        revenue = Revenue(
+            category="prescription",
+            description=f"Prescription payment{patient_name}",
+            amount=float(prescription_total),
+            payment_method=payment_method,
+            reference_type="prescription",
+            reference_id=prescription_id,
+            patient_id=prescription.patient_id,
+            branch_id=visit.branch_id if visit else current_user.branch_id,
+            recorded_by_id=current_user.id
+        )
+        db.add(revenue)
+    
     await db.commit()
-    return {"message": "Payment processed", "receipt_id": prescription.id}
+    return {"message": "Payment processed", "receipt_id": prescription.id, "amount": float(prescription_total)}
 
 
 @router.get("/out-of-stock-analytics")

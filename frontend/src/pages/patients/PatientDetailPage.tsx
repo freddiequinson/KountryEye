@@ -700,6 +700,7 @@ export default function PatientDetailPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="momo">Mobile Money</SelectItem>
                     <SelectItem value="insurance">Insurance</SelectItem>
                     <SelectItem value="visioncare">VisionCare Membership</SelectItem>
                   </SelectContent>

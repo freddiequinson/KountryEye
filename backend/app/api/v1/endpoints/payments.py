@@ -157,9 +157,16 @@ async def create_payment(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    # Get invoice
-    invoice_result = await db.execute(select(Invoice).where(Invoice.id == payment_in.invoice_id))
-    invoice = invoice_result.scalar_one_or_none()
+    from app.models.revenue import Revenue
+    from sqlalchemy.orm import joinedload
+    
+    # Get invoice with patient
+    invoice_result = await db.execute(
+        select(Invoice)
+        .options(joinedload(Invoice.patient))
+        .where(Invoice.id == payment_in.invoice_id)
+    )
+    invoice = invoice_result.unique().scalar_one_or_none()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     
@@ -201,6 +208,25 @@ async def create_payment(
         invoice.status = PaymentStatus.PAID
     else:
         invoice.status = PaymentStatus.PARTIAL
+    
+    # Record revenue for this payment
+    patient_name = ""
+    if invoice.patient:
+        patient_name = f" - {invoice.patient.first_name} {invoice.patient.last_name}"
+    
+    revenue = Revenue(
+        category="invoice_payment",
+        description=f"Invoice payment{patient_name}",
+        amount=float(payment_in.amount),
+        payment_method=payment_in.payment_method,
+        reference_type="invoice",
+        reference_id=invoice.id,
+        patient_id=invoice.patient_id,
+        branch_id=invoice.branch_id,
+        recorded_by_id=current_user.id,
+        notes=f"Invoice #{invoice.invoice_number}"
+    )
+    db.add(revenue)
     
     await db.commit()
     await db.refresh(payment)

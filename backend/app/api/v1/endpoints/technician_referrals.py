@@ -1840,6 +1840,8 @@ async def create_scan_payment(
     
     actual_is_paid = is_paid or (patient_pays == 0 and insurance_covered > 0)
     
+    was_already_paid = payment.is_paid if payment else False
+    
     if payment:
         # Update existing payment
         payment.is_paid = actual_is_paid
@@ -1862,6 +1864,42 @@ async def create_scan_payment(
             recorded_by_id=current_user.id
         )
         db.add(payment)
+    
+    # Record revenue if payment is being marked as paid (and wasn't already paid)
+    if actual_is_paid and not was_already_paid and float(scan_amount) > 0:
+        scan_type_labels = {
+            "oct": "OCT Scan",
+            "vft": "Visual Field Test",
+            "fundus": "Fundus Photography",
+            "pachymeter": "Pachymeter"
+        }
+        description = scan_type_labels.get(scan.scan_type, scan.scan_type.upper())
+        
+        # Get patient name if available
+        patient_name = ""
+        if scan.patient_id:
+            patient_result = await db.execute(
+                select(Patient).where(Patient.id == scan.patient_id)
+            )
+            patient = patient_result.scalar_one_or_none()
+            if patient:
+                patient_name = f" - {patient.first_name} {patient.last_name}"
+        
+        actual_payment_method = payment_method or ("insurance" if insurance_covered > 0 else "cash")
+        
+        revenue = Revenue(
+            category="service",
+            description=f"{description}{patient_name}",
+            amount=float(scan_amount),
+            payment_method=actual_payment_method,
+            reference_type="scan",
+            reference_id=scan_id,
+            patient_id=scan.patient_id,
+            branch_id=current_user.branch_id,
+            recorded_by_id=current_user.id,
+            notes=f"Scan #{scan.scan_number}"
+        )
+        db.add(revenue)
     
     await db.commit()
     
