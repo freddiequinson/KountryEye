@@ -179,9 +179,20 @@ export default function RevenuePage() {
 
   const exportInsuranceCSV = () => {
     const csvContent = [
-      ['Patient Name', 'Insurance Provider', 'Insurance ID', 'Amount', 'Date'].join(','),
+      ['Date', 'Patient Name', 'Phone', 'Insurance Provider', 'Insurance ID', 'Insurance Number', 'Insurance Limit', 'Amount Claimed', 'Visit Number', 'Category'].join(','),
       ...insuranceBreakdown.map((item: any) => 
-        [item.patient_name, item.insurance_provider, item.insurance_id, item.amount, item.date].join(',')
+        [
+          item.date,
+          `"${item.patient_name}"`,
+          item.patient_phone || '',
+          `"${item.insurance_provider}"`,
+          item.insurance_id || '',
+          item.insurance_number || '',
+          item.insurance_limit || 0,
+          item.amount,
+          item.visit_number || '',
+          item.category || ''
+        ].join(',')
       )
     ].join('\n');
     
@@ -717,46 +728,59 @@ export default function RevenuePage() {
 
       {/* Insurance Payments Dialog */}
       <Dialog open={showInsuranceDialog} onOpenChange={setShowInsuranceDialog}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
-              <span>Insurance Payments Details</span>
+              <span>Insurance Claims for Billing</span>
               <Button variant="outline" size="sm" onClick={exportInsuranceCSV}>
                 <Download className="mr-2 h-4 w-4" />
                 Export CSV
               </Button>
             </DialogTitle>
           </DialogHeader>
+          <div className="text-sm text-muted-foreground mb-4">
+            Total Claims: {insuranceBreakdown.length} | Total Amount: {formatCurrency(insuranceBreakdown.reduce((sum: number, item: any) => sum + (item.amount || 0), 0))}
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
+                <TableHead>Patient</TableHead>
+                <TableHead>Insurance Provider</TableHead>
+                <TableHead>Insurance ID/Number</TableHead>
+                <TableHead className="text-right">Limit</TableHead>
+                <TableHead className="text-right">Claimed</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {revenues.filter((r: Revenue) => r.payment_method === 'insurance').length === 0 ? (
+              {insuranceBreakdown.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                    No insurance payments found
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    No insurance claims found
                   </TableCell>
                 </TableRow>
               ) : (
-                revenues
-                  .filter((r: Revenue) => r.payment_method === 'insurance')
-                  .map((revenue: Revenue) => (
-                    <TableRow key={revenue.id}>
-                      <TableCell>{new Date(revenue.created_at).toLocaleDateString()}</TableCell>
-                      <TableCell>{revenue.description}</TableCell>
+                insuranceBreakdown.map((item: any) => (
+                    <TableRow key={item.id}>
+                      <TableCell>{item.date}</TableCell>
                       <TableCell>
-                        <Badge variant={getCategoryBadge(revenue.category)}>
-                          {formatCategory(revenue.category)}
-                        </Badge>
+                        <div className="font-medium">{item.patient_name}</div>
+                        {item.patient_phone && <div className="text-xs text-muted-foreground">{item.patient_phone}</div>}
                       </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(revenue.amount)}
+                      <TableCell>
+                        <Badge variant="warning">{item.insurance_provider}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          {item.insurance_id && <div>ID: {item.insurance_id}</div>}
+                          {item.insurance_number && <div>No: {item.insurance_number}</div>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(item.insurance_limit)}
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-green-600">
+                        {formatCurrency(item.amount)}
                       </TableCell>
                     </TableRow>
                   ))

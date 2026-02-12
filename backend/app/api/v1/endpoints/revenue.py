@@ -268,7 +268,7 @@ async def get_insurance_breakdown(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get insurance payments breakdown for export"""
+    """Get insurance payments breakdown for export with full insurance details"""
     from app.models.patient import Patient, Visit
     
     query = select(Revenue).where(Revenue.payment_method == 'insurance')
@@ -293,14 +293,22 @@ async def get_insurance_breakdown(
     breakdown = []
     for r in revenues:
         patient_name = "Unknown"
+        patient_phone = ""
         insurance_provider = "Unknown"
         insurance_id = ""
+        insurance_number = ""
+        insurance_limit = 0
+        insurance_used = 0
+        visit_number = ""
+        visit_type = ""
+        category = r.category or ""
         
         if r.patient_id:
             patient_result = await db.execute(select(Patient).where(Patient.id == r.patient_id))
             patient = patient_result.scalar_one_or_none()
             if patient:
                 patient_name = f"{patient.first_name} {patient.last_name}"
+                patient_phone = patient.phone or ""
         
         # Try to get insurance info from visit if reference_type is visit
         if r.reference_type == 'visit' and r.reference_id:
@@ -308,15 +316,27 @@ async def get_insurance_breakdown(
             visit = visit_result.scalar_one_or_none()
             if visit:
                 insurance_provider = visit.insurance_provider or "Unknown"
-                insurance_id = visit.insurance_number or ""
+                insurance_id = visit.insurance_id or ""
+                insurance_number = visit.insurance_number or ""
+                insurance_limit = float(visit.insurance_limit or 0)
+                insurance_used = float(visit.insurance_used or 0)
+                visit_number = visit.visit_number or ""
+                visit_type = visit.visit_type or ""
         
         breakdown.append({
             "id": r.id,
             "patient_name": patient_name,
+            "patient_phone": patient_phone,
             "insurance_provider": insurance_provider,
             "insurance_id": insurance_id,
+            "insurance_number": insurance_number,
+            "insurance_limit": insurance_limit,
+            "insurance_used": insurance_used,
             "amount": float(r.amount) if r.amount else 0,
             "description": r.description,
+            "category": category,
+            "visit_number": visit_number,
+            "visit_type": visit_type,
             "date": r.created_at.strftime("%Y-%m-%d") if r.created_at else ""
         })
     
