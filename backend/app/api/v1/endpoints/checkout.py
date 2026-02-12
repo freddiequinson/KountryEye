@@ -63,7 +63,7 @@ async def get_visit_checkout_summary(
         payment = payment_result.scalar_one_or_none()
         
         scan_amount = float(payment.amount if payment else 0)
-        scan_paid = scan_amount if (payment and payment.payment_status == 'paid') else 0
+        scan_paid = scan_amount if (payment and payment.is_paid) else 0
         
         scan_items.append({
             "id": scan.id,
@@ -71,14 +71,13 @@ async def get_visit_checkout_summary(
             "scan_type": scan.scan_type,
             "amount": scan_amount,
             "paid": scan_paid,
-            "status": payment.payment_status if payment else "pending"
+            "status": "paid" if (payment and payment.is_paid) else "pending"
         })
         total_scan_charges += scan_amount
         total_scan_paid += scan_paid
     
     # 3. Get POS sales linked to this visit
-    from app.models.sales import SaleItem
-    from app.models.inventory import Product
+    from app.models.sales import SaleItem, Product
     
     sale_result = await db.execute(
         select(Sale)
@@ -111,7 +110,7 @@ async def get_visit_checkout_summary(
         total_sale_charges += sale_total
         total_sale_paid += sale_paid
     
-    # Calculate totals
+    # Calculate totals for this visit
     grand_total = consultation_fee + total_scan_charges + total_sale_charges
     total_paid = consultation_paid + total_scan_paid + total_sale_paid
     balance_due = grand_total - total_paid
@@ -120,6 +119,26 @@ async def get_visit_checkout_summary(
     consultation_type_name = None
     if visit.consultation_type:
         consultation_type_name = visit.consultation_type.name
+    
+    # Calculate patient's overall debt from ALL visits (excluding current visit)
+    previous_visits_result = await db.execute(
+        select(Visit).where(
+            Visit.patient_id == patient.id,
+            Visit.id != visit_id  # Exclude current visit
+        )
+    )
+    previous_visits = previous_visits_result.scalars().all()
+    
+    previous_debt = 0
+    for pv in previous_visits:
+        pv_fee = float(pv.consultation_fee or 0)
+        pv_paid = float(pv.amount_paid or 0)
+        if pv_fee > pv_paid:
+            previous_debt += (pv_fee - pv_paid)
+    
+    # Total debt = current visit balance + previous visits debt
+    total_patient_debt = balance_due + previous_debt
+    has_outstanding_debt = total_patient_debt > 0
     
     return {
         "visit_id": visit_id,
@@ -160,6 +179,13 @@ async def get_visit_checkout_summary(
             "total_paid": total_paid,
             "balance_due": balance_due,
             "is_fully_paid": balance_due <= 0
+        },
+        "patient_debt": {
+            "previous_visits_debt": previous_debt,
+            "current_visit_balance": balance_due,
+            "total_debt": total_patient_debt,
+            "has_outstanding_debt": has_outstanding_debt,
+            "debt_warning": f"This patient has an outstanding debt of GHS {total_patient_debt:.2f}" if has_outstanding_debt else None
         }
     }
 
@@ -255,17 +281,57 @@ async def get_checkout_receipt(
 @router.post("/visits/{visit_id}/complete-checkout")
 async def complete_visit_checkout(
     visit_id: int,
+    data: Optional[dict] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Mark a visit as checked out / completed"""
+    """Mark a visit as checked out / completed.
+    
+    If patient has outstanding debt, requires confirm_with_debt=true in request body.
+    The debt will remain on their account for future payment.
+    """
     
     result = await db.execute(
-        select(Visit).where(Visit.id == visit_id)
+        select(Visit).options(selectinload(Visit.patient)).where(Visit.id == visit_id)
     )
     visit = result.scalar_one_or_none()
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")
+    
+    patient = visit.patient
+    
+    # Calculate current visit balance
+    consultation_fee = float(visit.consultation_fee or 0)
+    amount_paid = float(visit.amount_paid or 0)
+    current_balance = consultation_fee - amount_paid
+    
+    # Calculate total patient debt from all visits
+    all_visits_result = await db.execute(
+        select(Visit).where(Visit.patient_id == patient.id)
+    )
+    all_visits = all_visits_result.scalars().all()
+    
+    total_debt = 0
+    for v in all_visits:
+        v_fee = float(v.consultation_fee or 0)
+        v_paid = float(v.amount_paid or 0)
+        if v_fee > v_paid:
+            total_debt += (v_fee - v_paid)
+    
+    # Check if patient has outstanding debt
+    has_debt = total_debt > 0
+    confirm_with_debt = (data or {}).get("confirm_with_debt", False)
+    
+    if has_debt and not confirm_with_debt:
+        # Return debt warning - frontend should show confirmation dialog
+        return {
+            "requires_confirmation": True,
+            "has_outstanding_debt": True,
+            "total_debt": total_debt,
+            "current_visit_balance": current_balance,
+            "message": f"This patient has an outstanding debt of GHS {total_debt:.2f}. Are you sure you want to check them out? The debt will remain on their account.",
+            "visit_id": visit_id
+        }
     
     # Update visit status to checked_out
     visit.status = "checked_out"
@@ -273,12 +339,18 @@ async def complete_visit_checkout(
     
     await db.commit()
     
-    return {
+    response = {
         "message": "Patient checked out successfully",
         "visit_id": visit_id,
         "status": "checked_out",
         "checkout_time": visit.checkout_time.isoformat()
     }
+    
+    if has_debt:
+        response["debt_notice"] = f"Patient has outstanding debt of GHS {total_debt:.2f} remaining on their account."
+        response["total_debt"] = total_debt
+    
+    return response
 
 
 @router.get("/patients/{patient_id}/active-visits")

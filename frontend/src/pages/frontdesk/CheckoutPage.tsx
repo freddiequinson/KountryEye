@@ -48,6 +48,8 @@ export default function CheckoutPage() {
 
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [isCheckoutDialogOpen, setIsCheckoutDialogOpen] = useState(false);
+  const [isDebtConfirmDialogOpen, setIsDebtConfirmDialogOpen] = useState(false);
+  const [debtInfo, setDebtInfo] = useState<{ total_debt: number; message: string } | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
 
@@ -107,19 +109,44 @@ export default function CheckoutPage() {
   };
 
   const checkoutMutation = useMutation({
-    mutationFn: () => api.post(`/checkout/visits/${visitId}/complete-checkout`),
-    onSuccess: () => {
+    mutationFn: (confirmWithDebt: boolean = false) => 
+      api.post(`/checkout/visits/${visitId}/complete-checkout`, { confirm_with_debt: confirmWithDebt }),
+    onSuccess: (response) => {
+      const data = response.data;
+      
+      // Check if backend is asking for debt confirmation
+      if (data.requires_confirmation && data.has_outstanding_debt) {
+        setDebtInfo({
+          total_debt: data.total_debt,
+          message: data.message
+        });
+        setIsCheckoutDialogOpen(false);
+        setIsDebtConfirmDialogOpen(true);
+        return;
+      }
+      
+      // Checkout was successful
       queryClient.invalidateQueries({ queryKey: ['checkout-summary', visitId] });
       setIsCheckoutDialogOpen(false);
-      toast({ title: 'Patient checked out successfully', description: 'Visit has been marked as completed.' });
+      setIsDebtConfirmDialogOpen(false);
+      
+      if (data.debt_notice) {
+        toast({ 
+          title: 'Patient checked out successfully', 
+          description: data.debt_notice,
+          variant: 'default'
+        });
+      } else {
+        toast({ title: 'Patient checked out successfully', description: 'Visit has been marked as completed.' });
+      }
     },
     onError: () => {
       toast({ title: 'Failed to complete checkout', variant: 'destructive' });
     },
   });
 
-  const handleCompleteCheckout = () => {
-    checkoutMutation.mutate();
+  const handleCompleteCheckout = (confirmWithDebt: boolean = false) => {
+    checkoutMutation.mutate(confirmWithDebt);
   };
 
   if (isLoading) {
@@ -520,11 +547,53 @@ export default function CheckoutPage() {
               Cancel
             </Button>
             <Button 
-              onClick={handleCompleteCheckout} 
+              onClick={() => handleCompleteCheckout(false)} 
               disabled={checkoutMutation.isPending}
               className="bg-emerald-600 hover:bg-emerald-700"
             >
               {checkoutMutation.isPending ? 'Processing...' : 'Confirm Checkout'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Debt Confirmation Dialog */}
+      <Dialog open={isDebtConfirmDialogOpen} onOpenChange={setIsDebtConfirmDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertCircle className="h-5 w-5" />
+              Outstanding Debt Warning
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-amber-800 font-medium text-center text-lg">
+                GH₵{debtInfo?.total_debt?.toLocaleString() || 0}
+              </p>
+              <p className="text-amber-700 text-sm text-center mt-2">
+                Outstanding Debt
+              </p>
+            </div>
+            
+            <p className="text-sm text-center">
+              {debtInfo?.message || 'This patient has an outstanding debt. Are you sure you want to check them out?'}
+            </p>
+            
+            <p className="text-xs text-muted-foreground text-center">
+              The debt will remain on their account for future payment.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDebtConfirmDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => handleCompleteCheckout(true)} 
+              disabled={checkoutMutation.isPending}
+              variant="destructive"
+            >
+              {checkoutMutation.isPending ? 'Processing...' : 'Checkout with Debt'}
             </Button>
           </DialogFooter>
         </DialogContent>

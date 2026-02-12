@@ -61,7 +61,7 @@ export default function TerminalPage() {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  // Download error logs
+  // Download error logs and clear after download
   const handleDownloadLogs = async () => {
     try {
       const response = await api.get('/system/logs/download', {
@@ -76,7 +76,16 @@ export default function TerminalPage() {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      toast({ title: 'Error logs downloaded successfully' });
+      
+      // Clear logs after successful download
+      try {
+        await api.post('/system/logs/clear');
+        toast({ title: 'Error logs downloaded and cleared successfully' });
+        // Refresh the logs display
+        refetch();
+      } catch {
+        toast({ title: 'Logs downloaded but failed to clear', variant: 'default' });
+      }
     } catch {
       toast({ title: 'Failed to download logs', variant: 'destructive' });
     }

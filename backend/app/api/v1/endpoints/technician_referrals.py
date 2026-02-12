@@ -1093,16 +1093,26 @@ async def upload_scan_pdf(
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
     
-    # Create uploads directory if not exists
-    upload_dir = os.path.join("uploads", "scans")
-    os.makedirs(upload_dir, exist_ok=True)
+    # Use absolute path for uploads directory
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+    upload_dir = os.path.join(base_dir, "uploads", "scans")
+    
+    try:
+        os.makedirs(upload_dir, exist_ok=True)
+    except PermissionError:
+        # Fallback to /tmp if main directory is not writable
+        upload_dir = os.path.join("/tmp", "kountryeye", "uploads", "scans")
+        os.makedirs(upload_dir, exist_ok=True)
     
     # Save file
     filename = f"{scan.scan_number}_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
     file_path = os.path.join(upload_dir, filename)
     
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except PermissionError:
+        raise HTTPException(status_code=500, detail="Permission denied: Unable to save file. Please contact administrator.")
     
     scan.pdf_file_path = file_path
     scan.updated_at = datetime.utcnow()

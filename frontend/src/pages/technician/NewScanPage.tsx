@@ -91,6 +91,10 @@ export default function NewScanPage() {
     },
   });
 
+  // State for upload progress
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
+
   // Create scan mutation
   const createScanMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -98,30 +102,44 @@ export default function NewScanPage() {
       return response.data;
     },
     onSuccess: async (data) => {
-      // If there's a PDF file, upload it
+      // If there's a PDF file, upload it before navigating
       if (pdfFile) {
+        setIsUploading(true);
+        setUploadStatus('Uploading PDF...');
         try {
           const formData = new FormData();
           formData.append('file', pdfFile);
           await api.post(`/technician/scans/${data.id}/upload-pdf`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
           });
-        } catch (err) {
+          setUploadStatus('PDF uploaded successfully!');
+          toast({
+            title: 'Success',
+            description: `Scan ${data.scan_number} created with PDF`,
+          });
+        } catch (err: any) {
+          const errorMsg = err?.response?.data?.detail || 'PDF upload failed';
           toast({
             title: 'Warning',
-            description: 'Scan created but PDF upload failed',
+            description: `Scan created but ${errorMsg}`,
             variant: 'destructive',
           });
+        } finally {
+          setIsUploading(false);
+          setUploadStatus('');
         }
+      } else {
+        toast({
+          title: 'Success',
+          description: `Scan ${data.scan_number} created successfully`,
+        });
       }
-      toast({
-        title: 'Success',
-        description: `Scan ${data.scan_number} created successfully`,
-      });
       queryClient.invalidateQueries({ queryKey: ['scans'] });
       navigate(`/technician/scans/${data.id}`);
     },
     onError: () => {
+      setIsUploading(false);
+      setUploadStatus('');
       toast({
         title: 'Error',
         description: 'Failed to create scan',
@@ -534,14 +552,14 @@ export default function NewScanPage() {
 
         {/* Submit Button */}
         <div className="flex justify-end gap-4 mt-6">
-          <Button type="button" variant="outline" onClick={() => navigate(-1)}>
+          <Button type="button" variant="outline" onClick={() => navigate(-1)} disabled={isUploading}>
             Cancel
           </Button>
-          <Button type="submit" disabled={createScanMutation.isPending}>
-            {createScanMutation.isPending && (
+          <Button type="submit" disabled={createScanMutation.isPending || isUploading}>
+            {(createScanMutation.isPending || isUploading) && (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             )}
-            Save Scan
+            {isUploading ? uploadStatus || 'Uploading...' : createScanMutation.isPending ? 'Saving...' : 'Save Scan'}
           </Button>
         </div>
       </form>

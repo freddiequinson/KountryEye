@@ -441,6 +441,41 @@ async def download_error_logs(
     )
 
 
+@router.post("/logs/clear")
+async def clear_error_logs(
+    current_user: User = Depends(get_current_active_user)
+):
+    """Clear error logs after download - admin only"""
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    log_sources = [
+        "/var/log/kountryeye/app.log",
+        "/var/www/kountryeye/backend/app.log",
+    ]
+    
+    cleared = []
+    errors = []
+    
+    for source in log_sources:
+        if os.path.exists(source):
+            try:
+                # Truncate the log file (clear contents but keep file)
+                with open(source, 'w') as f:
+                    f.write(f"# Log cleared by {current_user.email} at {datetime.utcnow().isoformat()}\n")
+                cleared.append(source)
+            except PermissionError:
+                errors.append(f"Permission denied: {source}")
+            except Exception as e:
+                errors.append(f"Error clearing {source}: {str(e)}")
+    
+    return {
+        "message": "Logs cleared successfully" if cleared else "No logs to clear",
+        "cleared": cleared,
+        "errors": errors if errors else None
+    }
+
+
 @router.get("/logs/errors-summary")
 async def get_errors_summary(
     db: AsyncSession = Depends(get_db),
