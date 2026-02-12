@@ -721,6 +721,26 @@ async def create_visit(
     db.add(visit)
     await db.commit()
     await db.refresh(visit)
+    
+    # Record revenue for insurance/visioncare payments
+    if payment_type in ("insurance", "visioncare") and amount_paid > 0:
+        from app.models.revenue import Revenue
+        patient_name = f"{patient.first_name} {patient.last_name}"
+        
+        revenue = Revenue(
+            category="consultation",
+            description=f"Consultation fee - {patient_name}",
+            amount=amount_paid,
+            payment_method=payment_type,
+            reference_type="visit",
+            reference_id=visit.id,
+            patient_id=patient.id,
+            branch_id=patient.branch_id,
+            recorded_by_id=current_user.id
+        )
+        db.add(revenue)
+        await db.commit()
+    
     return visit
 
 
