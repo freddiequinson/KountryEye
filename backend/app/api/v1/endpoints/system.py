@@ -192,6 +192,9 @@ async def seed_permissions_and_roles(session):
         {'name': 'Create Fund Requests', 'code': 'fund_requests.create', 'module': 'fund_requests'},
         {'name': 'View Messages', 'code': 'messages.view', 'module': 'messaging'},
         {'name': 'Send Messages', 'code': 'messages.send', 'module': 'messaging'},
+        {'name': 'View Technician Dashboard', 'code': 'technician.view', 'module': 'technician'},
+        {'name': 'Manage Scans', 'code': 'technician.scans', 'module': 'technician'},
+        {'name': 'Manage Referrals', 'code': 'technician.referrals', 'module': 'technician'},
     ]
 
     ROLE_PERMISSIONS = {
@@ -242,6 +245,15 @@ async def seed_permissions_and_roles(session):
             'revenue.view', 'accounting.view',
             'attendance.clock', 'attendance.view_own', 'attendance.view_all', 'attendance.view',
             'analytics.view',
+            'fund_requests.view', 'fund_requests.create',
+            'messages.view', 'messages.send',
+            'technician.view', 'technician.scans', 'technician.referrals',
+        ],
+        'technician': [
+            'dashboard.view',
+            'technician.view', 'technician.scans', 'technician.referrals',
+            'patients.view',
+            'attendance.clock', 'attendance.view_own', 'attendance.view',
             'fund_requests.view', 'fund_requests.create',
             'messages.view', 'messages.send',
         ],

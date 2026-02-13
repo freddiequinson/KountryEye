@@ -59,6 +59,7 @@ import ReferralPaymentsPage from '@/pages/admin/ReferralPaymentsPage'
 import GlobalSearchPage from '@/pages/admin/GlobalSearchPage'
 import AuditLogsPage from '@/pages/admin/AuditLogsPage'
 import CheckoutPage from '@/pages/frontdesk/CheckoutPage'
+import InsuranceCompaniesPage from '@/pages/admin/InsuranceCompaniesPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -147,6 +148,7 @@ function App() {
                   <Route path="/admin/referral-payments" element={<ReferralPaymentsPage />} />
                   <Route path="/admin/search" element={<GlobalSearchPage />} />
                   <Route path="/admin/audit-logs" element={<AuditLogsPage />} />
+                  <Route path="/admin/insurance" element={<InsuranceCompaniesPage />} />
                 </Routes>
               </DashboardLayout>
             </ProtectedRoute>

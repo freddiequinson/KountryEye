@@ -210,6 +210,14 @@ export default function FrontDeskPage() {
     },
   });
 
+  const { data: insuranceCompanies = [] } = useQuery({
+    queryKey: ['insurance-companies-list'],
+    queryFn: async () => {
+      const response = await api.get('/insurance/list');
+      return response.data;
+    },
+  });
+
   const { data: pendingPaymentVisits = [] } = useQuery({
     queryKey: ['pending-payment-visits'],
     queryFn: async () => {
@@ -1024,13 +1032,23 @@ export default function FrontDeskPage() {
               <div className="space-y-4 p-4 border rounded-md">
                 <div className="space-y-2">
                   <Label>Insurance Provider</Label>
-                  <Input
+                  <Select
                     value={visitForm.insurance_provider}
-                    onChange={(e) =>
-                      setVisitForm({ ...visitForm, insurance_provider: e.target.value })
+                    onValueChange={(value) =>
+                      setVisitForm({ ...visitForm, insurance_provider: value })
                     }
-                    placeholder="e.g., NHIS, Acacia Health"
-                  />
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select insurance provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {insuranceCompanies.map((company: { id: number; name: string; code: string }) => (
+                        <SelectItem key={company.id} value={company.name}>
+                          {company.name} ({company.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">

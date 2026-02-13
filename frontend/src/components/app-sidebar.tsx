@@ -81,6 +81,7 @@ const allNavItems: NavItem[] = [
   { title: "Marketing", url: "/marketing", icon: Megaphone, permissions: ["marketing.view"] },
   { title: "Accounting", url: "/accounting", icon: BarChart3, permissions: ["accounting.view"] },
   { title: "Revenue", url: "/admin/revenue", icon: DollarSign, permissions: ["revenue.view"] },
+  { title: "Insurance", url: "/admin/insurance", icon: Shield, permissions: ["settings.manage"], roles: ["admin"] },
   // Branches page removed - use Settings page instead
   // { title: "Branches", url: "/admin/branches", icon: Building2, permissions: ["branches.manage"] },
   { title: "Users", url: "/admin/users", icon: UserCog, permissions: ["employees.manage"] },
@@ -200,7 +201,7 @@ function SidebarInnerContent() {
   ))
   
   const adminItems = filterByPermission(allNavItems.filter(i => 
-    ["/marketing", "/accounting", "/admin/revenue", "/admin/users", "/admin/employees", "/admin/permissions", "/admin/analytics", "/admin/referral-payments", "/admin/search", "/admin/audit-logs"].includes(i.url)
+    ["/marketing", "/accounting", "/admin/revenue", "/admin/insurance", "/admin/users", "/admin/employees", "/admin/permissions", "/admin/analytics", "/admin/referral-payments", "/admin/search", "/admin/audit-logs"].includes(i.url)
   ))
 
   const getRoleDisplayName = () => {

@@ -399,13 +399,39 @@ async def create_patient(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
+    # Check for duplicate phone number globally
+    if patient_in.phone:
+        phone_check = await db.execute(
+            select(Patient).where(Patient.phone == patient_in.phone)
+        )
+        existing_by_phone = phone_check.scalar_one_or_none()
+        if existing_by_phone:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"A patient with phone number {patient_in.phone} already exists (Patient #{existing_by_phone.patient_number})"
+            )
+    
+    # Check for duplicate ghana_card globally
+    patient_data = patient_in.model_dump()
+    ghana_card = patient_data.get('ghana_card')
+    if ghana_card:
+        ghana_card_check = await db.execute(
+            select(Patient).where(Patient.ghana_card == ghana_card)
+        )
+        existing_by_ghana_card = ghana_card_check.scalar_one_or_none()
+        if existing_by_ghana_card:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"A patient with Ghana Card {ghana_card} already exists (Patient #{existing_by_ghana_card.patient_number})"
+            )
+    
     count_result = await db.execute(
         select(func.count(Patient.id)).where(Patient.branch_id == patient_in.branch_id)
     )
     count = count_result.scalar() + 1
     
     patient = Patient(
-        **patient_in.model_dump(),
+        **patient_data,
         patient_number=generate_patient_number(patient_in.branch_id, count)
     )
     db.add(patient)
@@ -1032,6 +1058,32 @@ async def self_register_patient(
     """Public endpoint for patients to self-register. Creates a pending registration."""
     from app.models.patient import PendingRegistration
     from datetime import datetime
+    
+    # Check for duplicate phone number globally
+    phone = patient_data.get("phone", "").strip()
+    if phone:
+        phone_check = await db.execute(
+            select(Patient).where(Patient.phone == phone)
+        )
+        existing_by_phone = phone_check.scalar_one_or_none()
+        if existing_by_phone:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"A patient with this phone number already exists in our system. Please visit the front desk for assistance."
+            )
+    
+    # Check for duplicate ghana_card globally
+    ghana_card = patient_data.get("ghana_card", "").strip()
+    if ghana_card:
+        ghana_card_check = await db.execute(
+            select(Patient).where(Patient.ghana_card == ghana_card)
+        )
+        existing_by_ghana_card = ghana_card_check.scalar_one_or_none()
+        if existing_by_ghana_card:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"A patient with this Ghana Card number already exists in our system. Please visit the front desk for assistance."
+            )
     
     # Convert date_of_birth string to date object
     dob = patient_data.get("date_of_birth")

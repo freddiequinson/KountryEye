@@ -151,6 +151,11 @@ DEFAULT_PERMISSIONS = [
     # Messaging
     {"name": "View Messages", "code": "messages.view", "module": "messaging"},
     {"name": "Send Messages", "code": "messages.send", "module": "messaging"},
+    
+    # Technician
+    {"name": "View Technician Dashboard", "code": "technician.view", "module": "technician"},
+    {"name": "Manage Scans", "code": "technician.scans", "module": "technician"},
+    {"name": "Manage Referrals", "code": "technician.referrals", "module": "technician"},
 ]
 
 # Default roles with their permissions
@@ -196,6 +201,18 @@ DEFAULT_ROLES = {
         "permissions": [
             "dashboard.view", "dashboard.marketing",
             "marketing.view", "marketing.events", "marketing.ratings",
+            "patients.view",
+            "attendance.clock", "attendance.view_own",
+            "fund_requests.view", "fund_requests.create",
+            "messages.view", "messages.send",
+        ],
+    },
+    "Technician": {
+        "description": "Technician for scans and referrals",
+        "default_page": "/technician",
+        "permissions": [
+            "dashboard.view",
+            "technician.view", "technician.scans", "technician.referrals",
             "patients.view",
             "attendance.clock", "attendance.view_own",
             "fund_requests.view", "fund_requests.create",

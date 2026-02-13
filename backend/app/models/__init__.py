@@ -11,3 +11,4 @@ from app.models.accounting import IncomeCategory, ExpenseCategory, Income, Expen
 from app.models.employee import Attendance, ActivityLog, Task, EmployeeStats
 from app.models.communication import FundRequest, Conversation, ConversationParticipant, Message, Notification
 from app.models.technician_referral import ReferralDoctor, ExternalReferral, TechnicianScan, ReferralPaymentSetting, ReferralPayment, ScanPricing, ScanPayment
+from app.models.insurance import InsuranceCompany, InsuranceFeeOverride

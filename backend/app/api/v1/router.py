@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     auth, users, branches, patients, clinical,
     sales, inventory, assets, marketing, accounting, dashboard, receipts, payments, ai, settings, revenue, orders, uploads, employees, permissions, daily_verse, analytics,
-    fund_requests, messaging, notifications, user_profile, system, technician_referrals, search, audit, checkout, branch_assignments
+    fund_requests, messaging, notifications, user_profile, system, technician_referrals, search, audit, checkout, branch_assignments, insurance
 )
 
 api_router = APIRouter()
@@ -40,3 +40,4 @@ api_router.include_router(search.router, prefix="/search", tags=["Search"])
 api_router.include_router(audit.router, prefix="/audit", tags=["Audit"])
 api_router.include_router(checkout.router, prefix="/checkout", tags=["Checkout"])
 api_router.include_router(branch_assignments.router, prefix="/branch-assignments", tags=["Branch Assignments"])
+api_router.include_router(insurance.router, prefix="/insurance", tags=["Insurance"])
