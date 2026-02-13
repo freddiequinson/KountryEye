@@ -218,6 +218,21 @@ export default function FrontDeskPage() {
     },
   });
 
+  // Get selected insurance company ID for fee override lookup
+  const selectedInsuranceCompany = insuranceCompanies.find(
+    (c: { name: string }) => c.name === visitForm.insurance_provider
+  );
+
+  const { data: insuranceFeeOverrides = [] } = useQuery({
+    queryKey: ['insurance-fee-overrides', selectedInsuranceCompany?.id],
+    queryFn: async () => {
+      if (!selectedInsuranceCompany?.id) return [];
+      const response = await api.get(`/insurance/${selectedInsuranceCompany.id}/fee-overrides`);
+      return response.data;
+    },
+    enabled: !!selectedInsuranceCompany?.id && visitForm.payment_type === 'insurance',
+  });
+
   const { data: pendingPaymentVisits = [] } = useQuery({
     queryKey: ['pending-payment-visits'],
     queryFn: async () => {
@@ -459,7 +474,29 @@ export default function FrontDeskPage() {
   const getConsultationFee = () => {
     if (!visitForm.consultation_type_id) return 0;
     const type = consultationTypes.find((t: any) => t.id === parseInt(visitForm.consultation_type_id));
-    return type?.base_fee || 0;
+    const baseFee = type?.base_fee || 0;
+    
+    // Check for insurance fee override
+    if (visitForm.payment_type === 'insurance' && insuranceFeeOverrides.length > 0) {
+      const override = insuranceFeeOverrides.find(
+        (o: any) => o.consultation_type_id === parseInt(visitForm.consultation_type_id)
+      );
+      if (override) {
+        // Check for visit-type specific fee first
+        if (visitForm.visit_type === 'initial' && override.initial_fee != null) {
+          return override.initial_fee;
+        } else if (visitForm.visit_type === 'review' && override.review_fee != null) {
+          return override.review_fee;
+        } else if (visitForm.visit_type === 'subsequent' && override.subsequent_fee != null) {
+          return override.subsequent_fee;
+        } else if (override.override_fee != null) {
+          // Fall back to single override fee
+          return override.override_fee;
+        }
+      }
+    }
+    
+    return baseFee;
   };
 
   return (

@@ -61,7 +61,8 @@ async def hard_reset_database(request: ResetRequest):
                 frontdesk_role = Role(name="frontdesk", description="Front desk staff")
                 doctor_role = Role(name="doctor", description="Medical doctors")
                 marketing_role = Role(name="marketing", description="Marketing team")
-                session.add_all([frontdesk_role, doctor_role, marketing_role])
+                technician_role = Role(name="technician", description="Clinical technician for scans and referrals")
+                session.add_all([frontdesk_role, doctor_role, marketing_role, technician_role])
 
                 # Create main branch
                 main_branch = Branch(
@@ -555,3 +556,50 @@ async def get_errors_summary(
                 error_summary["error"] = str(e)
     
     return error_summary
+
+
+@router.post("/ensure-technician-role")
+async def ensure_technician_role(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Ensure the technician role exists in the database"""
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only superusers can run this")
+    
+    # Check if technician role exists
+    result = await db.execute(select(Role).where(Role.name == "technician"))
+    existing_role = result.scalar_one_or_none()
+    
+    if existing_role:
+        return {"message": "Technician role already exists", "role_id": existing_role.id}
+    
+    # Create technician role
+    technician_role = Role(name="technician", description="Clinical technician for scans and referrals")
+    db.add(technician_role)
+    await db.commit()
+    await db.refresh(technician_role)
+    
+    # Add technician permissions
+    technician_permissions = [
+        {'name': 'View Technician Dashboard', 'code': 'technician.view', 'module': 'technician'},
+        {'name': 'Manage Scans', 'code': 'technician.scans', 'module': 'technician'},
+        {'name': 'Manage Referrals', 'code': 'technician.referrals', 'module': 'technician'},
+    ]
+    
+    for perm_data in technician_permissions:
+        # Check if permission exists
+        perm_result = await db.execute(select(Permission).where(Permission.code == perm_data['code']))
+        perm = perm_result.scalar_one_or_none()
+        
+        if not perm:
+            perm = Permission(**perm_data)
+            db.add(perm)
+            await db.flush()
+        
+        # Assign to technician role
+        technician_role.permissions.append(perm)
+    
+    await db.commit()
+    
+    return {"message": "Technician role created successfully", "role_id": technician_role.id}
