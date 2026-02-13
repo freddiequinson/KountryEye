@@ -196,6 +196,7 @@ async def seed_permissions_and_roles(session):
         {'name': 'View Technician Dashboard', 'code': 'technician.view', 'module': 'technician'},
         {'name': 'Manage Scans', 'code': 'technician.scans', 'module': 'technician'},
         {'name': 'Manage Referrals', 'code': 'technician.referrals', 'module': 'technician'},
+        {'name': 'View Referral Payments', 'code': 'referrals.payments', 'module': 'referrals'},
     ]
 
     ROLE_PERMISSIONS = {
@@ -249,6 +250,7 @@ async def seed_permissions_and_roles(session):
             'fund_requests.view', 'fund_requests.create',
             'messages.view', 'messages.send',
             'technician.view', 'technician.scans', 'technician.referrals',
+            'referrals.payments',
         ],
         'technician': [
             'dashboard.view',

@@ -156,6 +156,9 @@ DEFAULT_PERMISSIONS = [
     {"name": "View Technician Dashboard", "code": "technician.view", "module": "technician"},
     {"name": "Manage Scans", "code": "technician.scans", "module": "technician"},
     {"name": "Manage Referrals", "code": "technician.referrals", "module": "technician"},
+    
+    # Referrals
+    {"name": "View Referral Payments", "code": "referrals.payments", "module": "referrals"},
 ]
 
 # Default roles with their permissions
