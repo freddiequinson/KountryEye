@@ -79,6 +79,13 @@ interface Branch {
   address?: string;
   phone?: string;
   is_active: boolean;
+  latitude?: number;
+  longitude?: number;
+  geofence_radius?: number;
+  require_geolocation?: boolean;
+  work_start_time?: string;
+  work_end_time?: string;
+  late_threshold_minutes?: number;
 }
 
 interface ConsultationType {
@@ -135,6 +142,13 @@ export default function SettingsPage() {
     address: '',
     phone: '',
     email: '',
+    latitude: '',
+    longitude: '',
+    geofence_radius: '100',
+    require_geolocation: false,
+    work_start_time: '08:00',
+    work_end_time: '17:00',
+    late_threshold_minutes: '15',
   });
 
   const [consultationTypeForm, setConsultationTypeForm] = useState({
@@ -470,7 +484,19 @@ export default function SettingsPage() {
   };
 
   const resetBranchForm = () => {
-    setBranchForm({ name: '', address: '', phone: '', email: '' });
+    setBranchForm({ 
+      name: '', 
+      address: '', 
+      phone: '', 
+      email: '',
+      latitude: '',
+      longitude: '',
+      geofence_radius: '100',
+      require_geolocation: false,
+      work_start_time: '08:00',
+      work_end_time: '17:00',
+      late_threshold_minutes: '15',
+    });
   };
 
   const resetConsultationTypeForm = () => {
@@ -500,6 +526,13 @@ export default function SettingsPage() {
       address: branch.address || '',
       phone: branch.phone || '',
       email: '',
+      latitude: branch.latitude?.toString() || '',
+      longitude: branch.longitude?.toString() || '',
+      geofence_radius: branch.geofence_radius?.toString() || '100',
+      require_geolocation: branch.require_geolocation || false,
+      work_start_time: branch.work_start_time || '08:00',
+      work_end_time: branch.work_end_time || '17:00',
+      late_threshold_minutes: branch.late_threshold_minutes?.toString() || '15',
     });
     setIsBranchDialogOpen(true);
   };
@@ -538,10 +571,23 @@ export default function SettingsPage() {
   };
 
   const handleBranchSubmit = () => {
+    const submitData = {
+      name: branchForm.name,
+      address: branchForm.address,
+      phone: branchForm.phone,
+      email: branchForm.email,
+      latitude: branchForm.latitude ? parseFloat(branchForm.latitude) : null,
+      longitude: branchForm.longitude ? parseFloat(branchForm.longitude) : null,
+      geofence_radius: parseInt(branchForm.geofence_radius) || 100,
+      require_geolocation: branchForm.require_geolocation,
+      work_start_time: branchForm.work_start_time,
+      work_end_time: branchForm.work_end_time,
+      late_threshold_minutes: parseInt(branchForm.late_threshold_minutes) || 15,
+    };
     if (editingBranch) {
-      updateBranchMutation.mutate({ id: editingBranch.id, data: branchForm });
+      updateBranchMutation.mutate({ id: editingBranch.id, data: submitData });
     } else {
-      createBranchMutation.mutate(branchForm);
+      createBranchMutation.mutate(submitData);
     }
   };
 
@@ -1179,34 +1225,133 @@ export default function SettingsPage() {
 
       {/* Branch Dialog */}
       <Dialog open={isBranchDialogOpen} onOpenChange={setIsBranchDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingBranch ? 'Edit Branch' : 'Create New Branch'}</DialogTitle>
             <DialogDescription>
-              {editingBranch ? 'Update branch information' : 'Add a new clinic branch'}
+              {editingBranch ? 'Update branch information and geolocation settings' : 'Add a new clinic branch'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Branch Name</Label>
-              <Input
-                value={branchForm.name}
-                onChange={(e) => setBranchForm({ ...branchForm, name: e.target.value })}
-              />
+          <div className="space-y-6">
+            {/* Basic Info */}
+            <div className="space-y-4">
+              <h4 className="font-medium text-sm text-muted-foreground">Basic Information</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Branch Name</Label>
+                  <Input
+                    value={branchForm.name}
+                    onChange={(e) => setBranchForm({ ...branchForm, name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Phone</Label>
+                  <Input
+                    value={branchForm.phone}
+                    onChange={(e) => setBranchForm({ ...branchForm, phone: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Address</Label>
+                <Input
+                  value={branchForm.address}
+                  onChange={(e) => setBranchForm({ ...branchForm, address: e.target.value })}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Address</Label>
-              <Input
-                value={branchForm.address}
-                onChange={(e) => setBranchForm({ ...branchForm, address: e.target.value })}
-              />
+
+            {/* Work Hours */}
+            <div className="space-y-4 border-t pt-4">
+              <h4 className="font-medium text-sm text-muted-foreground">Work Hours</h4>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Start Time</Label>
+                  <Input
+                    type="time"
+                    value={branchForm.work_start_time}
+                    onChange={(e) => setBranchForm({ ...branchForm, work_start_time: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>End Time</Label>
+                  <Input
+                    type="time"
+                    value={branchForm.work_end_time}
+                    onChange={(e) => setBranchForm({ ...branchForm, work_end_time: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Late Threshold (min)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="120"
+                    value={branchForm.late_threshold_minutes}
+                    onChange={(e) => setBranchForm({ ...branchForm, late_threshold_minutes: e.target.value })}
+                  />
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Phone</Label>
-              <Input
-                value={branchForm.phone}
-                onChange={(e) => setBranchForm({ ...branchForm, phone: e.target.value })}
-              />
+
+            {/* Geolocation Settings */}
+            <div className="space-y-4 border-t pt-4">
+              <h4 className="font-medium text-sm text-muted-foreground">Geolocation Settings (Clock In/Out)</h4>
+              <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                <div>
+                  <Label className="text-base">Require Geolocation</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Employees must be within the geofence to clock in/out
+                  </p>
+                </div>
+                <Switch
+                  checked={branchForm.require_geolocation}
+                  onCheckedChange={(checked) => setBranchForm({ ...branchForm, require_geolocation: checked })}
+                />
+              </div>
+              
+              {branchForm.require_geolocation && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Geofence Radius (meters)</Label>
+                    <Input
+                      type="number"
+                      min="10"
+                      max="1000"
+                      value={branchForm.geofence_radius}
+                      onChange={(e) => setBranchForm({ ...branchForm, geofence_radius: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Distance in meters employees must be within to clock in/out (10-1000m)
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Latitude</Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        placeholder="e.g., 5.6037"
+                        value={branchForm.latitude}
+                        onChange={(e) => setBranchForm({ ...branchForm, latitude: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Longitude</Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        placeholder="e.g., -0.1870"
+                        value={branchForm.longitude}
+                        onChange={(e) => setBranchForm({ ...branchForm, longitude: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Tip: You can get coordinates from Google Maps by right-clicking on a location
+                  </p>
+                </>
+              )}
             </div>
           </div>
           <DialogFooter>
