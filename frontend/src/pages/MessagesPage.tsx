@@ -20,6 +20,7 @@ import {
   CornerUpLeft,
   Check,
   CheckCheck,
+  CheckCircle,
   MoreVertical,
   Pencil,
   Trash2,
@@ -61,6 +62,11 @@ interface Conversation {
   } | null;
   unread_count: number;
   updated_at: string;
+  participants?: Array<{
+    id: number;
+    name: string;
+    role?: string;
+  }>;
 }
 
 interface ReplyInfo {
