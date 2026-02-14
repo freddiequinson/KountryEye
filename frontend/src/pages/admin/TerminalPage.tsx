@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Terminal, RefreshCw, Filter, AlertCircle, Info, AlertTriangle, Trash2, Download, BarChart3 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
@@ -25,6 +25,7 @@ interface LogEntry {
 export default function TerminalPage() {
   const { user } = useAuthStore();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const logsEndRef = useRef<HTMLDivElement>(null);
   
   const [lines, setLines] = useState(100);
@@ -81,8 +82,9 @@ export default function TerminalPage() {
       try {
         await api.post('/system/logs/clear');
         toast({ title: 'Error logs downloaded and cleared successfully' });
-        // Refresh the logs display
+        // Refresh the logs display and error summary
         refetch();
+        queryClient.invalidateQueries({ queryKey: ['error-summary'] });
       } catch {
         toast({ title: 'Logs downloaded but failed to clear', variant: 'default' });
       }
