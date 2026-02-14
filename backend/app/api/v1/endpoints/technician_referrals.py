@@ -1158,8 +1158,22 @@ async def get_patient_scans(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get all scans for a patient"""
-    query = select(TechnicianScan).where(TechnicianScan.patient_id == patient_id)
+    """Get all scans for a patient (including scans from external referrals linked to this patient)"""
+    # Get referral IDs linked to this patient
+    referral_ids_query = select(ExternalReferral.id).where(ExternalReferral.patient_id == patient_id)
+    referral_ids_result = await db.execute(referral_ids_query)
+    referral_ids = [r[0] for r in referral_ids_result.fetchall()]
+    
+    # Query scans by patient_id OR external_referral_id
+    if referral_ids:
+        query = select(TechnicianScan).where(
+            or_(
+                TechnicianScan.patient_id == patient_id,
+                TechnicianScan.external_referral_id.in_(referral_ids)
+            )
+        )
+    else:
+        query = select(TechnicianScan).where(TechnicianScan.patient_id == patient_id)
     
     if status:
         query = query.where(TechnicianScan.status == status)
@@ -1793,16 +1807,30 @@ async def create_scan_payment(
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
     
-    # Get pricing
-    price_result = await db.execute(
-        select(ScanPricing).where(ScanPricing.scan_type == scan.scan_type)
-    )
-    pricing = price_result.scalar_one_or_none()
+    # Get pricing - check if external referral first (use service_fee)
+    scan_amount = Decimal("0")
     
-    if not pricing:
-        raise HTTPException(status_code=400, detail="No pricing set for this scan type")
+    if scan.external_referral_id:
+        # For external referrals, use the service_fee from the referral
+        referral_result = await db.execute(
+            select(ExternalReferral).where(ExternalReferral.id == scan.external_referral_id)
+        )
+        referral = referral_result.scalar_one_or_none()
+        if referral and referral.service_fee:
+            scan_amount = Decimal(str(referral.service_fee))
     
-    scan_amount = Decimal(str(pricing.price))
+    # Fall back to scan pricing if no service fee or not external referral
+    if scan_amount == 0:
+        price_result = await db.execute(
+            select(ScanPricing).where(ScanPricing.scan_type == scan.scan_type)
+        )
+        pricing = price_result.scalar_one_or_none()
+        
+        if not pricing:
+            raise HTTPException(status_code=400, detail="No pricing set for this scan type")
+        
+        scan_amount = Decimal(str(pricing.price))
+    
     insurance_covered = Decimal("0")
     patient_pays = scan_amount
     
@@ -1856,7 +1884,7 @@ async def create_scan_payment(
         # Create new payment
         payment = ScanPayment(
             scan_id=scan_id,
-            amount=pricing.price,
+            amount=float(scan_amount),
             is_paid=actual_is_paid,
             payment_method=payment_method or ("insurance" if insurance_covered > 0 else None),
             payment_date=datetime.utcnow() if actual_is_paid else None,
@@ -1906,7 +1934,7 @@ async def create_scan_payment(
     return {
         "message": "Payment recorded successfully",
         "is_paid": actual_is_paid,
-        "amount": float(pricing.price),
+        "amount": float(scan_amount),
         "insurance_covered": float(insurance_covered),
         "patient_pays": float(patient_pays)
     }
