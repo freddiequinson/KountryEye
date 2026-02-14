@@ -859,6 +859,16 @@ async def create_technician_scan(
         status="pending"
     )
     db.add(scan)
+    
+    # Update external referral status to 'in_progress' when scan is created
+    if data.external_referral_id:
+        referral_result = await db.execute(
+            select(ExternalReferral).where(ExternalReferral.id == data.external_referral_id)
+        )
+        referral = referral_result.scalar_one_or_none()
+        if referral and referral.status == "pending":
+            referral.status = "in_progress"
+    
     await db.commit()
     await db.refresh(scan)
     
@@ -1017,6 +1027,15 @@ async def complete_scan(
     
     scan.status = "completed"
     scan.updated_at = datetime.utcnow()
+    
+    # Update external referral status if this scan is linked to one
+    if scan.external_referral_id:
+        referral_result = await db.execute(
+            select(ExternalReferral).where(ExternalReferral.id == scan.external_referral_id)
+        )
+        referral = referral_result.scalar_one_or_none()
+        if referral and referral.status == "pending":
+            referral.status = "completed"
     
     # Notify the requesting doctor if this was a doctor-requested scan
     if scan.requested_by_id:
