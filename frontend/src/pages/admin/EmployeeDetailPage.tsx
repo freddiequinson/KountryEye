@@ -578,6 +578,8 @@ export default function EmployeeDetailPage() {
                   const attendanceRecord = getAttendanceForDate(day);
                   const isCurrentMonth = day.getMonth() === calendarDate.getMonth();
                   const isToday = day.toDateString() === new Date().toDateString();
+                  const isPastWorkday = day < new Date() && day.getDay() !== 0 && day.getDay() !== 6; // Mon-Fri, before today
+                  const showAbsent = isPastWorkday && !attendanceRecord && isCurrentMonth && !isToday;
                   
                   return (
                     <div
@@ -590,6 +592,11 @@ export default function EmployeeDetailPage() {
                       {attendanceRecord && (
                         <div className={`text-xs px-1.5 py-0.5 rounded text-white ${getAttendanceStatusColor(attendanceRecord.status)}`}>
                           {attendanceRecord.status}
+                        </div>
+                      )}
+                      {showAbsent && (
+                        <div className="text-xs px-1.5 py-0.5 rounded text-white bg-red-500">
+                          absent
                         </div>
                       )}
                     </div>

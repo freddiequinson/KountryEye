@@ -511,35 +511,54 @@ export default function EmployeesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {todayAttendance.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8">
-                        No attendance records for today
+                  {/* Show employees who clocked in */}
+                  {todayAttendance.map((record: any) => (
+                    <TableRow 
+                      key={record.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => navigate(`/admin/employees/${record.user_id}?tab=attendance`)}
+                    >
+                      <TableCell className="font-medium">
+                        {record.user?.first_name} {record.user?.last_name}
+                      </TableCell>
+                      <TableCell>
+                        {record.clock_in ? new Date(record.clock_in).toLocaleTimeString() : '-'}
+                      </TableCell>
+                      <TableCell>
+                        {record.clock_out ? new Date(record.clock_out).toLocaleTimeString() : '-'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={record.status === 'present' ? 'default' : 'secondary'}>
+                          {record.status}
+                        </Badge>
                       </TableCell>
                     </TableRow>
-                  ) : (
-                    todayAttendance.map((record: any) => (
+                  ))}
+                  {/* Show absent employees (active employees who haven't clocked in) */}
+                  {employees
+                    .filter((emp: any) => emp.is_active && !todayAttendance.some((a: any) => a.user_id === emp.id))
+                    .map((emp: any) => (
                       <TableRow 
-                        key={record.id}
+                        key={`absent-${emp.id}`}
                         className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => navigate(`/admin/employees/${record.user_id}?tab=attendance`)}
+                        onClick={() => navigate(`/admin/employees/${emp.id}?tab=attendance`)}
                       >
                         <TableCell className="font-medium">
-                          {record.user?.first_name} {record.user?.last_name}
+                          {emp.first_name} {emp.last_name}
                         </TableCell>
+                        <TableCell>-</TableCell>
+                        <TableCell>-</TableCell>
                         <TableCell>
-                          {record.clock_in ? new Date(record.clock_in).toLocaleTimeString() : '-'}
-                        </TableCell>
-                        <TableCell>
-                          {record.clock_out ? new Date(record.clock_out).toLocaleTimeString() : '-'}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={record.status === 'present' ? 'default' : 'secondary'}>
-                            {record.status}
-                          </Badge>
+                          <Badge variant="destructive">absent</Badge>
                         </TableCell>
                       </TableRow>
-                    ))
+                    ))}
+                  {todayAttendance.length === 0 && employees.filter((e: any) => e.is_active).length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-8">
+                        No employees found
+                      </TableCell>
+                    </TableRow>
                   )}
                 </TableBody>
               </Table>

@@ -170,6 +170,7 @@ export default function MessagesPage() {
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
   const [showGroupChatDialog, setShowGroupChatDialog] = useState(false);
   const [showBroadcastDialog, setShowBroadcastDialog] = useState(false);
+  const [showGroupMembersDialog, setShowGroupMembersDialog] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
   const [groupName, setGroupName] = useState('');
   const [broadcastMessage, setBroadcastMessage] = useState('');
@@ -1110,9 +1111,14 @@ export default function MessagesPage() {
                     ) : (
                       'Offline'
                     )}
-                    {isAdmin && selectedConversation.other_user_id && (
+                    {isAdmin && !selectedConversation.is_group && selectedConversation.other_user_id && (
                       <span className="ml-2 text-primary cursor-pointer hover:underline" onClick={() => handleViewUserProfile(selectedConversation.other_user_id!)}>
                         View Profile
+                      </span>
+                    )}
+                    {selectedConversation.is_group && (
+                      <span className="ml-2 text-primary cursor-pointer hover:underline" onClick={() => setShowGroupMembersDialog(true)}>
+                        View Members
                       </span>
                     )}
                   </p>
@@ -1475,62 +1481,88 @@ export default function MessagesPage() {
           setGroupName('');
         }
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Create Group Chat</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />
+              Create Group Chat
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
+            <div className="space-y-2">
               <label className="text-sm font-medium">Group Name</label>
               <Input
                 value={groupName}
                 onChange={(e) => setGroupName(e.target.value)}
-                placeholder="Enter group name..."
-                className="mt-1"
+                placeholder="e.g., Marketing Team, Project Alpha..."
+                className="h-11"
               />
             </div>
-            <div>
-              <label className="text-sm font-medium">Select Members ({selectedUsers.length} selected)</label>
-              <ScrollArea className="h-48 mt-2 border rounded-md p-2">
-                {messageableUsers.map((u: MessageableUser) => (
-                  <div
-                    key={u.id}
-                    className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer ${
-                      selectedUsers.includes(u.id) ? 'bg-primary/10' : 'hover:bg-muted'
-                    }`}
-                    onClick={() => {
-                      setSelectedUsers(prev => 
-                        prev.includes(u.id) 
-                          ? prev.filter(id => id !== u.id)
-                          : [...prev, u.id]
-                      );
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedUsers.includes(u.id)}
-                      onChange={() => {}}
-                      className="h-4 w-4"
-                    />
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="text-xs">{u.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{u.name}</p>
-                      <p className="text-xs text-muted-foreground">{u.role}</p>
-                    </div>
+            
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Select Members</label>
+                <Badge variant="secondary" className="text-xs">
+                  {selectedUsers.length} selected
+                </Badge>
+              </div>
+              <div className="border rounded-lg overflow-hidden">
+                <ScrollArea className="h-64">
+                  <div className="divide-y">
+                    {messageableUsers.map((u: MessageableUser) => (
+                      <div
+                        key={u.id}
+                        className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${
+                          selectedUsers.includes(u.id) 
+                            ? 'bg-primary/10 border-l-2 border-l-primary' 
+                            : 'hover:bg-muted/50'
+                        }`}
+                        onClick={() => {
+                          setSelectedUsers(prev => 
+                            prev.includes(u.id) 
+                              ? prev.filter(id => id !== u.id)
+                              : [...prev, u.id]
+                          );
+                        }}
+                      >
+                        <div className={`h-5 w-5 rounded border-2 flex items-center justify-center ${
+                          selectedUsers.includes(u.id) 
+                            ? 'bg-primary border-primary' 
+                            : 'border-muted-foreground/30'
+                        }`}>
+                          {selectedUsers.includes(u.id) && (
+                            <CheckCircle className="h-4 w-4 text-primary-foreground" />
+                          )}
+                        </div>
+                        <Avatar className="h-9 w-9">
+                          <AvatarFallback className="text-sm bg-gradient-to-br from-primary/20 to-primary/10">
+                            {u.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm">{u.name}</p>
+                          <p className="text-xs text-muted-foreground">{u.role} {u.branch && `• ${u.branch}`}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </ScrollArea>
+                </ScrollArea>
+              </div>
+              {selectedUsers.length < 2 && (
+                <p className="text-xs text-muted-foreground">Select at least 2 members to create a group</p>
+              )}
             </div>
-            <div className="flex justify-end gap-2">
+            
+            <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setShowGroupChatDialog(false)}>
                 Cancel
               </Button>
               <Button 
                 onClick={() => createGroupChatMutation.mutate({ userIds: selectedUsers, name: groupName })}
                 disabled={selectedUsers.length < 2 || !groupName.trim() || createGroupChatMutation.isPending}
+                className="gap-2"
               >
+                <Users className="h-4 w-4" />
                 Create Group
               </Button>
             </div>
@@ -1546,81 +1578,106 @@ export default function MessagesPage() {
           setBroadcastMessage('');
         }
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Broadcast Message</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="h-5 w-5 text-primary" />
+              Broadcast Message
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Send the same message to multiple users individually. Each user will receive a separate conversation.
-            </p>
-            <div>
-              <label className="text-sm font-medium">Select Recipients ({selectedUsers.length} selected)</label>
-              <div className="flex gap-2 mt-1 mb-2">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setSelectedUsers(messageableUsers.map((u: MessageableUser) => u.id))}
-                >
-                  Select All
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setSelectedUsers([])}
-                >
-                  Clear
-                </Button>
-              </div>
-              <ScrollArea className="h-40 border rounded-md p-2">
-                {messageableUsers.map((u: MessageableUser) => (
-                  <div
-                    key={u.id}
-                    className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer ${
-                      selectedUsers.includes(u.id) ? 'bg-primary/10' : 'hover:bg-muted'
-                    }`}
-                    onClick={() => {
-                      setSelectedUsers(prev => 
-                        prev.includes(u.id) 
-                          ? prev.filter(id => id !== u.id)
-                          : [...prev, u.id]
-                      );
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedUsers.includes(u.id)}
-                      onChange={() => {}}
-                      className="h-4 w-4"
-                    />
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="text-xs">{u.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{u.name}</p>
-                      <p className="text-xs text-muted-foreground">{u.role}</p>
-                    </div>
-                  </div>
-                ))}
-              </ScrollArea>
+            <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground">
+              Send the same message to multiple users. Each recipient will receive it as a separate conversation.
             </div>
-            <div>
+            
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Select Recipients</label>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="text-xs">
+                    {selectedUsers.length} selected
+                  </Badge>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setSelectedUsers(messageableUsers.map((u: MessageableUser) => u.id))}
+                  >
+                    All
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setSelectedUsers([])}
+                  >
+                    None
+                  </Button>
+                </div>
+              </div>
+              <div className="border rounded-lg overflow-hidden">
+                <ScrollArea className="h-48">
+                  <div className="divide-y">
+                    {messageableUsers.map((u: MessageableUser) => (
+                      <div
+                        key={u.id}
+                        className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${
+                          selectedUsers.includes(u.id) 
+                            ? 'bg-primary/10 border-l-2 border-l-primary' 
+                            : 'hover:bg-muted/50'
+                        }`}
+                        onClick={() => {
+                          setSelectedUsers(prev => 
+                            prev.includes(u.id) 
+                              ? prev.filter(id => id !== u.id)
+                              : [...prev, u.id]
+                          );
+                        }}
+                      >
+                        <div className={`h-5 w-5 rounded border-2 flex items-center justify-center ${
+                          selectedUsers.includes(u.id) 
+                            ? 'bg-primary border-primary' 
+                            : 'border-muted-foreground/30'
+                        }`}>
+                          {selectedUsers.includes(u.id) && (
+                            <CheckCircle className="h-4 w-4 text-primary-foreground" />
+                          )}
+                        </div>
+                        <Avatar className="h-9 w-9">
+                          <AvatarFallback className="text-sm bg-gradient-to-br from-primary/20 to-primary/10">
+                            {u.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm">{u.name}</p>
+                          <p className="text-xs text-muted-foreground">{u.role} {u.branch && `• ${u.branch}`}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
               <label className="text-sm font-medium">Message</label>
               <textarea
                 value={broadcastMessage}
                 onChange={(e) => setBroadcastMessage(e.target.value)}
-                placeholder="Type your message..."
-                className="mt-1 w-full min-h-[80px] p-2 border rounded-md resize-none"
+                placeholder="Type your broadcast message here..."
+                className="w-full min-h-[100px] p-3 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               />
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setShowBroadcastDialog(false)}>
                 Cancel
               </Button>
               <Button 
                 onClick={() => broadcastMessageMutation.mutate({ userIds: selectedUsers, message: broadcastMessage })}
                 disabled={selectedUsers.length === 0 || !broadcastMessage.trim() || broadcastMessageMutation.isPending}
+                className="gap-2"
               >
+                <Send className="h-4 w-4" />
                 Send to {selectedUsers.length} Users
               </Button>
             </div>
@@ -1905,6 +1962,46 @@ export default function MessagesPage() {
                 Go to Inventory
               </Button>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Group Members Dialog */}
+      <Dialog open={showGroupMembersDialog} onOpenChange={setShowGroupMembersDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Group Members</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {selectedConversation?.participants?.map((participant: any) => (
+              <div
+                key={participant.id}
+                className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted cursor-pointer"
+                onClick={() => {
+                  if (isAdmin) {
+                    navigate(`/admin/user-profile/${participant.id}`);
+                    setShowGroupMembersDialog(false);
+                  }
+                }}
+              >
+                <Avatar className="h-10 w-10">
+                  <AvatarFallback>
+                    {participant.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2) || '??'}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <p className="font-medium">{participant.name}</p>
+                  <p className="text-xs text-muted-foreground">{participant.role || 'Member'}</p>
+                </div>
+              </div>
+            )) || (
+              <p className="text-center text-muted-foreground py-4">No members found</p>
+            )}
+          </div>
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setShowGroupMembersDialog(false)}>
+              Close
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
