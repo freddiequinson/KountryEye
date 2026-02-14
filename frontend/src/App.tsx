@@ -4,6 +4,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { OnboardingProvider } from '@/contexts/OnboardingContext'
 import { OnboardingOverlay } from '@/components/onboarding/OnboardingOverlay'
 import LoginPage from '@/pages/auth/LoginPage'
+import ChangePasswordPage from '@/pages/auth/ChangePasswordPage'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import HelpPage from '@/pages/HelpPage'
 import DashboardPage from '@/pages/DashboardPage'
@@ -50,6 +51,7 @@ import ActivityTracker from '@/components/ActivityTracker'
 // Technician pages
 import TechnicianDashboard from '@/pages/technician/TechnicianDashboard'
 import ReferralsPage from '@/pages/technician/ReferralsPage'
+import ReferralDetailPage from '@/pages/technician/ReferralDetailPage'
 import NewReferralPage from '@/pages/technician/NewReferralPage'
 import ScansPage from '@/pages/technician/ScansPage'
 import NewScanPage from '@/pages/technician/NewScanPage'
@@ -61,11 +63,17 @@ import AuditLogsPage from '@/pages/admin/AuditLogsPage'
 import CheckoutPage from '@/pages/frontdesk/CheckoutPage'
 import InsuranceCompaniesPage from '@/pages/admin/InsuranceCompaniesPage'
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuthStore()
+function ProtectedRoute({ children, allowPasswordChange = false }: { children: React.ReactNode; allowPasswordChange?: boolean }) {
+  const { isAuthenticated, user } = useAuthStore()
   
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
+  }
+  
+  // Check if user must change password (strictly enforced)
+  const mustChangePassword = (user as any)?.must_change_password;
+  if (mustChangePassword && !allowPasswordChange) {
+    return <Navigate to="/change-password" replace />
   }
   
   return <>{children}</>
@@ -77,6 +85,14 @@ function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<PatientSelfRegisterPage />} />
+        <Route 
+          path="/change-password" 
+          element={
+            <ProtectedRoute allowPasswordChange>
+              <ChangePasswordPage />
+            </ProtectedRoute>
+          } 
+        />
         <Route
           path="/*"
           element={
@@ -137,7 +153,7 @@ function App() {
                   <Route path="/technician/dashboard" element={<TechnicianDashboard />} />
                   <Route path="/technician/referrals" element={<ReferralsPage />} />
                   <Route path="/technician/referrals/new" element={<NewReferralPage />} />
-                  <Route path="/technician/referrals/:referralId" element={<ReferralsPage />} />
+                  <Route path="/technician/referrals/:referralId" element={<ReferralDetailPage />} />
                   <Route path="/technician/scans" element={<ScansPage />} />
                   <Route path="/technician/scans/new" element={<NewScanPage />} />
                   <Route path="/technician/scans/:scanId" element={<ScanDetailPage />} />

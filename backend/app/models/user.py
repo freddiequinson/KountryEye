@@ -72,6 +72,7 @@ class User(Base):
     avatar_url = Column(String(500))  # Profile picture URL
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
+    must_change_password = Column(Boolean, default=True)  # Force password change on first login
     
     role_id = Column(Integer, ForeignKey("roles.id"))
     branch_id = Column(Integer, ForeignKey("branches.id"))  # Primary branch

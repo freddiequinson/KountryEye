@@ -46,6 +46,12 @@ export function LoginForm({
       // Log login activity
       activityLogger.login()
       
+      // Check if user must change password (strictly enforced)
+      if (data.must_change_password || userResponse.data.must_change_password) {
+        navigate("/change-password")
+        return
+      }
+      
       // Redirect based on role's default page
       const defaultPage = userResponse.data.role?.default_page || "/dashboard"
       navigate(defaultPage)

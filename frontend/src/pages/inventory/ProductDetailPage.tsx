@@ -43,6 +43,7 @@ export default function ProductDetailPage() {
   const isNewProduct = !productId || productId === 'new';
 
   const [isEditing, setIsEditing] = useState(isNewProduct);
+  const [activeTab, setActiveTab] = useState('details');
   const [isPriceDialogOpen, setIsPriceDialogOpen] = useState(false);
   const [isDiscountDialogOpen, setIsDiscountDialogOpen] = useState(false);
   const [isStockAdjustDialogOpen, setIsStockAdjustDialogOpen] = useState(false);
@@ -54,8 +55,7 @@ export default function ProductDetailPage() {
     unit_price: '',
     cost_price: '',
     reorder_level: '10',
-    initial_stock: '0',
-    branch_id: '1',
+    branch_stocks: [{ branch_id: '1', quantity: '0' }],
   } : {});
   const [priceForm, setPriceForm] = useState({ new_price: '', reason: '' });
   const [discountForm, setDiscountForm] = useState({ 
@@ -214,10 +214,17 @@ export default function ProductDetailPage() {
       is_active: product?.is_active ?? true,
     });
     setIsEditing(true);
+    setActiveTab('details');
   };
 
   const handleSave = () => {
     if (isNewProduct) {
+      const branchStocks = (editForm.branch_stocks || [])
+        .filter((s: any) => s.branch_id && parseInt(s.quantity) > 0)
+        .map((s: any) => ({
+          branch_id: parseInt(s.branch_id),
+          quantity: parseInt(s.quantity),
+        }));
       createProductMutation.mutate({
         name: editForm.name,
         sku: editForm.sku || null,
@@ -226,8 +233,7 @@ export default function ProductDetailPage() {
         cost_price: editForm.cost_price ? parseFloat(editForm.cost_price) : null,
         unit_price: parseFloat(editForm.unit_price),
         reorder_level: editForm.reorder_level ? parseInt(editForm.reorder_level) : 10,
-        initial_stock: editForm.initial_stock ? parseInt(editForm.initial_stock) : 0,
-        branch_id: editForm.branch_id ? parseInt(editForm.branch_id) : 1,
+        branch_stocks: branchStocks,
       });
     } else {
       updateProductMutation.mutate({
@@ -420,12 +426,16 @@ export default function ProductDetailPage() {
         </Card>
       )}
 
-      <Tabs defaultValue="details">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="stock">Stock by Branch</TabsTrigger>
-          <TabsTrigger value="price-history">Price History</TabsTrigger>
-          <TabsTrigger value="sales">Sales</TabsTrigger>
+          {!isNewProduct && (
+            <>
+              <TabsTrigger value="stock">Stock by Branch</TabsTrigger>
+              <TabsTrigger value="price-history">Price History</TabsTrigger>
+              <TabsTrigger value="sales">Sales</TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         <TabsContent value="details" className="mt-4">
@@ -503,31 +513,76 @@ export default function ProductDetailPage() {
                   </div>
                   {isNewProduct && (
                     <>
-                      <div className="space-y-2">
-                        <Label>Initial Stock Quantity</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          value={editForm.initial_stock}
-                          onChange={(e) => setEditForm({ ...editForm, initial_stock: e.target.value })}
-                          placeholder="0"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Branch for Initial Stock</Label>
-                        <Select
-                          value={editForm.branch_id}
-                          onValueChange={(v) => setEditForm({ ...editForm, branch_id: v })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select branch" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {branches.map((b: any) => (
-                              <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                      <div className="space-y-2 md:col-span-2">
+                        <div className="flex items-center justify-between">
+                          <Label>Initial Stock by Branch</Label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const usedBranches = editForm.branch_stocks?.map((s: any) => s.branch_id) || [];
+                              const availableBranch = branches.find((b: any) => !usedBranches.includes(b.id.toString()));
+                              if (availableBranch) {
+                                setEditForm({
+                                  ...editForm,
+                                  branch_stocks: [...(editForm.branch_stocks || []), { branch_id: availableBranch.id.toString(), quantity: '0' }]
+                                });
+                              }
+                            }}
+                            disabled={(editForm.branch_stocks?.length || 0) >= branches.length}
+                          >
+                            + Add Branch
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          {(editForm.branch_stocks || []).map((stock: any, index: number) => (
+                            <div key={index} className="flex items-center gap-2">
+                              <Select
+                                value={stock.branch_id}
+                                onValueChange={(v) => {
+                                  const newStocks = [...editForm.branch_stocks];
+                                  newStocks[index] = { ...newStocks[index], branch_id: v };
+                                  setEditForm({ ...editForm, branch_stocks: newStocks });
+                                }}
+                              >
+                                <SelectTrigger className="flex-1">
+                                  <SelectValue placeholder="Select branch" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {branches.map((b: any) => (
+                                    <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Input
+                                type="number"
+                                min="0"
+                                className="w-24"
+                                value={stock.quantity}
+                                onChange={(e) => {
+                                  const newStocks = [...editForm.branch_stocks];
+                                  newStocks[index] = { ...newStocks[index], quantity: e.target.value };
+                                  setEditForm({ ...editForm, branch_stocks: newStocks });
+                                }}
+                                placeholder="Qty"
+                              />
+                              {editForm.branch_stocks.length > 1 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    const newStocks = editForm.branch_stocks.filter((_: any, i: number) => i !== index);
+                                    setEditForm({ ...editForm, branch_stocks: newStocks });
+                                  }}
+                                >
+                                  ×
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <Label>Reorder Level</Label>

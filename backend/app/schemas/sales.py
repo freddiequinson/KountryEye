@@ -23,6 +23,11 @@ class ProductCategoryResponse(ProductCategoryBase):
         from_attributes = True
 
 
+class BranchStockInput(BaseModel):
+    branch_id: int
+    quantity: int
+
+
 class ProductBase(BaseModel):
     name: str
     description: Optional[str] = None
@@ -35,8 +40,9 @@ class ProductBase(BaseModel):
 class ProductCreate(ProductBase):
     sku: Optional[str] = None
     reorder_level: Optional[int] = 10
-    initial_stock: Optional[int] = 0
-    branch_id: Optional[int] = 1
+    initial_stock: Optional[int] = 0  # Legacy single branch support
+    branch_id: Optional[int] = 1  # Legacy single branch support
+    branch_stocks: Optional[List[BranchStockInput]] = None  # Multi-branch stock support
 
 
 class ProductUpdate(BaseModel):

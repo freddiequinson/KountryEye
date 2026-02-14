@@ -951,6 +951,96 @@ async def get_messageable_users(
     return response
 
 
+# ============ BROADCAST MESSAGE ENDPOINT ============
+
+class BroadcastRequest(BaseModel):
+    user_ids: List[int]
+    message: str
+
+
+@router.post("/broadcast")
+async def broadcast_message(
+    request: BroadcastRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Send the same message to multiple users individually (admin only)"""
+    # Check if current user is admin
+    is_admin = current_user.is_superuser
+    if current_user.role_id:
+        role_result = await db.execute(select(Role).where(Role.id == current_user.role_id))
+        role = role_result.scalar_one_or_none()
+        if role and role.name == "Admin":
+            is_admin = True
+    
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if not request.user_ids or not request.message.strip():
+        raise HTTPException(status_code=400, detail="User IDs and message are required")
+    
+    sent_count = 0
+    
+    for user_id in request.user_ids:
+        if user_id == current_user.id:
+            continue  # Skip self
+        
+        # Check if conversation already exists
+        existing_conv = await db.execute(
+            select(Conversation)
+            .join(ConversationParticipant)
+            .where(
+                and_(
+                    Conversation.is_group == False,
+                    ConversationParticipant.user_id == current_user.id
+                )
+            )
+        )
+        existing_convs = existing_conv.scalars().all()
+        
+        conversation = None
+        for conv in existing_convs:
+            # Check if this conversation has the target user
+            participants_result = await db.execute(
+                select(ConversationParticipant)
+                .where(ConversationParticipant.conversation_id == conv.id)
+            )
+            participants = participants_result.scalars().all()
+            participant_ids = [p.user_id for p in participants]
+            if len(participant_ids) == 2 and user_id in participant_ids:
+                conversation = conv
+                break
+        
+        if not conversation:
+            # Create new conversation
+            conversation = Conversation(is_group=False)
+            db.add(conversation)
+            await db.flush()
+            
+            # Add participants
+            db.add(ConversationParticipant(conversation_id=conversation.id, user_id=current_user.id))
+            db.add(ConversationParticipant(conversation_id=conversation.id, user_id=user_id))
+            await db.flush()
+        
+        # Send message
+        message = Message(
+            conversation_id=conversation.id,
+            sender_id=current_user.id,
+            content=request.message.strip(),
+            message_type="text"
+        )
+        db.add(message)
+        
+        # Update conversation timestamp
+        conversation.updated_at = datetime.utcnow()
+        
+        sent_count += 1
+    
+    await db.commit()
+    
+    return {"message": "Broadcast sent", "sent_count": sent_count}
+
+
 # ============ WEBSOCKET ENDPOINT ============
 
 @router.websocket("/ws/{user_id}")

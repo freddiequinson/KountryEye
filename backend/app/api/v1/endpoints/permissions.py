@@ -46,7 +46,7 @@ class RoleUpdate(BaseModel):
 
 class RoleResponse(RoleBase):
     id: int
-    is_system: bool
+    is_system: Optional[bool] = False
     permissions: List[PermissionResponse] = []
 
     class Config:

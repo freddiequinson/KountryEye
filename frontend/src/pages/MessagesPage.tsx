@@ -168,6 +168,11 @@ export default function MessagesPage() {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messageText, setMessageText] = useState('');
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
+  const [showGroupChatDialog, setShowGroupChatDialog] = useState(false);
+  const [showBroadcastDialog, setShowBroadcastDialog] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
+  const [groupName, setGroupName] = useState('');
+  const [broadcastMessage, setBroadcastMessage] = useState('');
   const [userSearch, setUserSearch] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
@@ -414,6 +419,54 @@ export default function MessagesPage() {
     },
     onError: () => {
       toast({ title: 'Error', description: 'Failed to start conversation', variant: 'destructive' });
+    },
+  });
+
+  // Create group chat mutation
+  const createGroupChatMutation = useMutation({
+    mutationFn: async ({ userIds, name }: { userIds: number[]; name: string }) => {
+      const response = await api.post('/messaging/conversations', {
+        participant_ids: userIds,
+        is_group: true,
+        name: name,
+      });
+      return response.data;
+    },
+    onSuccess: async (data) => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      setShowGroupChatDialog(false);
+      setSelectedUsers([]);
+      setGroupName('');
+      const convResponse = await api.get('/messaging/conversations');
+      const conv = convResponse.data.find((c: Conversation) => c.id === data.id);
+      if (conv) {
+        setSelectedConversation(conv);
+      }
+      toast({ title: 'Success', description: 'Group chat created' });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to create group chat', variant: 'destructive' });
+    },
+  });
+
+  // Broadcast message mutation
+  const broadcastMessageMutation = useMutation({
+    mutationFn: async ({ userIds, message }: { userIds: number[]; message: string }) => {
+      const response = await api.post('/messaging/broadcast', {
+        user_ids: userIds,
+        message: message,
+      });
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      setShowBroadcastDialog(false);
+      setSelectedUsers([]);
+      setBroadcastMessage('');
+      toast({ title: 'Success', description: `Message sent to ${data.sent_count} users` });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to send broadcast message', variant: 'destructive' });
     },
   });
 
@@ -931,9 +984,21 @@ export default function MessagesPage() {
         <div className="p-4 border-b">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold">Messages</h2>
-            <Button size="sm" variant="outline" onClick={() => setShowNewChatDialog(true)}>
-              <Plus className="h-4 w-4" />
-            </Button>
+            <div className="flex gap-1">
+              {isAdmin && (
+                <>
+                  <Button size="sm" variant="outline" onClick={() => setShowGroupChatDialog(true)} title="New Group Chat">
+                    <Users className="h-4 w-4" />
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setShowBroadcastDialog(true)} title="Broadcast Message">
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+              <Button size="sm" variant="outline" onClick={() => setShowNewChatDialog(true)} title="New Chat">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1398,6 +1463,167 @@ export default function MessagesPage() {
                 </div>
               )}
             </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Group Chat Dialog - Admin Only */}
+      <Dialog open={showGroupChatDialog} onOpenChange={(open) => {
+        setShowGroupChatDialog(open);
+        if (!open) {
+          setSelectedUsers([]);
+          setGroupName('');
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create Group Chat</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Group Name</label>
+              <Input
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                placeholder="Enter group name..."
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Select Members ({selectedUsers.length} selected)</label>
+              <ScrollArea className="h-48 mt-2 border rounded-md p-2">
+                {messageableUsers.map((u: MessageableUser) => (
+                  <div
+                    key={u.id}
+                    className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer ${
+                      selectedUsers.includes(u.id) ? 'bg-primary/10' : 'hover:bg-muted'
+                    }`}
+                    onClick={() => {
+                      setSelectedUsers(prev => 
+                        prev.includes(u.id) 
+                          ? prev.filter(id => id !== u.id)
+                          : [...prev, u.id]
+                      );
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedUsers.includes(u.id)}
+                      onChange={() => {}}
+                      className="h-4 w-4"
+                    />
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="text-xs">{u.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{u.name}</p>
+                      <p className="text-xs text-muted-foreground">{u.role}</p>
+                    </div>
+                  </div>
+                ))}
+              </ScrollArea>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowGroupChatDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => createGroupChatMutation.mutate({ userIds: selectedUsers, name: groupName })}
+                disabled={selectedUsers.length < 2 || !groupName.trim() || createGroupChatMutation.isPending}
+              >
+                Create Group
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Broadcast Message Dialog - Admin Only */}
+      <Dialog open={showBroadcastDialog} onOpenChange={(open) => {
+        setShowBroadcastDialog(open);
+        if (!open) {
+          setSelectedUsers([]);
+          setBroadcastMessage('');
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Broadcast Message</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Send the same message to multiple users individually. Each user will receive a separate conversation.
+            </p>
+            <div>
+              <label className="text-sm font-medium">Select Recipients ({selectedUsers.length} selected)</label>
+              <div className="flex gap-2 mt-1 mb-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setSelectedUsers(messageableUsers.map((u: MessageableUser) => u.id))}
+                >
+                  Select All
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setSelectedUsers([])}
+                >
+                  Clear
+                </Button>
+              </div>
+              <ScrollArea className="h-40 border rounded-md p-2">
+                {messageableUsers.map((u: MessageableUser) => (
+                  <div
+                    key={u.id}
+                    className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer ${
+                      selectedUsers.includes(u.id) ? 'bg-primary/10' : 'hover:bg-muted'
+                    }`}
+                    onClick={() => {
+                      setSelectedUsers(prev => 
+                        prev.includes(u.id) 
+                          ? prev.filter(id => id !== u.id)
+                          : [...prev, u.id]
+                      );
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedUsers.includes(u.id)}
+                      onChange={() => {}}
+                      className="h-4 w-4"
+                    />
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="text-xs">{u.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{u.name}</p>
+                      <p className="text-xs text-muted-foreground">{u.role}</p>
+                    </div>
+                  </div>
+                ))}
+              </ScrollArea>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Message</label>
+              <textarea
+                value={broadcastMessage}
+                onChange={(e) => setBroadcastMessage(e.target.value)}
+                placeholder="Type your message..."
+                className="mt-1 w-full min-h-[80px] p-2 border rounded-md resize-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowBroadcastDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => broadcastMessageMutation.mutate({ userIds: selectedUsers, message: broadcastMessage })}
+                disabled={selectedUsers.length === 0 || !broadcastMessage.trim() || broadcastMessageMutation.isPending}
+              >
+                Send to {selectedUsers.length} Users
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

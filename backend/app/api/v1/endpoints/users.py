@@ -44,7 +44,8 @@ async def get_current_user_info(
         "created_at": current_user.created_at,
         "role": current_user.role,
         "branch": current_user.branch,
-        "permissions": list(set(permissions))  # Remove duplicates
+        "permissions": list(set(permissions)),  # Remove duplicates
+        "must_change_password": current_user.must_change_password if current_user.must_change_password is not None else False
     }
     return user_dict
 

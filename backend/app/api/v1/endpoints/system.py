@@ -45,7 +45,7 @@ async def hard_reset_database(request: ResetRequest):
                 session.add(role)
                 await session.flush()
 
-                # Create admin user
+                # Create admin user (must_change_password=False so admin can access system)
                 admin_user = User(
                     email="admin@kountryeyecare.com",
                     hashed_password=get_password_hash("admin123"),
@@ -53,7 +53,8 @@ async def hard_reset_database(request: ResetRequest):
                     last_name="Administrator",
                     role_id=role.id,
                     is_active=True,
-                    is_superuser=True
+                    is_superuser=True,
+                    must_change_password=False
                 )
                 session.add(admin_user)
 

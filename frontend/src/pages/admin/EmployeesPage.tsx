@@ -519,7 +519,11 @@ export default function EmployeesPage() {
                     </TableRow>
                   ) : (
                     todayAttendance.map((record: any) => (
-                      <TableRow key={record.id}>
+                      <TableRow 
+                        key={record.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => navigate(`/admin/employees/${record.user_id}?tab=attendance`)}
+                      >
                         <TableCell className="font-medium">
                           {record.user?.first_name} {record.user?.last_name}
                         </TableCell>

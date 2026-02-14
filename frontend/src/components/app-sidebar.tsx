@@ -84,7 +84,7 @@ const allNavItems: NavItem[] = [
   { title: "Insurance", url: "/admin/insurance", icon: Shield, permissions: ["settings.manage"], roles: ["admin"] },
   // Branches page removed - use Settings page instead
   // { title: "Branches", url: "/admin/branches", icon: Building2, permissions: ["branches.manage"] },
-  { title: "Users", url: "/admin/users", icon: UserCog, permissions: ["employees.manage"] },
+  // Users page removed - use Settings page instead
   { title: "Employees", url: "/admin/employees", icon: UsersRound, permissions: ["employees.view"] },
   { title: "Permissions", url: "/admin/permissions", icon: KeyRound, permissions: ["permissions.manage"] },
   { title: "Analytics", url: "/admin/analytics", icon: TrendingUp, permissions: ["analytics.view"] },

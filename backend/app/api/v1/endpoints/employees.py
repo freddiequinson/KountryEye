@@ -576,7 +576,9 @@ async def get_employee_attendance(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get attendance history for an employee"""
-    query = select(Attendance).where(Attendance.user_id == employee_id)
+    query = select(Attendance).options(
+        selectinload(Attendance.user)
+    ).where(Attendance.user_id == employee_id)
     
     if start_date:
         query = query.where(Attendance.date >= start_date)

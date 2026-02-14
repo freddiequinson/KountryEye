@@ -315,25 +315,39 @@ async def create_product(
     
     sku = product_in.sku or generate_sku(product_in.category_id, count)
     
-    # Extract initial_stock, branch_id, and reorder_level if provided
-    product_data = product_in.model_dump(exclude={"sku", "initial_stock", "branch_id", "reorder_level"})
-    initial_stock = getattr(product_in, 'initial_stock', None) or 0
-    branch_id = getattr(product_in, 'branch_id', None) or 1
+    # Extract initial_stock, branch_id, branch_stocks, and reorder_level if provided
+    product_data = product_in.model_dump(exclude={"sku", "initial_stock", "branch_id", "reorder_level", "branch_stocks"})
     reorder_level = getattr(product_in, 'reorder_level', None) or 10
     
     product = Product(**product_data, sku=sku)
     db.add(product)
     await db.flush()
     
-    # Create initial stock if provided
-    if initial_stock > 0:
-        stock = BranchStock(
-            branch_id=branch_id,
-            product_id=product.id,
-            quantity=initial_stock,
-            min_quantity=reorder_level
-        )
-        db.add(stock)
+    # Create initial stock - prefer branch_stocks array if provided, else use legacy single branch
+    branch_stocks = getattr(product_in, 'branch_stocks', None)
+    if branch_stocks and len(branch_stocks) > 0:
+        # Multi-branch stock support
+        for stock_input in branch_stocks:
+            if stock_input.quantity > 0:
+                stock = BranchStock(
+                    branch_id=stock_input.branch_id,
+                    product_id=product.id,
+                    quantity=stock_input.quantity,
+                    min_quantity=reorder_level
+                )
+                db.add(stock)
+    else:
+        # Legacy single branch support
+        initial_stock = getattr(product_in, 'initial_stock', None) or 0
+        branch_id = getattr(product_in, 'branch_id', None) or 1
+        if initial_stock > 0:
+            stock = BranchStock(
+                branch_id=branch_id,
+                product_id=product.id,
+                quantity=initial_stock,
+                min_quantity=reorder_level
+            )
+            db.add(stock)
     
     await db.commit()
     
