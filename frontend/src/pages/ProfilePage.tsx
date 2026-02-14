@@ -258,14 +258,6 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                <div className="flex justify-between items-center py-2 border-b">
-                  <div>
-                    <p className="font-medium">Last Login</p>
-                    <p className="text-sm text-muted-foreground">
-                      {user?.last_login ? new Date(user.last_login).toLocaleString() : 'N/A'}
-                    </p>
-                  </div>
-                </div>
                 <div className="flex justify-between items-center py-2">
                   <div>
                     <p className="font-medium">Account Created</p>
