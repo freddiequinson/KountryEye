@@ -79,6 +79,10 @@ export default function ReferralPaymentsPage() {
   const [showDoctorDetail, setShowDoctorDetail] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState<any>(null);
   const [expandedDoctors, setExpandedDoctors] = useState<Set<number>>(new Set());
+  const [showCreatePaymentDialog, setShowCreatePaymentDialog] = useState(false);
+  const [createPaymentDoctorId, setCreatePaymentDoctorId] = useState<number | null>(null);
+  const [createPaymentAmount, setCreatePaymentAmount] = useState('');
+  const [createPaymentNotes, setCreatePaymentNotes] = useState('');
 
   // Payment form state
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -256,6 +260,38 @@ export default function ReferralPaymentsPage() {
     setSelectedPayment(null);
   };
 
+  // Create manual payment mutation
+  const createManualPaymentMutation = useMutation({
+    mutationFn: async (data: { referral_doctor_id: number; amount: number; notes?: string }) => {
+      const response = await api.post('/technician/payments/create-manual', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      toast({ title: 'Success', description: 'Payment created successfully' });
+      queryClient.invalidateQueries({ queryKey: ['referral-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['referral-summary'] });
+      setShowCreatePaymentDialog(false);
+      setCreatePaymentDoctorId(null);
+      setCreatePaymentAmount('');
+      setCreatePaymentNotes('');
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to create payment', variant: 'destructive' });
+    },
+  });
+
+  const handleCreateManualPayment = () => {
+    if (!createPaymentDoctorId || !createPaymentAmount) {
+      toast({ title: 'Error', description: 'Please select a doctor and enter an amount', variant: 'destructive' });
+      return;
+    }
+    createManualPaymentMutation.mutate({
+      referral_doctor_id: createPaymentDoctorId,
+      amount: parseFloat(createPaymentAmount),
+      notes: createPaymentNotes || undefined,
+    });
+  };
+
   const resetSettingsForm = () => {
     setSettingDoctorId('');
     setSettingPaymentType('percentage');
@@ -336,6 +372,10 @@ export default function ReferralPaymentsPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button onClick={() => setShowCreatePaymentDialog(true)}>
+            <DollarSign className="h-4 w-4 mr-2" />
+            Create Payment
+          </Button>
           <Button variant="outline" onClick={() => setShowSettingsDialog(true)}>
             <Settings className="h-4 w-4 mr-2" />
             Payment Settings
@@ -997,6 +1037,74 @@ export default function ReferralPaymentsPage() {
             </Button>
             <Button onClick={handleSaveSetting} disabled={createSettingMutation.isPending}>
               Save Setting
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Manual Payment Dialog */}
+      <Dialog open={showCreatePaymentDialog} onOpenChange={setShowCreatePaymentDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Payment for Doctor</DialogTitle>
+            <DialogDescription>
+              Create a payment record for a referring doctor
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Select Doctor</Label>
+              <Select 
+                value={createPaymentDoctorId?.toString() || ''} 
+                onValueChange={(v) => setCreatePaymentDoctorId(parseInt(v))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a doctor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {doctors.map((doc: any) => (
+                    <SelectItem key={doc.id} value={doc.id.toString()}>
+                      {doc.name} - {doc.clinic_name || 'No clinic'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="createPaymentAmount">Amount (GH₵)</Label>
+              <Input
+                id="createPaymentAmount"
+                type="number"
+                step="0.01"
+                placeholder="Enter amount"
+                value={createPaymentAmount}
+                onChange={(e) => setCreatePaymentAmount(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="createPaymentNotes">Notes (Optional)</Label>
+              <Textarea
+                id="createPaymentNotes"
+                placeholder="Add any notes about this payment..."
+                value={createPaymentNotes}
+                onChange={(e) => setCreatePaymentNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowCreatePaymentDialog(false);
+              setCreatePaymentDoctorId(null);
+              setCreatePaymentAmount('');
+              setCreatePaymentNotes('');
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateManualPayment} disabled={createManualPaymentMutation.isPending}>
+              <DollarSign className="h-4 w-4 mr-2" />
+              Create Payment
             </Button>
           </DialogFooter>
         </DialogContent>

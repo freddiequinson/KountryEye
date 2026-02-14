@@ -57,6 +57,20 @@ export default function SalesPage() {
     },
   });
 
+  const { data: branches = [] } = useQuery({
+    queryKey: ['branches'],
+    queryFn: async () => {
+      const response = await api.get('/branches');
+      return response.data;
+    },
+  });
+
+  // Create branch lookup map
+  const branchMap = branches.reduce((acc: Record<number, string>, branch: any) => {
+    acc[branch.id] = branch.name;
+    return acc;
+  }, {});
+
   // Pagination
   const totalPages = Math.ceil(sales.length / itemsPerPage);
   const paginatedSales = sales.slice(
@@ -242,7 +256,7 @@ export default function SalesPage() {
                       {new Date(sale.created_at).toLocaleString()}
                     </TableCell>
                     <TableCell>
-                      Branch #{sale.branch_id}
+                      {branchMap[sale.branch_id] || `Branch ${sale.branch_id}`}
                     </TableCell>
                     <TableCell>
                       {sale.subtotal?.toLocaleString('en-US', {

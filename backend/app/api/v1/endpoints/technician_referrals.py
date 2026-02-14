@@ -1469,6 +1469,81 @@ async def mark_payment_paid(
     return {"message": "Payment marked as paid"}
 
 
+class ManualPaymentCreate(BaseModel):
+    referral_doctor_id: int
+    amount: float
+    notes: Optional[str] = None
+
+
+@router.post("/payments/create-manual")
+async def create_manual_payment(
+    data: ManualPaymentCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Manually create a payment record for a doctor"""
+    # Verify doctor exists
+    doc_result = await db.execute(
+        select(ReferralDoctor).where(ReferralDoctor.id == data.referral_doctor_id)
+    )
+    doctor = doc_result.scalar_one_or_none()
+    
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor not found")
+    
+    payment_number = await generate_payment_number(db)
+    
+    payment = ReferralPayment(
+        payment_number=payment_number,
+        referral_doctor_id=data.referral_doctor_id,
+        service_amount=data.amount,
+        payment_type="fixed",
+        payment_rate=100,
+        amount=data.amount,
+        is_paid=False,
+        notes=data.notes
+    )
+    db.add(payment)
+    await db.commit()
+    await db.refresh(payment)
+    
+    return {
+        "id": payment.id,
+        "payment_number": payment.payment_number,
+        "amount": payment.amount,
+        "message": "Payment created successfully"
+    }
+
+
+@router.post("/referrals/{referral_id}/create-payment")
+async def create_payment_for_referral(
+    referral_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Create a payment record for an existing referral that doesn't have one"""
+    # Get referral
+    ref_result = await db.execute(
+        select(ExternalReferral).where(ExternalReferral.id == referral_id)
+    )
+    referral = ref_result.scalar_one_or_none()
+    
+    if not referral:
+        raise HTTPException(status_code=404, detail="Referral not found")
+    
+    # Check if payment already exists
+    existing = await db.execute(
+        select(ReferralPayment).where(ReferralPayment.external_referral_id == referral_id)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Payment already exists for this referral")
+    
+    # Create payment record
+    await create_referral_payment_record(db, referral, current_user)
+    
+    return {"message": "Payment created for referral"}
+
+
 # ============ ANALYTICS ENDPOINTS ============
 
 @router.get("/analytics/top-referrers")
