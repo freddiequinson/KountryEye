@@ -16,6 +16,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthStore } from '@/stores/auth';
 
 interface CartItem {
   product_id: number;
@@ -29,6 +30,10 @@ interface CartItem {
 export default function POSPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuthStore();
+
+  const roleName = typeof user?.role === 'string' ? user.role : user?.role?.name;
+  const isFrontdesk = roleName?.toLowerCase() === 'frontdesk' || roleName?.toLowerCase() === 'front desk';
 
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -394,19 +399,21 @@ export default function POSPage() {
             <span>Subtotal</span>
             <span>GH₵{subtotal.toLocaleString()}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm">Discount</span>
-            <Input
-              type="number"
-              value={discountPercent}
-              onChange={(e) => setDiscountPercent(parseFloat(e.target.value) || 0)}
-              className="w-16 h-8 text-center"
-              min={0}
-              max={100}
-            />
-            <span className="text-sm">%</span>
-            <span className="ml-auto text-sm">-GH₵{discountAmount.toLocaleString()}</span>
-          </div>
+          {!isFrontdesk && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm">Discount</span>
+              <Input
+                type="number"
+                value={discountPercent}
+                onChange={(e) => setDiscountPercent(parseFloat(e.target.value) || 0)}
+                className="w-16 h-8 text-center"
+                min={0}
+                max={100}
+              />
+              <span className="text-sm">%</span>
+              <span className="ml-auto text-sm">-GH₵{discountAmount.toLocaleString()}</span>
+            </div>
+          )}
           <div className="flex justify-between font-bold text-lg pt-2 border-t">
             <span>Total</span>
             <span className="text-primary">GH₵{total.toLocaleString()}</span>
