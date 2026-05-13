@@ -18,6 +18,10 @@ export function FrontDeskDashboard({ user }: FrontDeskDashboardProps) {
       const response = await api.get('/dashboard/overview')
       return response.data
     },
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
+    staleTime: 0,
   })
 
   const { data: queueData } = useQuery({

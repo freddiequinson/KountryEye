@@ -82,6 +82,10 @@ export default function RevenuePage() {
       const response = await api.get(`/revenue?${params.toString()}`);
       return response.data;
     },
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 
   // Pagination
@@ -156,6 +160,10 @@ export default function RevenuePage() {
       const response = await api.get(`/revenue/summary?${params.toString()}`);
       return response.data;
     },
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 
   const { data: insuranceBreakdown = [] } = useQuery({
