@@ -36,6 +36,7 @@ export default function POSPage() {
   const isFrontdesk = roleName?.toLowerCase() === 'frontdesk' || roleName?.toLowerCase() === 'front desk';
 
   const [search, setSearch] = useState('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [selectedVisit, setSelectedVisit] = useState<any>(null);
@@ -49,9 +50,19 @@ export default function POSPage() {
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
 
   const { data: products = [] } = useQuery({
-    queryKey: ['pos-products', search],
+    queryKey: ['pos-products', search, selectedCategoryId],
     queryFn: async () => {
-      const response = await api.get('/sales/products', { params: { search } });
+      const params: Record<string, any> = { search };
+      if (selectedCategoryId) params.category_id = selectedCategoryId;
+      const response = await api.get('/sales/products', { params });
+      return response.data;
+    },
+  });
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['pos-categories'],
+    queryFn: async () => {
+      const response = await api.get('/sales/categories');
       return response.data;
     },
   });
@@ -237,6 +248,35 @@ export default function POSPage() {
               className="pl-10 h-12 text-lg"
             />
           </div>
+          {categories.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto mt-3 pb-1">
+              <button
+                type="button"
+                onClick={() => setSelectedCategoryId(null)}
+                className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap border transition-colors ${
+                  selectedCategoryId === null
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background hover:bg-muted border-input'
+                }`}
+              >
+                All
+              </button>
+              {categories.map((cat: any) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setSelectedCategoryId(cat.id)}
+                  className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap border transition-colors ${
+                    selectedCategoryId === cat.id
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background hover:bg-muted border-input'
+                  }`}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-auto">
