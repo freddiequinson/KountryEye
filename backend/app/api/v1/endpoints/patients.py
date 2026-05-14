@@ -935,21 +935,26 @@ async def record_visit_payment(
     current_user: User = Depends(get_current_active_user)
 ):
     """Record a payment for a visit"""
-    result = await db.execute(select(Visit).where(Visit.id == visit_id))
-    visit = result.scalar_one_or_none()
-    
+    from sqlalchemy.orm import joinedload
+    from app.models.revenue import Revenue
+
+    result = await db.execute(
+        select(Visit).options(joinedload(Visit.patient)).where(Visit.id == visit_id)
+    )
+    visit = result.unique().scalar_one_or_none()
+
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")
-    
+
     amount = payment_data.get("amount", 0)
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Payment amount must be greater than 0")
-    
+
     # Update amount paid
     current_paid = float(visit.amount_paid or 0)
     new_paid = current_paid + float(amount)
     visit.amount_paid = new_paid
-    
+
     # Update payment status and visit status
     consultation_fee = float(visit.consultation_fee or 0)
     if new_paid >= consultation_fee:
@@ -958,7 +963,24 @@ async def record_visit_payment(
     elif new_paid > 0:
         visit.payment_status = "partial"
         visit.status = "waiting"  # Also move to queue for partial payments
-    
+
+    # Record revenue
+    payment_method = payment_data.get("payment_method", "cash")
+    patient_name = (
+        f"{visit.patient.first_name} {visit.patient.last_name}" if visit.patient else "Unknown"
+    )
+    db.add(Revenue(
+        category="consultation",
+        description=f"Consultation fee - {patient_name}",
+        amount=float(amount),
+        payment_method=payment_method,
+        reference_type="visit",
+        reference_id=visit.id,
+        patient_id=visit.patient_id,
+        branch_id=visit.branch_id,
+        recorded_by_id=current_user.id,
+    ))
+
     await db.commit()
     
     return {
