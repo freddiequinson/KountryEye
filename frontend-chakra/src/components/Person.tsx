@@ -15,7 +15,7 @@ export function PersonCell({ name, sub, src }: { name: string; sub?: ReactNode; 
     <Flex align="center" gap="12px" minW="0">
       <Avatar name={clean} src={src} w="34px" h="34px" size="sm" borderRadius="10px" bg={colorFor(clean)} color="white" />
       <Box minW="0">
-        <Text fontWeight="700" noOfLines={1}>
+        <Text fontWeight="700" fontSize="sm" noOfLines={1}>
           {clean}
         </Text>
         {sub && (

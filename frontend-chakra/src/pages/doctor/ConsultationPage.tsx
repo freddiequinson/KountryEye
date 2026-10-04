@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
+  Avatar,
   Alert,
   AlertIcon,
   Badge,
@@ -37,6 +38,8 @@ import {
 } from '@chakra-ui/react'
 import { MdAccessTime, MdAdd, MdArrowBack, MdCheckCircle, MdDelete, MdDescription, MdDownload, MdSave, MdVisibility, MdWarningAmber } from 'react-icons/md'
 import api from '@/lib/api'
+import Card from '@/components/card/Card'
+import { FormActions } from '@/components/FormSection'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/hooks/use-toast'
 import SectionCard from '@/components/card/SectionCard'
@@ -445,7 +448,10 @@ export default function ConsultationPage() {
     <SimpleGrid columns={{ base: 1, md: 2 }} spacing="24px">
       {(['od', 'os'] as const).map((eye) => (
         <Stack key={eye} spacing="16px">
-          <Text fontWeight="600">{eye === 'od' ? 'Right Eye (OD)' : 'Left Eye (OS)'}</Text>
+          <Flex align="center" gap="8px">
+            <Badge colorScheme={eye === 'od' ? 'blue' : 'green'}>{eye === 'od' ? 'OD' : 'OS'}</Badge>
+            <Text fontWeight="700">{eye === 'od' ? 'Right Eye' : 'Left Eye'}</Text>
+          </Flex>
           {render(eye)}
         </Stack>
       ))}
@@ -454,28 +460,28 @@ export default function ConsultationPage() {
 
   return (
     <>
-      <Flex justify="space-between" align={{ base: 'start', md: 'center' }} direction={{ base: 'column', md: 'row' }} gap="12px" mb="20px">
-        <Flex align="center" gap="16px">
-          <Button variant="ghost" size="sm" leftIcon={<MdArrowBack />} onClick={() => navigate('/doctor/queue')}>
-            Back to Queue
+      {/* Patient strip: who is in the chair, with the main action on the right */}
+      <Card mb="20px" px="18px" py="14px">
+        <Flex justify="space-between" align="center" gap="12px" wrap="wrap">
+          <Flex align="center" gap="14px" minW="0">
+            <IconButton aria-label="Back to queue" variant="light" size="sm" icon={<MdArrowBack />} onClick={() => navigate('/doctor/queue')} />
+            <Avatar name={`${patient?.first_name || ''} ${patient?.last_name || ''}`} w="46px" h="46px" borderRadius="14px" bg="brand.600" color="white" />
+            <Box minW="0">
+              <Heading as="h1" fontSize="20px" fontWeight="800" data-tour="page-title" noOfLines={1}>
+                {patient?.first_name} {patient?.last_name}
+              </Heading>
+              <Flex align="center" gap="8px" fontSize="13px" fontWeight="500" color="secondaryGray.600" wrap="wrap">
+                <Badge variant="outline">{patient?.patient_number}</Badge>
+                {patient?.sex && <Text textTransform="capitalize">{patient.sex}</Text>}
+                {patient?.date_of_birth && <Text>· Born {patient.date_of_birth}</Text>}
+              </Flex>
+            </Box>
+          </Flex>
+          <Button variant="brand" leftIcon={<MdCheckCircle />} onClick={() => completeConsultationMutation.mutate()}>
+            Complete Consultation
           </Button>
-          <Box>
-            <Heading size="lg" data-tour="page-title">
-              {patient?.first_name} {patient?.last_name}
-            </Heading>
-            <Flex align="center" gap="8px" color="secondaryGray.600">
-              <Badge variant="outline">{patient?.patient_number}</Badge>
-              <span>•</span>
-              <span>{patient?.sex}</span>
-              <span>•</span>
-              <span>{patient?.date_of_birth}</span>
-            </Flex>
-          </Box>
         </Flex>
-        <Button variant="brand" onClick={() => completeConsultationMutation.mutate()}>
-          Complete Consultation
-        </Button>
-      </Flex>
+      </Card>
 
       {/* Payment Alert for Partial Payments */}
       {visit?.payment_status === 'partial' && (
@@ -711,7 +717,7 @@ export default function ConsultationPage() {
                 ))}
               </SectionCard>
 
-              <Flex justify="end">
+              <FormActions hint="Examination findings for this visit">
                 <Button
                   variant="brand"
                   leftIcon={<MdSave />}
@@ -721,7 +727,7 @@ export default function ConsultationPage() {
                 >
                   Save Examination
                 </Button>
-              </Flex>
+              </FormActions>
             </Stack>
           </TabPanel>
 
@@ -1002,7 +1008,7 @@ export default function ConsultationPage() {
                 </Stack>
               </SectionCard>
 
-              <Flex justify="end">
+              <FormActions hint="Diagnosis and management plan">
                 <Button
                   variant="brand"
                   leftIcon={<MdSave />}
@@ -1012,7 +1018,7 @@ export default function ConsultationPage() {
                 >
                   Save Diagnosis & Plan
                 </Button>
-              </Flex>
+              </FormActions>
             </Stack>
           </TabPanel>
 

@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
+import { keyframes } from '@emotion/react'
 import { Box, Flex, Heading, Text } from '@chakra-ui/react'
 
+const drift = keyframes`0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(60px, -20px) scale(1.25); }`
 const fadeMask = 'linear-gradient(to right, transparent 0%, black 55%)'
 
 // Dark green banner with the clinic photo fading in from the right. Used at the top of dashboards and profile pages.
@@ -42,7 +44,7 @@ export default function PageHero({
       {/* decorative rings and glow */}
       <Box position="absolute" top="-90px" left="-60px" w="260px" h="260px" borderRadius="full" border="1px solid rgba(255,255,255,0.08)" />
       <Box position="absolute" top="-140px" left="-110px" w="360px" h="360px" borderRadius="full" border="1px solid rgba(255,255,255,0.05)" />
-      <Box position="absolute" bottom="-80px" left="35%" w="220px" h="220px" borderRadius="full" bg="rgba(12, 192, 223, 0.18)" filter="blur(50px)" />
+      <Box position="absolute" bottom="-80px" left="35%" w="220px" h="220px" borderRadius="full" bg="rgba(12, 192, 223, 0.22)" filter="blur(50px)" animation={`${drift} 14s ease-in-out infinite`} />
 
       <Flex
         position="relative"

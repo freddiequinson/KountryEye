@@ -23,6 +23,7 @@ import {
 } from '@chakra-ui/react'
 import { MdAdd, MdCheck, MdPeople, MdSave, MdShield } from 'react-icons/md'
 import api from '@/lib/api'
+import { PersonCell } from '@/components/Person'
 import { useToast } from '@/hooks/use-toast'
 import PageHeader from '@/components/PageHeader'
 import Card from '@/components/card/Card'
@@ -236,14 +237,7 @@ export default function PermissionManagerPage() {
                       selectedId={selectedEmployee?.id}
                       onSelect={handleSelectEmployee}
                       render={(emp) => (
-                        <>
-                          <Text fontWeight="500" fontSize="sm">
-                            {emp.first_name} {emp.last_name}
-                          </Text>
-                          <Text fontSize="xs" opacity={0.7}>
-                            {emp.role?.name || 'No role'}
-                          </Text>
-                        </>
+                        <PersonCell name={`${emp.first_name} ${emp.last_name}`} sub={emp.role?.name || 'No role'} />
                       )}
                     />
                   </Box>

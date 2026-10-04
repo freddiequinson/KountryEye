@@ -4,6 +4,8 @@ export const badgeStyles = {
     Badge: {
       baseStyle: {
         borderRadius: "full",
+        width: "fit-content",
+        maxW: "100%",
         lineHeight: "1",
         py: "5px",
         px: "10px",

@@ -53,12 +53,13 @@ function NavItemLink({
         _hover={{ bg: active ? activeBg : hoverBg, color: activeColor }}
         transition="background .15s ease, color .15s ease"
         data-tour={tour}
+        role="group"
       >
         {/* the brand bar slides between items when the route changes */}
         {active && (
           <Box as={motion.div} layoutId={collapsed ? 'nav-bar-collapsed' : 'nav-bar'} position="absolute" left="-12px" top="8px" bottom="8px" w="4px" borderRightRadius="4px" bg="brand.500" />
         )}
-        <Icon as={icon} w="20px" h="20px" me={collapsed ? '0' : '12px'} flexShrink={0} />
+        <Icon as={icon} w="20px" h="20px" me={collapsed ? '0' : '12px'} flexShrink={0} transition="transform .2s ease" _groupHover={{ transform: 'scale(1.15) rotate(-6deg)' }} />
         {!collapsed && (
           <Text flex="1" fontSize="14px" fontWeight={active ? '700' : '500'} noOfLines={1}>
             {title}
