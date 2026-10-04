@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Box, Button, Flex, Grid, Icon, SimpleGrid, Text } from '@chakra-ui/react'
+import { Box, Button, Flex, Icon, SimpleGrid, Text } from '@chakra-ui/react'
 import { MdAccessTime, MdArrowForward, MdAttachMoney, MdBarChart, MdBusiness, MdEvent, MdHowToReg, MdInventory2, MdPeople, MdReceiptLong, MdTrendingUp } from 'react-icons/md'
 import api from '@/lib/api'
 import type { DashboardStats } from '@/types'
 import PageHero from '@/components/PageHero'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
+import { TabbedSections } from '@/components/card/TabCard'
 import { DualAreaChart, PieChart } from '@/components/charts'
 import { EmptyState } from '@/components/ui'
 import { QuickActions, SummaryList } from '@/components/dashboard/widgets'
@@ -68,8 +69,8 @@ export function AdminDashboard({ user }: { user: any }) {
         <StatCard name="Pending Consultations" value={stats?.pending_consultations || 0} icon={MdAccessTime} iconColor="orange.500" helpText="awaiting doctor" />
       </SimpleGrid>
 
-      <Grid templateColumns={{ base: '1fr', xl: '2fr 1fr' }} gap="20px" mb="20px">
-        <SectionCard
+      <SectionCard
+          mb="20px"
           title="Visits and revenue"
           description="Last 30 days"
           actions={
@@ -90,9 +91,11 @@ export function AdminDashboard({ user }: { user: any }) {
           )}
         </SectionCard>
 
+
+      <TabbedSections title="Overview">
         <SectionCard title="Quick actions" description="Jump straight to common tasks" data-tour="quick-actions">
           <QuickActions
-            columns={1}
+            columns={{ base: 1, md: 2, xl: 4 }}
             actions={[
               { label: 'Employees', hint: 'Staff, roles and attendance', icon: MdHowToReg, onClick: () => navigate('/admin/employees') },
               // Branches are managed from Settings (the standalone branches page was removed)
@@ -102,9 +105,6 @@ export function AdminDashboard({ user }: { user: any }) {
             ]}
           />
         </SectionCard>
-      </Grid>
-
-      <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing="20px">
         <SectionCard title="This month" description="Business summary">
           <SummaryList
             rows={[
@@ -141,7 +141,7 @@ export function AdminDashboard({ user }: { user: any }) {
             </Flex>
           </Flex>
         </SectionCard>
-      </SimpleGrid>
+      </TabbedSections>
     </>
   )
 }

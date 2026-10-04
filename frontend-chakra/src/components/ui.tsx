@@ -259,9 +259,8 @@ export function Pagination({
 
 // Wraps a Chakra <Table> so wide tables scroll horizontally on small screens.
 export function TableBox({ children, ...rest }: React.ComponentProps<typeof Box>) {
-  const borderColor = useColorModeValue('secondaryGray.100', 'whiteAlpha.100')
   return (
-    <Box overflowX="auto" border="1px solid" borderColor={borderColor} borderRadius="14px" {...rest}>
+    <Box overflowX="auto" {...rest}>
       {children}
     </Box>
   )

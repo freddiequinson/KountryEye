@@ -6,6 +6,7 @@ import api from '@/lib/api'
 import PageHero from '@/components/PageHero'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
+import { TabbedSections } from '@/components/card/TabCard'
 import { RowBox } from '@/components/dashboard/widgets'
 
 export default function MarketingDashboard() {
@@ -49,7 +50,7 @@ export default function MarketingDashboard() {
         <StatCard name="Engagement" value="-" icon={MdTrendingUp} iconColor="green.500" helpText="coming soon" />
       </SimpleGrid>
 
-      <SimpleGrid columns={{ base: 1, md: 2 }} spacing="20px">
+      <TabbedSections>
         <SectionCard title="Recent Campaigns">
           {stats?.recentCampaigns?.length === 0 ? (
             <Text color="secondaryGray.600" textAlign="center" py="16px">
@@ -98,7 +99,7 @@ export default function MarketingDashboard() {
             </Stack>
           )}
         </SectionCard>
-      </SimpleGrid>
+      </TabbedSections>
     </>
   )
 }

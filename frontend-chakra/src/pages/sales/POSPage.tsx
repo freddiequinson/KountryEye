@@ -11,18 +11,21 @@ import {
   IconButton,
   Image,
   Input,
+  InputGroup,
+  InputLeftElement,
   Select,
   SimpleGrid,
   Stack,
   Text,
   useColorModeValue,
 } from '@chakra-ui/react'
-import { MdAdd, MdCreditCard, MdDelete, MdPerson, MdRemove, MdShoppingCart } from 'react-icons/md'
+import { MdAdd, MdCreditCard, MdDelete, MdPerson, MdRemove, MdSearch, MdShoppingCart } from 'react-icons/md'
 import { SalesReceiptModal } from '@/components/SalesReceiptModal'
 import api from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/card/Card'
+import ProductCard from '@/components/card/ProductCard'
 import { RowBox } from '@/components/dashboard/widgets'
 import { AppModal, EmptyState, Field, PaymentMethodPicker, SearchInput } from '@/components/ui'
 
@@ -203,101 +206,98 @@ export default function POSPage() {
     })
   }
 
+  const productImage = (id: number) => products.find((p: any) => p.id === id)?.image_url as string | undefined
+
   const pill = (active: boolean) => ({
-    variant: active ? 'brand' : 'light',
-    size: 'sm',
-    borderRadius: 'full',
+    variant: 'unstyled',
+    h: 'auto',
+    minW: 'auto',
     flexShrink: 0,
+    fontSize: 'md',
+    fontWeight: active ? '700' : '500',
+    color: active ? 'brand.600' : 'secondaryGray.600',
+    borderBottom: '2px solid',
+    borderColor: active ? 'brand.500' : 'transparent',
+    borderRadius: 0,
+    pb: '4px',
+    _hover: { color: 'brand.600' },
   })
 
   return (
-    <Flex direction={{ base: 'column', lg: 'row' }} gap="20px" h={{ lg: 'calc(100vh - 150px)' }}>
+    <Flex direction={{ base: 'column', xl: 'row' }} gap="20px" align="start">
       {/* Left side - Products */}
-      <Flex flex="1" direction="column" minW="0" data-tour="products">
-        <Heading size="lg" mb="12px" data-tour="page-title">
-          Point of Sale
-        </Heading>
-        <SearchInput maxW="100%" size="lg" placeholder="Search products by name or SKU..." value={search} onChange={setSearch} />
-        {categories.length > 0 && (
-          <Flex gap="8px" overflowX="auto" mt="12px" pb="4px" className="thin-scrollbar">
-            <Button {...pill(selectedCategoryId === null)} onClick={() => setSelectedCategoryId(null)}>
-              All
-            </Button>
-            {categories.map((cat: any) => (
-              <Button key={cat.id} {...pill(selectedCategoryId === cat.id)} onClick={() => setSelectedCategoryId(cat.id)}>
-                {cat.name}
-              </Button>
-            ))}
-          </Flex>
-        )}
-
-        <Box flex="1" overflowY="auto" mt="16px" className="thin-scrollbar">
-          <SimpleGrid columns={{ base: 2, md: 3, xl: 4 }} spacing="12px">
-            {products.map((product: any) => {
-              const stockQty = getProductStock(product.id)
-              const isOutOfStock = stockQty <= 0
-              return (
-                <Card
-                  key={product.id}
-                  p="16px"
-                  cursor={isOutOfStock ? 'not-allowed' : 'pointer'}
-                  opacity={isOutOfStock ? 0.5 : 1}
-                  border="2px solid"
-                  borderColor="transparent"
-                  _hover={{ borderColor: 'brand.400' }}
-                  transition="border-color 0.15s"
-                  onClick={() => !isOutOfStock && addToCart(product)}
-                >
-                  <Flex
-                    position="relative"
-                    align="center"
-                    justify="center"
-                    bg={imageBg}
-                    borderRadius="12px"
-                    mb="8px"
-                    overflow="hidden"
-                    sx={{ aspectRatio: '1 / 1' }}
-                  >
-                    {product.image_url ? (
-                      <Image src={product.image_url} alt={product.name} w="100%" h="100%" objectFit="cover" />
-                    ) : (
-                      <Icon as={MdShoppingCart} w="32px" h="32px" color="secondaryGray.600" />
-                    )}
-                    <Badge
-                      position="absolute"
-                      top="4px"
-                      right="4px"
-                      fontSize="xs"
-                      colorScheme={stockQty > 10 ? 'green' : stockQty > 0 ? 'orange' : 'red'}
-                    >
-                      {stockQty} in stock
-                    </Badge>
-                  </Flex>
-                  <Text fontWeight="500" fontSize="sm" noOfLines={1}>
-                    {product.name}
-                  </Text>
-                  <Text fontSize="xs" color="secondaryGray.600">
-                    {product.sku}
-                  </Text>
-                  <Text fontWeight="bold" color="brand.500" mt="4px">
-                    GH₵{product.unit_price?.toLocaleString()}
-                  </Text>
-                </Card>
-              )
-            })}
-          </SimpleGrid>
-          {products.length === 0 && <EmptyState>{search ? 'No products found' : 'Start typing to search products'}</EmptyState>}
+      <Flex flex="1" direction="column" minW="0" w="100%" data-tour="products">
+        {/* Banner, after Horizon's marketplace banner */}
+        <Box position="relative" overflow="hidden" borderRadius="30px" color="white" bg="linear-gradient(120deg, #0B2415 0%, #14472A 50%, #2F7A3F 100%)" px={{ base: '22px', md: '40px' }} py={{ base: '26px', md: '40px' }}>
+          <Box position="absolute" top="-110px" right="-40px" w="320px" h="320px" borderRadius="full" border="1px solid rgba(255,255,255,0.1)" />
+          <Box position="absolute" bottom="-90px" right="18%" w="220px" h="220px" borderRadius="full" bg="rgba(12, 192, 223, 0.22)" filter="blur(50px)" />
+          <Box position="relative" maxW="560px">
+            <Heading as="h1" fontSize={{ base: '26px', md: '34px' }} fontWeight="700" lineHeight="1.2" data-tour="page-title">
+              Point of Sale
+            </Heading>
+            <Text fontSize="md" fontWeight="500" color="whiteAlpha.800" mt="8px" mb="20px">
+              Find frames, lenses and eye care products, add them to the cart and take payment.
+            </Text>
+            <InputGroup size="lg">
+              <InputLeftElement pointerEvents="none">
+                <Icon as={MdSearch} color="secondaryGray.500" />
+              </InputLeftElement>
+              <Input bg="white" color="secondaryGray.900" border="none" borderRadius="16px" fontSize="md" fontWeight="500" placeholder="Search products by name or SKU..." _placeholder={{ color: 'secondaryGray.500' }} value={search} onChange={(e) => setSearch(e.target.value)} />
+            </InputGroup>
+          </Box>
         </Box>
+
+        <Flex mt="34px" mb="20px" justify="space-between" direction={{ base: 'column', md: 'row' }} align={{ base: 'start', md: 'center' }} gap="12px">
+          <Text fontSize="2xl" fontWeight="700" ms={{ md: '8px' }} flexShrink={0}>
+            {selectedCategoryId === null ? 'All Products' : categories.find((c: any) => c.id === selectedCategoryId)?.name}
+            <Text as="span" fontSize="md" fontWeight="500" color="secondaryGray.600" ms="10px">
+              {products.length}
+            </Text>
+          </Text>
+          {categories.length > 0 && (
+            <Flex gap={{ base: '22px', md: '32px' }} overflowX="auto" maxW="100%" pb="4px" className="thin-scrollbar">
+              <Button {...pill(selectedCategoryId === null)} onClick={() => setSelectedCategoryId(null)}>
+                All
+              </Button>
+              {categories.map((cat: any) => (
+                <Button key={cat.id} {...pill(selectedCategoryId === cat.id)} onClick={() => setSelectedCategoryId(cat.id)}>
+                  {cat.name}
+                </Button>
+              ))}
+            </Flex>
+          )}
+        </Flex>
+
+        <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing="20px">
+          {products.map((product: any) => (
+            <ProductCard
+              key={product.id}
+              image={product.image_url}
+              name={product.name}
+              sub={product.sku}
+              price={`GH₵${product.unit_price?.toLocaleString()}`}
+              stock={getProductStock(product.id)}
+              onAdd={() => addToCart(product)}
+            />
+          ))}
+        </SimpleGrid>
+        {products.length === 0 && (
+          <Card>
+            <EmptyState icon={MdShoppingCart}>{search ? 'No products found' : 'Start typing to search products'}</EmptyState>
+          </Card>
+        )}
       </Flex>
 
       {/* Right side - Cart */}
-      <Card w={{ base: '100%', lg: '384px' }} p="0" data-tour="cart">
-        <Box p="16px" borderBottom="1px solid" borderColor={borderColor}>
-          <Flex justify="space-between" align="center" mb="8px">
-            <Heading size="md" display="flex" alignItems="center" gap="8px">
-              <Icon as={MdShoppingCart} />
-              Cart ({cart.length})
-            </Heading>
+      <Card w={{ base: '100%', xl: '400px' }} flexShrink={0} p="0" position={{ xl: 'sticky' }} top={{ xl: '96px' }} maxH={{ xl: 'calc(100vh - 116px)' }} data-tour="cart">
+        <Box p="20px" pb="16px">
+          <Flex justify="space-between" align="center" mb="14px">
+            <Text fontSize="22px" fontWeight="700" lineHeight="100%">
+              Cart
+              <Text as="span" fontSize="md" fontWeight="500" color="secondaryGray.600" ms="8px">
+                {cart.length} item{cart.length === 1 ? '' : 's'}
+              </Text>
+            </Text>
             {cart.length > 0 && (
               <Button variant="ghost" size="sm" onClick={() => setCart([])}>
                 Clear
@@ -347,49 +347,47 @@ export default function POSPage() {
         )}
 
         {/* Cart Items */}
-        <Box flex="1" overflowY="auto" p="16px" minH={{ base: '160px', lg: 0 }} className="thin-scrollbar">
+        <Box flex="1" overflowY="auto" px="20px" py="12px" minH="160px" className="thin-scrollbar">
           {cart.length === 0 ? (
             <EmptyState icon={MdShoppingCart} title="Cart is empty">
               Click products to add them
             </EmptyState>
           ) : (
-            <Stack spacing="12px">
+            <Stack spacing="16px">
               {cart.map((item) => (
-                <RowBox key={item.product_id} p="8px" gap="8px">
+                <Flex key={item.product_id} align="center" gap="12px">
+                  <Flex w="52px" h="52px" minW="52px" borderRadius="16px" bg={imageBg} align="center" justify="center" overflow="hidden">
+                    {productImage(item.product_id) ? <Image src={productImage(item.product_id)} alt="" w="100%" h="100%" objectFit="cover" /> : <Icon as={MdShoppingCart} color="secondaryGray.500" />}
+                  </Flex>
                   <Box flex="1" minW="0">
-                    <Text fontWeight="500" fontSize="sm" noOfLines={1}>
+                    <Text fontWeight="700" fontSize="sm" noOfLines={1}>
                       {item.product_name}
                     </Text>
                     <Text fontSize="xs" color="secondaryGray.600">
                       GH₵{item.unit_price.toLocaleString()} each
                     </Text>
+                    <Flex align="center" gap="6px" mt="6px">
+                      <IconButton aria-label="Decrease" variant="light" size="xs" borderRadius="full" icon={<MdRemove />} onClick={() => updateQuantity(item.product_id, -1)} />
+                      <Text minW="24px" textAlign="center" fontWeight="700" fontSize="sm">
+                        {item.quantity}
+                      </Text>
+                      <IconButton aria-label="Increase" variant="light" size="xs" borderRadius="full" icon={<MdAdd />} onClick={() => updateQuantity(item.product_id, 1)} />
+                    </Flex>
                   </Box>
-                  <Flex align="center" gap="4px">
-                    <IconButton aria-label="Decrease" variant="light" size="xs" icon={<MdRemove />} onClick={() => updateQuantity(item.product_id, -1)} />
-                    <Text w="32px" textAlign="center" fontWeight="500">
-                      {item.quantity}
+                  <Flex direction="column" align="end" gap="6px">
+                    <Text fontWeight="700" fontSize="md">
+                      GH₵{(item.quantity * item.unit_price).toLocaleString()}
                     </Text>
-                    <IconButton aria-label="Increase" variant="light" size="xs" icon={<MdAdd />} onClick={() => updateQuantity(item.product_id, 1)} />
+                    <IconButton aria-label="Remove" variant="ghost" size="xs" color="red.500" icon={<MdDelete />} onClick={() => setCart(cart.filter((i) => i.product_id !== item.product_id))} />
                   </Flex>
-                  <Text fontWeight="500" w="80px" textAlign="right">
-                    GH₵{(item.quantity * item.unit_price).toLocaleString()}
-                  </Text>
-                  <IconButton
-                    aria-label="Remove"
-                    variant="ghost"
-                    size="xs"
-                    color="red.500"
-                    icon={<MdDelete />}
-                    onClick={() => setCart(cart.filter((i) => i.product_id !== item.product_id))}
-                  />
-                </RowBox>
+                </Flex>
               ))}
             </Stack>
           )}
         </Box>
 
         {/* Cart Summary */}
-        <Stack spacing="12px" p="16px" borderTop="1px solid" borderColor={borderColor} data-tour="payment">
+        <Stack spacing="12px" p="20px" borderTop="1px solid" borderColor={borderColor} data-tour="payment">
           <Flex justify="space-between" fontSize="sm">
             <Text>Subtotal</Text>
             <Text>GH₵{subtotal.toLocaleString()}</Text>
@@ -415,11 +413,11 @@ export default function POSPage() {
             </Flex>
           )}
           <Divider />
-          <Flex justify="space-between" fontWeight="bold" fontSize="lg">
-            <Text>Total</Text>
-            <Text color="brand.500">GH₵{total.toLocaleString()}</Text>
+          <Flex justify="space-between" align="center" fontWeight="bold">
+            <Text fontSize="lg">Total</Text>
+            <Text fontSize="2xl" color="brand.600" _dark={{ color: "white" }}>GH₵{total.toLocaleString()}</Text>
           </Flex>
-          <Button variant="brand" h="48px" fontSize="lg" leftIcon={<MdCreditCard />} isDisabled={cart.length === 0} onClick={() => setIsPaymentDialogOpen(true)}>
+          <Button variant="brand" size="lg" leftIcon={<MdCreditCard />} isDisabled={cart.length === 0} onClick={() => setIsPaymentDialogOpen(true)}>
             Checkout
           </Button>
         </Stack>

@@ -6,6 +6,7 @@ import api from '@/lib/api'
 import PageHero from '@/components/PageHero'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
+import { TabbedSections } from '@/components/card/TabCard'
 import { QuickActions, SummaryList } from '@/components/dashboard/widgets'
 
 export function FrontDeskDashboard({ user }: { user: any }) {
@@ -70,7 +71,7 @@ export function FrontDeskDashboard({ user }: { user: any }) {
         <StatCard name="Total Patients" value={stats?.patients.total || 0} icon={MdPeople} helpText={`+${stats?.patients.month || 0} this month`} />
       </SimpleGrid>
 
-      <SimpleGrid columns={{ base: 1, md: 2 }} spacing="20px" data-tour="quick-actions">
+      <TabbedSections data-tour="quick-actions">
         <SectionCard title="Quick Actions">
           <QuickActions
             actions={[
@@ -92,7 +93,7 @@ export function FrontDeskDashboard({ user }: { user: any }) {
             ]}
           />
         </SectionCard>
-      </SimpleGrid>
+      </TabbedSections>
     </>
   )
 }

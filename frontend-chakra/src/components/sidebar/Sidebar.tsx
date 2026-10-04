@@ -43,7 +43,7 @@ function NavItemLink({
       <Flex
         position="relative"
         align="center"
-        h="40px"
+        h="44px"
         px={collapsed ? '0' : '12px'}
         mb="2px"
         justify={collapsed ? 'center' : 'start'}
@@ -61,7 +61,7 @@ function NavItemLink({
         )}
         <Icon as={icon} w="20px" h="20px" me={collapsed ? '0' : '12px'} flexShrink={0} transition="transform .2s ease" _groupHover={{ transform: 'scale(1.15) rotate(-6deg)' }} />
         {!collapsed && (
-          <Text flex="1" fontSize="14px" fontWeight={active ? '700' : '500'} noOfLines={1}>
+          <Text flex="1" fontSize="15px" fontWeight={active ? '700' : '500'} noOfLines={1}>
             {title}
           </Text>
         )}
@@ -96,7 +96,8 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
   const location = useLocation()
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const [closed, setClosed] = useState<Set<string>>(new Set())
+  // sections the user opened or closed by hand; anything else is open only if it holds the current page
+  const [toggled, setToggled] = useState<Record<string, boolean>>({})
   const textColor = useColorModeValue('secondaryGray.900', 'white')
   const divider = useColorModeValue('secondaryGray.100', 'whiteAlpha.100')
 
@@ -117,13 +118,9 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
     .filter((url) => location.pathname === url || (url !== '/' && location.pathname.startsWith(url + '/')))
     .sort((a, b) => b.length - a.length)[0]
 
-  const toggle = (id: string) =>
-    setClosed((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+  // default: only the section holding the current page is open (the first one when the page isn't in the menu)
+  const homeSection = sections.find((sec) => sec.items.some((i) => i.url === activeUrl)) || sections[0]
+  const isSectionOpen = (section: (typeof sections)[number]) => toggled[section.id] ?? section.id === homeSection?.id
 
   return (
     <Flex direction="column" h="100%">
@@ -158,7 +155,7 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
 
       <Box flex="1" overflowY="auto" overflowX="hidden" className="thin-scrollbar" px="12px" py="14px">
         {sections.map((section, index) => {
-          const isOpen = !closed.has(section.id)
+          const isOpen = isSectionOpen(section)
           return (
             <Box key={section.id} mb="10px">
               {collapsed ? (
@@ -174,7 +171,7 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
                   mb="2px"
                   color="secondaryGray.500"
                   _hover={{ color: 'secondaryGray.700' }}
-                  onClick={() => toggle(section.id)}
+                  onClick={() => setToggled((prev) => ({ ...prev, [section.id]: !isOpen }))}
                   data-tour={`section-${section.id}`}
                 >
                   <Text flex="1" textAlign="left" fontSize="11px" fontWeight="700" textTransform="uppercase" letterSpacing="0.1em">

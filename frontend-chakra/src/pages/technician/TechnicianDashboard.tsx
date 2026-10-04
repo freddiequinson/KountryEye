@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 import PageHero from '@/components/PageHero'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
+import { TabbedSections } from '@/components/card/TabCard'
 import { EmptyState } from '@/components/ui'
 import { QuickActions } from '@/components/dashboard/widgets'
 import { SCAN_TYPE_LABELS, StatusBadge } from './shared'
@@ -82,7 +83,7 @@ export default function TechnicianDashboard() {
         </SectionCard>
       )}
 
-      <SimpleGrid columns={{ base: 1, lg: 2 }} spacing="20px" mb="20px">
+      <TabbedSections mb="20px">
         <SectionCard title="Recent Referrals" description="Latest external referrals" actions={viewAll('/technician/referrals')}>
           {recentReferrals.length === 0 ? (
             <EmptyState icon={MdPeople} title="No referrals yet">
@@ -159,7 +160,7 @@ export default function TechnicianDashboard() {
             </Box>
           )}
         </SectionCard>
-      </SimpleGrid>
+      </TabbedSections>
 
       <SectionCard title="Quick Actions">
         <QuickActions

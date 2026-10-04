@@ -6,6 +6,7 @@ import api from '@/lib/api'
 import PageHero from '@/components/PageHero'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
+import { TabbedSections } from '@/components/card/TabCard'
 import { QuickActions, SummaryList } from '@/components/dashboard/widgets'
 
 export function MarketingDashboard({ user }: { user: any }) {
@@ -46,7 +47,7 @@ export function MarketingDashboard({ user }: { user: any }) {
         <StatCard name="Active Campaigns" value={0} icon={MdTrackChanges} iconColor="orange.500" helpText="running campaigns" />
       </SimpleGrid>
 
-      <SimpleGrid columns={{ base: 1, md: 2 }} spacing="20px" data-tour="quick-actions">
+      <TabbedSections data-tour="quick-actions">
         <SectionCard title="Quick Actions">
           <QuickActions
             actions={[
@@ -68,7 +69,7 @@ export function MarketingDashboard({ user }: { user: any }) {
             ]}
           />
         </SectionCard>
-      </SimpleGrid>
+      </TabbedSections>
     </>
   )
 }

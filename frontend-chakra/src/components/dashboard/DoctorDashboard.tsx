@@ -7,6 +7,7 @@ import api from '@/lib/api'
 import PageHero from '@/components/PageHero'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
+import { TabbedSections } from '@/components/card/TabCard'
 import { QuickActions } from '@/components/dashboard/widgets'
 
 export function DoctorDashboard({ user }: { user: any }) {
@@ -78,7 +79,7 @@ export function DoctorDashboard({ user }: { user: any }) {
         <StatCard name="Total Patients" value={stats?.patients.total || 0} icon={MdPeople} helpText="in system" />
       </SimpleGrid>
 
-      <SimpleGrid columns={{ base: 1, md: 2 }} spacing="20px" data-tour="quick-actions">
+      <TabbedSections data-tour="quick-actions">
         <SectionCard
           title="Waiting Patients"
           actions={waitingPatients.length > 0 && <Badge borderRadius="full">{waitingPatients.length} waiting</Badge>}
@@ -140,7 +141,7 @@ export function DoctorDashboard({ user }: { user: any }) {
             ]}
           />
         </SectionCard>
-      </SimpleGrid>
+      </TabbedSections>
     </>
   )
 }

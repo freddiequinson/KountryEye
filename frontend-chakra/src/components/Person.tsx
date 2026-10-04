@@ -77,7 +77,7 @@ export function EntityHeader({
             {badges}
           </Flex>
           {subtitle && (
-            <Text fontSize="sm" fontWeight="500" color="secondaryGray.600" mt="2px">
+            <Text as="div" fontSize="sm" fontWeight="500" color="secondaryGray.600" mt="2px">
               {subtitle}
             </Text>
           )}
