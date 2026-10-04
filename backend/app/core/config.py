@@ -33,7 +33,16 @@ class Settings(BaseSettings):
     # AI Settings
     GROQ_API_KEY: str = ""
     AI_ENABLED: bool = False
-    
+
+    # Email (password reset). Leave SMTP_HOST empty to disable sending.
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_TLS: bool = True
+    FRONTEND_URL: str = "http://localhost:5173"
+
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:5173",
         "http://localhost:3000",
