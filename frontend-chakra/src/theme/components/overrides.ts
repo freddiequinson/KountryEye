@@ -56,6 +56,7 @@ export const overrideStyles = {
             fontSize: "14px",
             fontWeight: "700",
             py: "14px",
+            whiteSpace: "nowrap",
           },
           tbody: {
             tr: {

@@ -55,18 +55,18 @@ export default function StatCard({ name, value, icon: iconProp, iconColor: iconC
       sx={stagger}
     >
       <Flex my="auto" h="100%" align="center">
-        <Flex w="56px" h="56px" minW="56px" borderRadius="50%" bg={boxBg} align="center" justify="center">
+        <Flex w={{ base: '48px', '2xl': '56px' }} h={{ base: '48px', '2xl': '56px' }} flexShrink={0} borderRadius="50%" bg={boxBg} align="center" justify="center">
           <Icon as={icon} w="28px" h="28px" color={iconColor} />
         </Flex>
-        <Stat my="auto" ms="18px" minW="0">
+        <Stat my="auto" ms="14px" minW="0">
           <StatLabel lineHeight="1.3" color="secondaryGray.600" fontSize="sm" fontWeight="500">
             {name}
           </StatLabel>
-          <StatNumber color={valueColor || textColor} fontSize="2xl" fontWeight="700" lineHeight="1.25">
+          <StatNumber color={valueColor || textColor} fontSize={typeof value === 'string' && value.length > 11 ? 'xl' : '2xl'} fontWeight="700" lineHeight="1.25" whiteSpace="nowrap">
             {typeof value === 'number' ? <NumberFlow value={value} /> : value}
           </StatNumber>
           {helpText && (
-            <Text color="secondaryGray.600" fontSize="xs" fontWeight="500" noOfLines={1}>
+            <Text as="div" color="secondaryGray.600" fontSize="xs" fontWeight="500">
               {helpText}
             </Text>
           )}

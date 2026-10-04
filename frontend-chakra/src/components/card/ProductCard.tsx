@@ -55,8 +55,8 @@ export default function ProductCard({
       <Text color="secondaryGray.600" fontSize="sm" fontWeight="400" noOfLines={1}>
         {sub || ' '}
       </Text>
-      <Flex align="center" justify="space-between" gap="10px" mt="18px">
-        <Text fontWeight="700" fontSize="md" color={priceColor} noOfLines={1}>
+      <Flex align="center" justify="space-between" gap="10px" mt="18px" wrap="wrap">
+        <Text fontWeight="700" fontSize="md" color={priceColor} whiteSpace="nowrap">
           {price}
         </Text>
         <Button variant="darkBrand" size="sm" borderRadius="70px" px="18px" leftIcon={<MdAdd />} isDisabled={out} flexShrink={0}>

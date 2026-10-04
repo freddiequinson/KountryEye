@@ -51,6 +51,7 @@ import { useToast } from '@/hooks/use-toast'
 import Card from '@/components/card/Card'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
+import { TabbedSections } from '@/components/card/TabCard'
 import { AppModal, EmptyState, Field, TableMessageRow } from '@/components/ui'
 import { PriorityBadge, PRIORITY_OPTIONS, TaskStatusBadge, TASK_STATUS_OPTIONS } from './taskBadges'
 
@@ -308,7 +309,7 @@ export default function EmployeeDetailPage() {
           {/* Overview */}
           <TabPanel p="0">
             <Stack spacing="20px">
-              <SimpleGrid columns={{ base: 1, md: 2 }} spacing="20px">
+              <TabbedSections>
                 <SectionCard title="Recent Activity">
                   {activity.length === 0 ? (
                     <Text color="secondaryGray.600" fontSize="sm">
@@ -356,7 +357,7 @@ export default function EmployeeDetailPage() {
                     </Stack>
                   )}
                 </SectionCard>
-              </SimpleGrid>
+              </TabbedSections>
 
               <SectionCard
                 title="Assigned Tasks"

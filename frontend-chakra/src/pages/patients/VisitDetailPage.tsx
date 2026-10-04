@@ -25,6 +25,7 @@ import api from '@/lib/api'
 import PageHeader from '@/components/PageHeader'
 import Card from '@/components/card/Card'
 import SectionCard from '@/components/card/SectionCard'
+import { TabbedSections } from '@/components/card/TabCard'
 import { RowBox } from '@/components/dashboard/widgets'
 import { EmptyState } from '@/components/ui'
 
@@ -195,7 +196,7 @@ export default function VisitDetailPage() {
         <TabPanels>
           <TabPanel p="0">
             {record ? (
-              <SimpleGrid columns={{ base: 1, md: 2 }} spacing="20px">
+              <TabbedSections>
                 <SectionCard title="Chief Complaint">
                   <Text fontSize="sm">{record.chief_complaint || 'Not recorded'}</Text>
                 </SectionCard>
@@ -229,7 +230,7 @@ export default function VisitDetailPage() {
                     </Text>
                   </SectionCard>
                 )}
-              </SimpleGrid>
+              </TabbedSections>
             ) : (
               <Card>
                 <EmptyState>No clinical record found for this visit</EmptyState>

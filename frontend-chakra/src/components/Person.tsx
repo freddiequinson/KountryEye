@@ -90,7 +90,7 @@ export function EntityHeader({
       </Flex>
 
       <Flex direction={{ base: 'column', xl: 'row' }} mt="20px" borderTop="1px solid" borderColor={border}>
-        <SimpleGrid flex="1" columns={{ base: 1, sm: 2, lg: 3 }} spacingX="24px" spacingY="16px" px={{ base: '18px', md: '26px' }} py="20px">
+        <SimpleGrid flex="1" columns={{ base: 1, sm: 2, lg: aside ? 3 : 4 }} spacingX="24px" spacingY="16px" px={{ base: '18px', md: '26px' }} py="20px">
           {facts.map((fact) => (
             <Flex key={fact.label} gap="12px" align="center" minW="0">
               <Flex w="36px" h="36px" minW="36px" borderRadius="10px" bg="secondaryGray.300" _dark={{ bg: 'whiteAlpha.100' }} color="secondaryGray.700" align="center" justify="center">

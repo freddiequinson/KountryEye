@@ -181,7 +181,7 @@ export default function ReferralDetailPage() {
 
         <TabPanels>
           <TabPanel p="0">
-            <SimpleGrid columns={{ base: 1, md: 2 }} spacing="20px">
+            <Stack spacing="20px">
               <SectionCard title={titled(MdPerson, 'Client Information')}>
                 <Stack spacing="12px">
                   <InfoLine icon={MdPerson}>
@@ -250,7 +250,7 @@ export default function ReferralDetailPage() {
                   )}
                 </Stack>
               </SectionCard>
-            </SimpleGrid>
+            </Stack>
           </TabPanel>
 
           <TabPanel p="0">

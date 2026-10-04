@@ -1,4 +1,4 @@
-import { Children, isValidElement, useState, type ReactNode } from 'react'
+import { Children, isValidElement, useId, useState, type ReactNode } from 'react'
 import { Box, Flex, Heading, Icon, Text, useColorModeValue } from '@chakra-ui/react'
 import { motion } from 'framer-motion'
 import type { IconType } from 'react-icons'
@@ -13,7 +13,7 @@ export default function TabCard({ title, tabs, defaultIndex = 0, ...rest }: { ti
   const textColor = useColorModeValue('secondaryGray.900', 'white')
   const border = useColorModeValue('secondaryGray.100', 'whiteAlpha.100')
   const active = tabs[Math.min(index, tabs.length - 1)]
-  const id = typeof title === 'string' ? title : 'tabs'
+  const id = useId() // keeps each card's sliding underline separate from other cards on the page
 
   return (
     <Card {...rest}>

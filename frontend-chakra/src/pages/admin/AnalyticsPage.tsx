@@ -7,6 +7,7 @@ import PageHeader from '@/components/PageHeader'
 import Card from '@/components/card/Card'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
+import { TabbedSections } from '@/components/card/TabCard'
 import { AppModal, EmptyState } from '@/components/ui'
 import { BarChart, DualAreaChart, PieChart } from '@/components/charts'
 
@@ -197,14 +198,14 @@ export default function AnalyticsPage() {
                   right={{ name: 'Revenue', data: daily.map((d) => d.revenue), formatter: shortCurrency }}
                 />
               </SectionCard>
-              <SimpleGrid columns={{ base: 1, lg: 2 }} spacing="20px">
+              <TabbedSections>
                 <SectionCard title="Visits by Payment Type">
                   <PieChart labels={paymentType.map(([k]) => capitalize(k))} values={paymentType.map(([, v]) => v)} />
                 </SectionCard>
                 <SectionCard title="Patients by Gender">
                   <PieChart labels={gender.map(([k]) => capitalize(k))} values={gender.map(([, v]) => v)} />
                 </SectionCard>
-              </SimpleGrid>
+              </TabbedSections>
               {consultations?.by_type?.length > 0 && (
                 <SectionCard title="Consultations by Type" description={`Average fee: ${formatCurrency(consultations?.average_fee || 0)}`}>
                   <BarChart
@@ -232,7 +233,7 @@ export default function AnalyticsPage() {
                   helpText={`${financial?.summary?.profit_margin || 0}% margin`}
                 />
               </SimpleGrid>
-              <SimpleGrid columns={{ base: 1, lg: 2 }} spacing="20px">
+              <TabbedSections>
                 <SectionCard title="Revenue by Payment Type">
                   <BarChart
                     horizontal
@@ -250,7 +251,7 @@ export default function AnalyticsPage() {
                     formatter={formatCurrency}
                   />
                 </SectionCard>
-              </SimpleGrid>
+              </TabbedSections>
               {financial?.expense_by_category?.length > 0 && (
                 <SectionCard title="Expenses by Category">
                   <PieChart
