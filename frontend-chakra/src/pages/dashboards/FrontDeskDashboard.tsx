@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Badge, Box, Button, SimpleGrid, Stack, Text } from '@chakra-ui/react'
 import { MdAccessTime, MdCheckCircle, MdCreditCard, MdPeople, MdPersonAdd } from 'react-icons/md'
 import api from '@/lib/api'
-import PageHeader from '@/components/PageHeader'
+import PageHero from '@/components/PageHero'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
 import { RowBox } from '@/components/dashboard/widgets'
@@ -37,7 +37,7 @@ export default function FrontDeskDashboard() {
 
   return (
     <>
-      <PageHeader
+      <PageHero
         title="Front Desk Dashboard"
         description="Today's overview"
         actions={

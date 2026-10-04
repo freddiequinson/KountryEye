@@ -16,15 +16,15 @@ export default function SectionCard({ title, description, actions, children, ...
   return (
     <Card {...rest}>
       {(title || actions) && (
-        <Flex justify="space-between" align="start" gap="12px" mb="16px" wrap="wrap">
+        <Flex justify="space-between" align="center" gap="12px" mb="18px" wrap="wrap">
           <Box>
             {title && (
-              <Heading as="h3" fontSize="lg" fontWeight="700" color={textColor}>
+              <Heading as="h3" fontSize="16px" fontWeight="700" letterSpacing="-0.02em" color={textColor}>
                 {title}
               </Heading>
             )}
             {description && (
-              <Text fontSize="sm" color="secondaryGray.600" mt="2px">
+              <Text fontSize="13px" fontWeight="500" color="secondaryGray.600" mt="3px">
                 {description}
               </Text>
             )}

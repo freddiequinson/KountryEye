@@ -1,39 +1,16 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import {
-  AlertDialog,
-  AlertDialogBody,
-  AlertDialogContent,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogOverlay,
-  Badge,
-  Box,
-  Button,
-  Collapse,
-  Drawer,
-  DrawerBody,
-  DrawerCloseButton,
-  DrawerContent,
-  DrawerOverlay,
-  Flex,
-  Icon,
-  Image,
-  Text,
-  Tooltip,
-  useColorModeValue,
-} from '@chakra-ui/react'
+import { motion } from 'framer-motion'
+import { Badge, Box, Button, Collapse, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerOverlay, Flex, Icon, Image, Text, Tooltip, useColorModeValue } from '@chakra-ui/react'
 import type { IconType } from 'react-icons'
-import { MdChevronRight, MdHelpOutline, MdLogout, MdPerson, MdAccessTime, MdSettings } from 'react-icons/md'
-import { HSeparator } from '@/components/separator/Separator'
+import { MdExpandMore, MdHelpOutline } from 'react-icons/md'
 import { useAuthStore } from '@/stores/auth'
-import { activityLogger } from '@/lib/activityLogger'
 import api from '@/lib/api'
-import { getNavSections, getRoleDisplayName, getUserRole } from '@/config/nav'
+import { getNavSections, getRoleDisplayName } from '@/config/nav'
 
-export const SIDEBAR_WIDTH = 290
-export const SIDEBAR_COLLAPSED_WIDTH = 88
+export const SIDEBAR_WIDTH = 272
+export const SIDEBAR_COLLAPSED_WIDTH = 84
 
 const tourId = (title: string) => `nav-${title.toLowerCase().replace(/\s+/g, '-')}`
 
@@ -47,7 +24,7 @@ function NavItemLink({
   tour,
   onClick,
 }: {
-  to?: string
+  to: string
   title: string
   icon: IconType
   active: boolean
@@ -56,51 +33,55 @@ function NavItemLink({
   tour?: string
   onClick?: () => void
 }) {
-  const activeColor = useColorModeValue('gray.700', 'white')
-  const textColor = useColorModeValue('secondaryGray.500', 'white')
-  const activeIcon = useColorModeValue('brand.500', 'white')
-  const brandColor = useColorModeValue('brand.500', 'brand.400')
-  const hoverBg = useColorModeValue('secondaryGray.300', 'whiteAlpha.100')
+  const activeColor = useColorModeValue('brand.700', 'white')
+  const textColor = useColorModeValue('secondaryGray.700', 'secondaryGray.500')
+  const activeBg = useColorModeValue('brand.50', 'whiteAlpha.100')
+  const hoverBg = useColorModeValue('secondaryGray.300', 'whiteAlpha.50')
 
-  const body = (
-    <Flex
-      align="center"
-      py="5px"
-      ps={collapsed ? '0' : '10px'}
-      justify={collapsed ? 'center' : 'start'}
-      borderRadius="12px"
-      _hover={{ bg: hoverBg }}
-      cursor="pointer"
-      data-tour={tour}
-      onClick={onClick}
-    >
-      <Flex align="center" flex="1" justify={collapsed ? 'center' : 'start'} position="relative">
-        <Icon as={icon} w="20px" h="20px" color={active ? activeIcon : textColor} me={collapsed ? '0' : '18px'} />
+  const link = (
+    <NavLink to={to} onClick={onClick}>
+      <Flex
+        position="relative"
+        align="center"
+        h="40px"
+        px={collapsed ? '0' : '12px'}
+        mb="2px"
+        justify={collapsed ? 'center' : 'start'}
+        borderRadius="10px"
+        color={active ? activeColor : textColor}
+        bg={active ? activeBg : 'transparent'}
+        _hover={{ bg: active ? activeBg : hoverBg, color: activeColor }}
+        transition="background .15s ease, color .15s ease"
+        data-tour={tour}
+      >
+        {/* the brand bar slides between items when the route changes */}
+        {active && (
+          <Box as={motion.div} layoutId={collapsed ? 'nav-bar-collapsed' : 'nav-bar'} position="absolute" left="-12px" top="8px" bottom="8px" w="4px" borderRightRadius="4px" bg="brand.500" />
+        )}
+        <Icon as={icon} w="20px" h="20px" me={collapsed ? '0' : '12px'} flexShrink={0} />
         {!collapsed && (
-          <Text me="auto" color={active ? activeColor : textColor} fontWeight={active ? 'bold' : 'normal'} fontSize="md">
+          <Text flex="1" fontSize="14px" fontWeight={active ? '700' : '500'} noOfLines={1}>
             {title}
           </Text>
         )}
         {!!badge && (
           <Badge
-            colorScheme="red"
-            variant="solid"
-            borderRadius="full"
+            bg="red.500"
+            color="white"
+            px="6px"
+            py="3px"
             fontSize="10px"
             position={collapsed ? 'absolute' : 'static'}
-            top="-6px"
-            right="10px"
-            me={collapsed ? '0' : '8px'}
+            top="2px"
+            right="8px"
           >
             {badge > 99 ? '99+' : badge}
           </Badge>
         )}
       </Flex>
-      {!collapsed && <Box h="36px" w="4px" bg={active ? brandColor : 'transparent'} borderRadius="5px" />}
-    </Flex>
+    </NavLink>
   )
 
-  const link = to ? <NavLink to={to}>{body}</NavLink> : body
   return collapsed ? (
     <Tooltip label={title} placement="right" hasArrow>
       <Box>{link}</Box>
@@ -113,176 +94,150 @@ function NavItemLink({
 export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, logout } = useAuthStore()
-  const [openSection, setOpenSection] = useState<string | null>('main')
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
-  const cancelRef = useRef<HTMLButtonElement>(null)
+  const { user } = useAuthStore()
+  const [closed, setClosed] = useState<Set<string>>(new Set())
   const textColor = useColorModeValue('secondaryGray.900', 'white')
-  const sectionColor = useColorModeValue('gray.700', 'white')
+  const divider = useColorModeValue('secondaryGray.100', 'whiteAlpha.100')
 
   // Fetch unread message count
   const { data: unreadData } = useQuery({
     queryKey: ['unread-messages'],
     queryFn: async () => (await api.get('/messaging/unread-count')).data,
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 30000,
     enabled: !!user,
   })
   const unreadCount = unreadData?.unread_count || 0
 
   const sections = getNavSections(user)
-  const footerItems = [
-    { title: 'My Profile', url: '/profile', icon: MdPerson, tour: 'nav-profile' },
-    { title: 'Attendance', url: '/attendance', icon: MdAccessTime },
-    ...(getUserRole(user) === 'admin' ? [{ title: 'Settings', url: '/admin/settings', icon: MdSettings }] : []),
-    { title: 'Help', url: '/help', icon: MdHelpOutline, tour: 'nav-help' },
-  ]
 
   // Longest nav URL that matches the current path is the active one (so /inventory/products doesn't also light up /inventory)
-  const allUrls = [...sections.flatMap((s) => s.items.map((i) => i.url)), ...footerItems.map((i) => i.url)]
-  const activeUrl = allUrls
+  const activeUrl = sections
+    .flatMap((s) => s.items.map((i) => i.url))
     .filter((url) => location.pathname === url || (url !== '/' && location.pathname.startsWith(url + '/')))
     .sort((a, b) => b.length - a.length)[0]
 
-  const handleLogout = () => {
-    setShowLogoutConfirm(false)
-    activityLogger.logout()
-    logout()
-    navigate('/login')
-  }
+  const toggle = (id: string) =>
+    setClosed((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   return (
-    <Flex direction="column" h="100%" pt="25px" px={collapsed ? '12px' : '16px'}>
+    <Flex direction="column" h="100%">
       <Flex
         align="center"
         justify={collapsed ? 'center' : 'start'}
         gap="12px"
-        mb="20px"
+        h="76px"
+        px={collapsed ? '0' : '20px'}
+        borderBottom="1px solid"
+        borderColor={divider}
         cursor="pointer"
+        flexShrink={0}
         onClick={() => {
           navigate('/')
           onNavigate?.()
         }}
         data-tour="sidebar-logo"
       >
-        <Image src="/kountry-sidebarilogo.png" alt="Kountry Eyecare" h="40px" w="40px" borderRadius="8px" />
+        <Image src="/kountry-sidebarilogo.png" alt="Kountry Eyecare" h="40px" w="40px" borderRadius="10px" />
         {!collapsed && (
           <Box minW="0">
-            <Text fontWeight="bold" fontSize="lg" color={textColor} noOfLines={1}>
+            <Text fontWeight="800" fontSize="16px" letterSpacing="-0.02em" color={textColor} noOfLines={1}>
               Kountry Eyecare
             </Text>
-            <Text fontSize="sm" color="secondaryGray.600" noOfLines={1}>
+            <Text fontSize="12px" fontWeight="500" color="secondaryGray.600" noOfLines={1}>
               {getRoleDisplayName(user)}
             </Text>
           </Box>
         )}
       </Flex>
-      <HSeparator mb="16px" />
 
-      <Box flex="1" overflowY="auto" overflowX="hidden" className="thin-scrollbar" mx="-4px" px="4px">
-        {sections.map((section) =>
-          collapsed ? (
-            <Box key={section.id} mb="8px">
-              {section.items.map((item) => (
-                <NavItemLink
-                  key={item.url}
-                  to={item.url}
-                  title={item.title}
-                  icon={item.icon}
-                  active={activeUrl === item.url}
-                  collapsed
-                  badge={item.url === '/messages' ? unreadCount : undefined}
-                />
-              ))}
-              <HSeparator mt="8px" />
-            </Box>
-          ) : (
-            <Box key={section.id} mb="4px">
-              <Flex
-                as="button"
-                type="button"
-                w="100%"
-                align="center"
-                ps="10px"
-                pe="8px"
-                py="10px"
-                onClick={() => setOpenSection(openSection === section.id ? null : section.id)}
-                data-tour={`section-${section.id}`}
-              >
-                <Icon as={section.icon} w="18px" h="18px" color="secondaryGray.600" me="14px" />
-                <Text flex="1" textAlign="left" fontSize="sm" fontWeight="bold" textTransform="uppercase" letterSpacing="0.5px" color={sectionColor}>
-                  {section.title}
-                </Text>
-                <Icon
-                  as={MdChevronRight}
-                  color="secondaryGray.600"
-                  transform={openSection === section.id ? 'rotate(90deg)' : 'none'}
-                  transition="transform 0.2s"
-                />
-              </Flex>
-              <Collapse in={openSection === section.id} animateOpacity>
-                <Box ps="8px">
-                  {section.items.map((item) => (
-                    <NavItemLink
-                      key={item.url}
-                      to={item.url}
-                      title={item.title}
-                      icon={item.icon}
-                      active={activeUrl === item.url}
-                      collapsed={false}
-                      tour={tourId(item.title)}
-                      badge={item.url === '/messages' ? unreadCount : undefined}
-                      onClick={onNavigate}
-                    />
-                  ))}
-                </Box>
+      <Box flex="1" overflowY="auto" overflowX="hidden" className="thin-scrollbar" px="12px" py="14px">
+        {sections.map((section, index) => {
+          const isOpen = !closed.has(section.id)
+          return (
+            <Box key={section.id} mb="10px">
+              {collapsed ? (
+                index > 0 && <Box h="1px" bg={divider} mx="8px" mb="10px" />
+              ) : (
+                <Flex
+                  as="button"
+                  type="button"
+                  w="100%"
+                  align="center"
+                  px="12px"
+                  py="6px"
+                  mb="2px"
+                  color="secondaryGray.500"
+                  _hover={{ color: 'secondaryGray.700' }}
+                  onClick={() => toggle(section.id)}
+                  data-tour={`section-${section.id}`}
+                >
+                  <Text flex="1" textAlign="left" fontSize="11px" fontWeight="700" textTransform="uppercase" letterSpacing="0.1em">
+                    {section.title}
+                  </Text>
+                  <Icon as={MdExpandMore} transform={isOpen ? 'none' : 'rotate(-90deg)'} transition="transform 0.2s" />
+                </Flex>
+              )}
+              <Collapse in={collapsed || isOpen} animateOpacity style={{ overflow: 'visible' }}>
+                {section.items.map((item) => (
+                  <NavItemLink
+                    key={item.url}
+                    to={item.url}
+                    title={item.title}
+                    icon={item.icon}
+                    active={activeUrl === item.url}
+                    collapsed={collapsed}
+                    tour={collapsed ? undefined : tourId(item.title)}
+                    badge={item.url === '/messages' ? unreadCount : undefined}
+                    onClick={onNavigate}
+                  />
+                ))}
               </Collapse>
             </Box>
-          ),
-        )}
+          )
+        })}
       </Box>
 
-      <HSeparator my="12px" />
-      <Box pb="20px">
-        {footerItems.map((item) => (
-          <NavItemLink
-            key={item.url}
-            to={item.url}
-            title={item.title}
-            icon={item.icon}
-            active={activeUrl === item.url}
-            collapsed={collapsed}
-            tour={item.tour}
-            onClick={onNavigate}
-          />
-        ))}
-        <NavItemLink title="Logout" icon={MdLogout} active={false} collapsed={collapsed} onClick={() => setShowLogoutConfirm(true)} />
-      </Box>
-
-      <AlertDialog isOpen={showLogoutConfirm} leastDestructiveRef={cancelRef} onClose={() => setShowLogoutConfirm(false)} isCentered>
-        <AlertDialogOverlay>
-          <AlertDialogContent borderRadius="20px">
-            <AlertDialogHeader>Confirm Logout</AlertDialogHeader>
-            <AlertDialogBody color="secondaryGray.600">
-              Are you sure you want to logout? You will need to sign in again to access the system.
-            </AlertDialogBody>
-            <AlertDialogFooter gap="8px">
-              <Button ref={cancelRef} variant="light" onClick={() => setShowLogoutConfirm(false)}>
-                Cancel
-              </Button>
-              <Button colorScheme="red" onClick={handleLogout}>
-                Yes, Logout
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialogOverlay>
-      </AlertDialog>
+      {/* Help card (profile, attendance, settings and logout live in the navbar profile menu) */}
+      {!collapsed && (
+        <Box p="12px" flexShrink={0}>
+          <Box position="relative" overflow="hidden" borderRadius="16px" p="16px" color="white" bg="linear-gradient(135deg, #14472A 0%, #3E8141 100%)" data-tour="nav-help">
+            <Box position="absolute" top="-30px" right="-30px" w="110px" h="110px" borderRadius="full" bg="whiteAlpha.200" />
+            <Box position="absolute" bottom="-40px" right="20px" w="80px" h="80px" borderRadius="full" bg="rgba(12,192,223,0.25)" filter="blur(12px)" />
+            <Text position="relative" fontWeight="700" fontSize="14px">
+              Need a hand?
+            </Text>
+            <Text position="relative" fontSize="12px" color="whiteAlpha.800" mt="2px" mb="12px">
+              Guides, shortcuts and page tutorials.
+            </Text>
+            <Button
+              position="relative"
+              size="sm"
+              bg="white"
+              color="brand.700"
+              _hover={{ bg: 'whiteAlpha.900' }}
+              leftIcon={<MdHelpOutline />}
+              onClick={() => {
+                navigate('/help')
+                onNavigate?.()
+              }}
+            >
+              Help centre
+            </Button>
+          </Box>
+        </Box>
+      )}
     </Flex>
   )
 }
 
 export default function Sidebar({ collapsed }: { collapsed: boolean }) {
   const bg = useColorModeValue('white', 'navy.800')
-  const shadow = useColorModeValue('14px 17px 40px 4px rgba(112, 144, 176, 0.08)', 'unset')
+  const border = useColorModeValue('secondaryGray.100', 'whiteAlpha.100')
 
   return (
     <Box
@@ -293,8 +248,9 @@ export default function Sidebar({ collapsed }: { collapsed: boolean }) {
       h="100vh"
       w={`${collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH}px`}
       bg={bg}
-      boxShadow={shadow}
-      transition="width 0.2s linear"
+      borderRight="1px solid"
+      borderColor={border}
+      transition="width 0.2s ease"
       zIndex="10"
     >
       <SidebarContent collapsed={collapsed} />
@@ -309,8 +265,8 @@ export function SidebarDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: (
     <Drawer isOpen={isOpen} onClose={onClose} placement="left">
       <DrawerOverlay />
       <DrawerContent w="285px" maxW="285px" bg={bg}>
-        <DrawerCloseButton zIndex="3" />
-        <DrawerBody px="0" pb="0">
+        <DrawerCloseButton zIndex="3" top="22px" />
+        <DrawerBody p="0">
           <SidebarContent collapsed={false} onNavigate={onClose} />
         </DrawerBody>
       </DrawerContent>

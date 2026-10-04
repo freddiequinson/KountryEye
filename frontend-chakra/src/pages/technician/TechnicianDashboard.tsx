@@ -4,7 +4,7 @@ import { Box, Button, HStack, SimpleGrid, Table, Tbody, Td, Text, Th, Thead, Tr 
 import { MdAccessTime, MdAdd, MdArrowForward, MdAttachMoney, MdDescription, MdPeople, MdShowChart, MdVisibility } from 'react-icons/md'
 import api from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
-import PageHeader from '@/components/PageHeader'
+import PageHero from '@/components/PageHero'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
 import { EmptyState } from '@/components/ui'
@@ -38,7 +38,7 @@ export default function TechnicianDashboard() {
 
   return (
     <>
-      <PageHeader
+      <PageHero
         title="Technician Dashboard"
         description={`Welcome back, ${user?.first_name}! Manage referrals and scans.`}
         actions={

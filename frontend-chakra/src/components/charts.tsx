@@ -10,26 +10,28 @@ type Formatter = (value: number) => string
 function useBaseOptions(): ApexOptions {
   const { colorMode } = useColorMode()
   return {
-    chart: { toolbar: { show: false }, fontFamily: 'DM Sans, sans-serif', background: 'transparent', foreColor: colorMode === 'dark' ? '#A3AED0' : '#707EAE' },
+    chart: { toolbar: { show: false }, fontFamily: 'Plus Jakarta Sans, sans-serif', background: 'transparent', foreColor: colorMode === 'dark' ? '#A3AED0' : '#64748B' },
     theme: { mode: colorMode },
     colors: CHART_COLORS,
-    grid: { borderColor: colorMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#E2E8F0', strokeDashArray: 4 },
+    grid: { borderColor: colorMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#E4E9F0', strokeDashArray: 4 },
     dataLabels: { enabled: false },
-    legend: { position: 'bottom' },
+    legend: { position: 'bottom', fontWeight: 600, markers: { size: 5 }, itemMargin: { horizontal: 10 } },
     tooltip: { theme: colorMode },
   }
 }
 
 export function PieChart({ labels, values, height = 256, formatter }: { labels: string[]; values: number[]; height?: number; formatter?: Formatter }) {
   const base = useBaseOptions()
+  const { colorMode } = useColorMode()
   const options: ApexOptions = {
     ...base,
     labels,
-    dataLabels: { enabled: true, formatter: (pct: number) => `${pct.toFixed(0)}%` },
-    tooltip: { ...base.tooltip, y: formatter ? { formatter } : undefined },
-    stroke: { width: 0 },
+    dataLabels: { enabled: true, formatter: (pct: number) => `${pct.toFixed(0)}%`, dropShadow: { enabled: false }, style: { fontSize: '12px', fontWeight: 700 } },
+    plotOptions: { pie: { donut: { size: '62%' }, expandOnClick: false } },
+    tooltip: { ...base.tooltip, ...(formatter ? { y: { formatter } } : {}) },
+    stroke: { width: 3, colors: [colorMode === 'dark' ? '#111C44' : '#ffffff'] },
   }
-  return <Chart type="pie" series={values} options={options} height={height} />
+  return <Chart type="donut" series={values} options={options} height={height} />
 }
 
 export function BarChart({
@@ -54,9 +56,9 @@ export function BarChart({
     ...base,
     colors: colors || base.colors,
     plotOptions: { bar: { horizontal, borderRadius: 6, columnWidth: '45%', barHeight: '60%', distributed } },
-    xaxis: { categories, labels: horizontal && formatter ? { formatter: (v: string) => formatter(Number(v)) } : undefined },
-    yaxis: { labels: { formatter: !horizontal && formatter ? formatter : undefined, maxWidth: 140 } },
-    tooltip: { ...base.tooltip, y: formatter ? { formatter } : undefined },
+    xaxis: { categories, ...(horizontal && formatter ? { labels: { formatter: (v: string) => formatter(Number(v)) } } : {}) },
+    yaxis: { labels: { maxWidth: 140, ...(!horizontal && formatter ? { formatter } : {}) } },
+    tooltip: { ...base.tooltip, ...(formatter ? { y: { formatter } } : {}) },
     legend: { ...base.legend, show: series.length > 1 },
   }
   return <Chart type="bar" series={series} options={options} height={height} />
@@ -77,12 +79,13 @@ export function DualAreaChart({
   const base = useBaseOptions()
   const options: ApexOptions = {
     ...base,
-    stroke: { curve: 'smooth', width: 2 },
+    stroke: { curve: 'smooth', width: 2.5 },
     fill: { type: 'gradient', gradient: { opacityFrom: 0.5, opacityTo: 0 } },
-    xaxis: { categories },
+    // at most ~8 date labels, kept horizontal
+    xaxis: { categories, tickAmount: Math.min(8, categories.length), labels: { rotate: 0, hideOverlappingLabels: true }, axisBorder: { show: false }, axisTicks: { show: false }, tooltip: { enabled: false } },
     yaxis: [
-      { title: { text: left.name }, labels: { formatter: left.formatter } },
-      { opposite: true, title: { text: right.name }, labels: { formatter: right.formatter } },
+      { min: 0, forceNiceScale: true, decimalsInFloat: 0, labels: left.formatter ? { formatter: left.formatter } : {} },
+      { opposite: true, min: 0, forceNiceScale: true, labels: right.formatter ? { formatter: right.formatter } : {} },
     ],
     tooltip: { ...base.tooltip, shared: true },
   }

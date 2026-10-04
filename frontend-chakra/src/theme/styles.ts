@@ -1,4 +1,5 @@
 import { mode, type StyleFunctionProps } from "@chakra-ui/theme-tools";
+const FONT = `"Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif`;
 // KountryEye green (#4C9B4F) replaces Horizon's purple brand scale
 const brand = {
   50: "#EEF7EE",
@@ -30,16 +31,17 @@ export const globalStyles = {
       800: "#055462",
       900: "#033038",
     },
+    // Neutral scale. Token names are Horizon's; values are darker so muted text stays readable.
     secondaryGray: {
-      100: "#E0E5F2",
-      200: "#E1E9F8",
-      300: "#F4F7FE",
-      400: "#E9EDF7",
-      500: "#8F9BBA",
-      600: "#A3AED0",
-      700: "#707EAE",
-      800: "#707EAE",
-      900: "#1B2559",
+      100: "#E4E9F0", // borders
+      200: "#EDF1F5",
+      300: "#F4F6F9", // page background, subtle fills
+      400: "#DDE3EC",
+      500: "#7A889C",
+      600: "#64748B", // muted text
+      700: "#475569",
+      800: "#334155",
+      900: "#0F1B2D", // ink
     },
     red: {
       100: "#FEEFEE",
@@ -74,23 +76,34 @@ export const globalStyles = {
       100: "#FAFCFE",
     },
   },
+  fonts: {
+    heading: FONT,
+    body: FONT,
+  },
+  shadows: {
+    card: "0 1px 2px rgba(15, 27, 45, 0.04), 0 12px 32px -16px rgba(15, 27, 45, 0.12)",
+    cardHover: "0 2px 4px rgba(15, 27, 45, 0.05), 0 20px 40px -18px rgba(15, 27, 45, 0.22)",
+    pop: "0 12px 40px -8px rgba(15, 27, 45, 0.22)",
+  },
   styles: {
     global: (props: StyleFunctionProps) => ({
       body: {
         overflowX: "hidden",
         bg: mode("secondaryGray.300", "navy.900")(props),
-        fontFamily: "DM Sans",
-        letterSpacing: "-0.5px",
+        color: mode("secondaryGray.900", "white")(props),
+        fontFamily: FONT,
+        letterSpacing: "0",
+        wordSpacing: "0.06em",
+        fontFeatureSettings: '"tnum" 1, "cv11" 1',
+        WebkitFontSmoothing: "antialiased",
       },
-      input: {
-        color: "gray.700",
-      },
-      html: {
-        fontFamily: "DM Sans",
-      },
+      "::selection": { background: "brand.200" },
       ".thin-scrollbar": {
         scrollbarWidth: "thin",
-        scrollbarColor: "rgba(135, 140, 189, 0.3) transparent",
+        scrollbarColor: "rgba(100, 116, 139, 0.3) transparent",
+      },
+      "@media (prefers-reduced-motion: reduce)": {
+        "*": { animationDuration: "0.01ms !important", transitionDuration: "0.01ms !important" },
       },
     }),
   },

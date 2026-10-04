@@ -25,7 +25,7 @@ import {
   ModalHeader,
   ModalOverlay,
   SimpleGrid,
-  Spinner,
+  Skeleton,
   Td,
   Text,
   Tr,
@@ -34,7 +34,7 @@ import {
   type InputGroupProps,
   type ModalProps,
 } from '@chakra-ui/react'
-import { MdCreditCard, MdPayments, MdReceipt, MdSearch } from 'react-icons/md'
+import { MdCreditCard, MdInbox, MdPayments, MdReceipt, MdSearch } from 'react-icons/md'
 
 // Label + control, the shadcn `<div className="space-y-2"><Label/>{control}</div>` pattern.
 export function Field({
@@ -102,28 +102,55 @@ export function SearchInput({
   )
 }
 
-// Full-width table row for loading / empty states.
+// Full-width table row for loading / empty states. Loading shows skeleton rows shaped like the table.
 export function TableMessageRow({ colSpan, loading, children }: { colSpan: number; loading?: boolean; children?: ReactNode }) {
+  if (loading) {
+    return (
+      <>
+        {[0, 1, 2, 3, 4].map((r) => (
+          <Tr key={r}>
+            {Array.from({ length: colSpan }, (_, c) => (
+              <Td key={c}>
+                <Skeleton h="14px" borderRadius="6px" w={c === 0 ? '70%' : `${45 + ((r * 7 + c * 13) % 40)}%`} />
+              </Td>
+            ))}
+          </Tr>
+        ))}
+      </>
+    )
+  }
   return (
-    <Tr>
-      <Td colSpan={colSpan} textAlign="center" py="32px" color="secondaryGray.600">
-        {loading ? <Spinner size="sm" color="brand.500" /> : children}
+    <Tr _hover={{ bg: 'transparent' }}>
+      <Td colSpan={colSpan} p="0">
+        <EmptyState>{children}</EmptyState>
       </Td>
     </Tr>
   )
 }
 
-// Centered empty / loading placeholder outside tables.
-export function EmptyState({ icon, title, children }: { icon?: React.ElementType; title?: ReactNode; children?: ReactNode }) {
+// Centered empty placeholder: icon chip on a dotted halo, title and a line of help or an action.
+export function EmptyState({ icon = MdInbox, title, children }: { icon?: React.ElementType; title?: ReactNode; children?: ReactNode }) {
+  const chipBg = useColorModeValue('white', 'navy.700')
+  const ring = useColorModeValue('secondaryGray.400', 'whiteAlpha.300')
   return (
-    <Flex direction="column" align="center" textAlign="center" py="40px" color="secondaryGray.600">
-      {icon && <Icon as={icon} w="48px" h="48px" mb="12px" opacity={0.5} />}
+    <Flex direction="column" align="center" textAlign="center" py="44px" px="16px">
+      <Flex position="relative" w="84px" h="84px" align="center" justify="center" mb="14px">
+        <Box position="absolute" inset="0" borderRadius="full" border="1.5px dashed" borderColor={ring} />
+        <Box position="absolute" inset="10px" borderRadius="full" bg="brand.50" _dark={{ bg: 'whiteAlpha.100' }} />
+        <Flex position="relative" w="44px" h="44px" borderRadius="13px" bg={chipBg} boxShadow="card" align="center" justify="center" color="brand.600" _dark={{ color: 'brand.300' }}>
+          <Icon as={icon} w="22px" h="22px" />
+        </Flex>
+      </Flex>
       {title && (
-        <Text fontWeight="600" mb="4px">
+        <Text fontWeight="700" fontSize="15px" mb="2px">
           {title}
         </Text>
       )}
-      {children && <Box fontSize="sm">{children}</Box>}
+      {children && (
+        <Box fontSize="sm" fontWeight="500" color="secondaryGray.600" maxW="360px">
+          {children}
+        </Box>
+      )}
     </Flex>
   )
 }
@@ -232,9 +259,9 @@ export function Pagination({
 
 // Wraps a Chakra <Table> so wide tables scroll horizontally on small screens.
 export function TableBox({ children, ...rest }: React.ComponentProps<typeof Box>) {
-  const borderColor = useColorModeValue('gray.100', 'whiteAlpha.100')
+  const borderColor = useColorModeValue('secondaryGray.100', 'whiteAlpha.100')
   return (
-    <Box overflowX="auto" border="1px solid" borderColor={borderColor} borderRadius="16px" {...rest}>
+    <Box overflowX="auto" border="1px solid" borderColor={borderColor} borderRadius="14px" {...rest}>
       {children}
     </Box>
   )

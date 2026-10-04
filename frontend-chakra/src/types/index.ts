@@ -173,4 +173,5 @@ export interface DashboardStats {
     month: number;
   };
   pending_consultations: number;
+  in_consultation?: number
 }

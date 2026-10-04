@@ -4,8 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Avatar,
   Box,
-  Breadcrumb,
-  BreadcrumbItem,
   Flex,
   Icon,
   IconButton,
@@ -14,7 +12,6 @@ import {
   InputLeftElement,
   Menu,
   MenuButton,
-  MenuDivider,
   MenuItem,
   MenuList,
   Tag,
@@ -26,19 +23,19 @@ import {
 } from '@chakra-ui/react'
 import { IoMdMoon, IoMdSunny } from 'react-icons/io'
 import { IoMenuOutline } from 'react-icons/io5'
-import { MdBusiness, MdExpandMore, MdMenuOpen, MdSearch } from 'react-icons/md'
+import { MdAccessTime, MdBusiness, MdExpandMore, MdHelpOutline, MdLogout, MdMenuOpen, MdPerson, MdSearch, MdSettings } from 'react-icons/md'
 import NotificationDropdown from '@/components/navbar/NotificationDropdown'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/hooks/use-toast'
 import api from '@/lib/api'
-import { getPageTitle, getRoleDisplayName, hasPermission } from '@/config/nav'
+import { getPageTitle, getRoleDisplayName, getUserRole, hasPermission } from '@/config/nav'
+import { activityLogger } from '@/lib/activityLogger'
+import { ConfirmDialog } from '@/components/ui'
 
 function BranchSwitcher() {
   const { user, setUser } = useAuthStore()
   const queryClient = useQueryClient()
   const { toast } = useToast()
-  const menuBg = useColorModeValue('white', 'navy.800')
-
   // Fetch user's accessible branches
   const { data: userBranches = [] } = useQuery<{ id: number; name: string }[]>({
     queryKey: ['user-branches'],
@@ -63,7 +60,7 @@ function BranchSwitcher() {
   const branchId = typeof user.branch === 'object' ? user.branch.id : null
 
   const tag = (
-    <Tag size="lg" borderRadius="full" colorScheme="brand" variant="subtle" cursor={userBranches.length > 1 ? 'pointer' : 'default'}>
+    <Tag size="lg" h="38px" borderRadius="10px" colorScheme="brand" variant="subtle" cursor={userBranches.length > 1 ? 'pointer' : 'default'}>
       <TagLeftIcon as={MdBusiness} />
       <TagLabel fontSize="xs" fontWeight="600" maxW="140px">
         {branchName}
@@ -77,12 +74,11 @@ function BranchSwitcher() {
   return (
     <Menu placement="bottom-end">
       <MenuButton me="10px">{tag}</MenuButton>
-      <MenuList bg={menuBg} border="none" borderRadius="16px" boxShadow="lg" p="8px">
+      <MenuList>
         {userBranches.map((branch) => (
           <MenuItem
             key={branch.id}
             icon={<MdBusiness />}
-            borderRadius="10px"
             fontWeight={branch.id === branchId ? 'bold' : 'normal'}
             color={branch.id === branchId ? 'brand.500' : undefined}
             onClick={() => switchBranchMutation.mutate(branch.id)}
@@ -98,137 +94,161 @@ function BranchSwitcher() {
 export default function Navbar({ onOpenDrawer, onToggleCollapse }: { onOpenDrawer: () => void; onToggleCollapse: () => void }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user } = useAuthStore()
+  const { user, logout } = useAuthStore()
   const { colorMode, toggleColorMode } = useColorMode()
   const [search, setSearch] = useState('')
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
-  const mainText = useColorModeValue('navy.700', 'white')
-  const secondaryText = useColorModeValue('gray.700', 'white')
-  const navbarBg = useColorModeValue('rgba(244, 247, 254, 0.2)', 'rgba(11,20,55,0.5)')
-  const menuBg = useColorModeValue('white', 'navy.800')
-  const navbarIcon = useColorModeValue('gray.400', 'white')
+  const mainText = useColorModeValue('secondaryGray.900', 'white')
+  const navbarBg = useColorModeValue('rgba(255, 255, 255, 0.82)', 'rgba(17, 28, 68, 0.82)')
+  const border = useColorModeValue('secondaryGray.100', 'whiteAlpha.100')
+  const iconColor = useColorModeValue('secondaryGray.700', 'white')
   const searchBg = useColorModeValue('secondaryGray.300', 'navy.900')
-  const shadow = useColorModeValue('14px 17px 40px 4px rgba(112, 144, 176, 0.18)', '14px 17px 40px 4px rgba(112, 144, 176, 0.06)')
+  const hoverBg = useColorModeValue('secondaryGray.300', 'whiteAlpha.100')
 
   const pageTitle = getPageTitle(location.pathname)
   const canSearch = hasPermission(user, ['analytics.view'])
   const fullName = `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim()
+  const isAdmin = getUserRole(user) === 'admin'
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (search.trim()) navigate(`/admin/search?q=${encodeURIComponent(search.trim())}`)
   }
 
+  const handleLogout = () => {
+    setShowLogoutConfirm(false)
+    activityLogger.logout()
+    logout()
+    navigate('/login')
+  }
+
+  const menuLinks = [
+    { label: 'My Profile', icon: MdPerson, to: '/profile' },
+    { label: 'Attendance', icon: MdAccessTime, to: '/attendance' },
+    ...(isAdmin ? [{ label: 'Settings', icon: MdSettings, to: '/admin/settings' }] : []),
+    { label: 'Help', icon: MdHelpOutline, to: '/help' },
+  ]
+
   return (
     <Box
       position="sticky"
-      top={{ base: '12px', md: '16px', xl: '20px' }}
+      top={{ base: '8px', md: '14px' }}
       zIndex="5"
       bg={navbarBg}
-      backdropFilter="blur(20px)"
+      backdropFilter="saturate(180%) blur(16px)"
+      border="1px solid"
+      borderColor={border}
       borderRadius="16px"
-      px={{ base: '12px', md: '10px' }}
-      ps={{ xl: '12px' }}
-      py="8px"
-      minH="75px"
-      mb="20px"
+      boxShadow="card"
+      px="10px"
+      h="64px"
+      mb="24px"
     >
-      <Flex w="100%" direction={{ base: 'column', md: 'row' }} align={{ md: 'center' }} gap={{ base: '8px', md: '0' }}>
-        <Flex align="center" minW="0">
-          <IconButton
-            aria-label="Open menu"
-            display={{ base: 'inline-flex', lg: 'none' }}
-            variant="ghost"
-            me="8px"
-            icon={<Icon as={IoMenuOutline} w="24px" h="24px" color={navbarIcon} />}
-            onClick={onOpenDrawer}
-          />
-          <IconButton
-            aria-label="Collapse sidebar"
-            display={{ base: 'none', lg: 'inline-flex' }}
-            variant="ghost"
-            me="8px"
-            icon={<Icon as={MdMenuOpen} w="24px" h="24px" color={navbarIcon} />}
-            onClick={onToggleCollapse}
-          />
-          <Box minW="0">
-            <Breadcrumb fontSize="sm" color={secondaryText} mb="2px">
-              <BreadcrumbItem>
-                <Text>Pages</Text>
-              </BreadcrumbItem>
-              <BreadcrumbItem isCurrentPage>
-                <Text>{pageTitle}</Text>
-              </BreadcrumbItem>
-            </Breadcrumb>
-            <Text color={mainText} fontWeight="bold" fontSize={{ base: '24px', md: '30px' }} lineHeight="1.2" noOfLines={1}>
-              {pageTitle}
-            </Text>
-          </Box>
+      <Flex h="100%" align="center" gap="8px">
+        <IconButton
+          aria-label="Open menu"
+          display={{ base: 'inline-flex', lg: 'none' }}
+          variant="ghost"
+          icon={<Icon as={IoMenuOutline} w="22px" h="22px" color={iconColor} />}
+          onClick={onOpenDrawer}
+        />
+        <IconButton
+          aria-label="Collapse sidebar"
+          display={{ base: 'none', lg: 'inline-flex' }}
+          variant="ghost"
+          icon={<Icon as={MdMenuOpen} w="22px" h="22px" color={iconColor} />}
+          onClick={onToggleCollapse}
+        />
+        <Flex align="center" gap="8px" minW="0" fontSize="sm" fontWeight="500" display={{ base: 'none', sm: 'flex' }}>
+          <Text color="secondaryGray.500" display={{ base: 'none', md: 'block' }}>
+            Kountry Eyecare
+          </Text>
+          <Text color="secondaryGray.400" display={{ base: 'none', md: 'block' }}>
+            /
+          </Text>
+          <Text color={mainText} fontWeight="700" noOfLines={1}>
+            {pageTitle}
+          </Text>
         </Flex>
 
-        <Flex ms="auto" w={{ base: '100%', md: 'auto' }} align="center" bg={menuBg} p="10px" borderRadius="30px" boxShadow={shadow}>
+        <Flex ms="auto" align="center" gap="6px" minW="0">
           {canSearch && (
-            <form onSubmit={handleSearch} style={{ flex: 1 }}>
-              <InputGroup w={{ base: '100%', md: '200px' }} me="10px">
-                <InputLeftElement pointerEvents="none">
-                  <Icon as={MdSearch} color="gray.400" />
+            <Box as="form" onSubmit={handleSearch} display={{ base: 'none', md: 'block' }}>
+              <InputGroup w={{ md: '200px', xl: '260px' }}>
+                <InputLeftElement pointerEvents="none" h="38px">
+                  <Icon as={MdSearch} color="secondaryGray.500" />
                 </InputLeftElement>
                 <Input
                   variant="search"
+                  h="38px"
                   fontSize="sm"
-                  bg={searchBg}
                   fontWeight="500"
-                  borderRadius="30px"
-                  placeholder="Search..."
-                  _placeholder={{ color: 'gray.400', fontSize: '14px' }}
+                  bg={searchBg}
+                  borderRadius="10px"
+                  placeholder="Search patients, sales..."
+                  _placeholder={{ color: 'secondaryGray.500' }}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </InputGroup>
-            </form>
+            </Box>
           )}
-          <Box ms={canSearch ? '10px' : 'auto'} display="flex" alignItems="center">
+          <Box display={{ base: 'none', sm: 'block' }}>
             <BranchSwitcher />
-            <NotificationDropdown />
-            <IconButton
-              aria-label="Toggle dark mode"
-              variant="ghost"
-              size="sm"
-              borderRadius="full"
-              me="10px"
-              icon={<Icon as={colorMode === 'light' ? IoMdMoon : IoMdSunny} color={navbarIcon} w="18px" h="18px" />}
-              onClick={toggleColorMode}
-            />
-            <Menu placement="bottom-end">
-              <MenuButton>
-                <Avatar size="sm" w="40px" h="40px" name={fullName || 'User'} src={user?.avatar_url} bg="brand.500" color="white" />
-              </MenuButton>
-              <MenuList boxShadow={shadow} p="0px" mt="10px" borderRadius="20px" bg={menuBg} border="none">
-                <Box px="14px" pt="16px" pb="10px">
-                  <Text fontSize="sm" fontWeight="700" color={mainText}>
-                    👋&nbsp; Hey, {user?.first_name}
+          </Box>
+          <NotificationDropdown />
+          <IconButton
+            aria-label="Toggle dark mode"
+            variant="ghost"
+            icon={<Icon as={colorMode === 'light' ? IoMdMoon : IoMdSunny} color={iconColor} w="18px" h="18px" />}
+            onClick={toggleColorMode}
+          />
+
+          <Menu placement="bottom-end">
+            <MenuButton borderRadius="12px" p="4px" pe={{ md: '8px' }} _hover={{ bg: hoverBg }} _expanded={{ bg: hoverBg }} transition="background .15s ease" data-tour="nav-profile">
+              <Flex align="center" gap="10px">
+                <Avatar w="36px" h="36px" size="sm" name={fullName || 'User'} src={user?.avatar_url} bg="brand.600" color="white" borderRadius="10px" />
+                <Box textAlign="left" display={{ base: 'none', md: 'block' }} maxW="140px">
+                  <Text fontSize="13px" fontWeight="700" color={mainText} lineHeight="1.2" noOfLines={1}>
+                    {fullName || 'User'}
                   </Text>
-                  <Text fontSize="xs" color="secondaryGray.600">
+                  <Text fontSize="11px" fontWeight="500" color="secondaryGray.600" lineHeight="1.3" noOfLines={1}>
                     {getRoleDisplayName(user)}
                   </Text>
                 </Box>
-                <MenuDivider />
-                <Box p="8px">
-                  <MenuItem borderRadius="8px" onClick={() => navigate('/profile')}>
-                    My Profile
-                  </MenuItem>
-                  <MenuItem borderRadius="8px" onClick={() => navigate('/attendance')}>
-                    Attendance
-                  </MenuItem>
-                  <MenuItem borderRadius="8px" onClick={() => navigate('/help')}>
-                    Help
-                  </MenuItem>
+                <Icon as={MdExpandMore} color="secondaryGray.500" display={{ base: 'none', md: 'block' }} />
+              </Flex>
+            </MenuButton>
+            <MenuList minW="240px" zIndex="20">
+              <Flex align="center" gap="12px" px="10px" py="10px" mb="4px" borderBottom="1px solid" borderColor={border}>
+                <Avatar w="40px" h="40px" name={fullName || 'User'} src={user?.avatar_url} bg="brand.600" color="white" borderRadius="12px" />
+                <Box minW="0">
+                  <Text fontSize="sm" fontWeight="700" color={mainText} noOfLines={1}>
+                    {fullName || 'User'}
+                  </Text>
+                  <Text fontSize="xs" color="secondaryGray.600" noOfLines={1}>
+                    {user?.email}
+                  </Text>
                 </Box>
-              </MenuList>
-            </Menu>
-          </Box>
+              </Flex>
+              {menuLinks.map((item) => (
+                <MenuItem key={item.to} icon={<Icon as={item.icon} w="18px" h="18px" color="secondaryGray.600" />} onClick={() => navigate(item.to)}>
+                  {item.label}
+                </MenuItem>
+              ))}
+              <Box h="1px" bg={border} my="4px" />
+              <MenuItem color="red.500" icon={<Icon as={MdLogout} w="18px" h="18px" />} onClick={() => setShowLogoutConfirm(true)}>
+                Logout
+              </MenuItem>
+            </MenuList>
+          </Menu>
         </Flex>
       </Flex>
+
+      <ConfirmDialog isOpen={showLogoutConfirm} onClose={() => setShowLogoutConfirm(false)} onConfirm={handleLogout} title="Confirm Logout" confirmLabel="Yes, Logout">
+        Are you sure you want to logout? You will need to sign in again to access the system.
+      </ConfirmDialog>
     </Box>
   )
 }

@@ -6,14 +6,13 @@ const Card = {
     flexDirection: 'column',
     width: '100%',
     position: 'relative',
-    borderRadius: '20px',
+    borderRadius: '18px',
+    border: '1px solid',
+    borderColor: mode('secondaryGray.100', 'whiteAlpha.100')(props),
     minWidth: '0px',
     wordWrap: 'break-word',
     bg: mode('#ffffff', 'navy.800')(props),
-    boxShadow: mode(
-      '14px 17px 40px 4px rgba(112, 144, 176, 0.08)',
-      'unset',
-    )(props),
+    boxShadow: mode('card', 'none')(props),
     backgroundClip: 'border-box',
   }),
 };

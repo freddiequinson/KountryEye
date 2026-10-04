@@ -4,7 +4,7 @@ import { Box, Button, Flex, Icon, SimpleGrid, Stack, Text } from '@chakra-ui/rea
 import { MdAccessTime, MdDescription, MdPeople } from 'react-icons/md'
 import { FaStethoscope } from 'react-icons/fa'
 import api from '@/lib/api'
-import PageHeader from '@/components/PageHeader'
+import PageHero from '@/components/PageHero'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
 import { RowBox } from '@/components/dashboard/widgets'
@@ -29,7 +29,7 @@ export default function DoctorDashboard() {
 
   return (
     <>
-      <PageHeader
+      <PageHero
         title="Doctor Dashboard"
         description="Patient queue overview"
         actions={

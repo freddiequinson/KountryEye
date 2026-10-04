@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Badge, Box, Button, Flex, Icon, SimpleGrid, Stack, Text } from '@chakra-ui/react'
 import { MdEvent, MdPeople, MdStar, MdTrendingUp } from 'react-icons/md'
 import api from '@/lib/api'
-import PageHeader from '@/components/PageHeader'
+import PageHero from '@/components/PageHero'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
 import { RowBox } from '@/components/dashboard/widgets'
@@ -32,7 +32,7 @@ export default function MarketingDashboard() {
 
   return (
     <>
-      <PageHeader
+      <PageHero
         title="Marketing Dashboard"
         description="Campaign and ratings overview"
         actions={

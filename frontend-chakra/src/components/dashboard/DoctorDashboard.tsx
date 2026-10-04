@@ -4,7 +4,7 @@ import { Badge, Box, Button, Flex, Icon, SimpleGrid, Stack, Text, useColorModeVa
 import { MdAccessTime, MdCheckCircle, MdDescription, MdErrorOutline, MdPeople } from 'react-icons/md'
 import { FaStethoscope } from 'react-icons/fa'
 import api from '@/lib/api'
-import PageHeader from '@/components/PageHeader'
+import PageHero from '@/components/PageHero'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
 import { QuickActions } from '@/components/dashboard/widgets'
@@ -36,7 +36,7 @@ export function DoctorDashboard({ user }: { user: any }) {
 
   return (
     <>
-      <PageHeader
+      <PageHero
         title="Doctor Dashboard"
         description={`Welcome, Dr. ${user?.last_name}! ${
           waitingPatients.length > 0

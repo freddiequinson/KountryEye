@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button, SimpleGrid } from '@chakra-ui/react'
 import { MdAccessTime, MdAssignment, MdPeople, MdPersonAdd, MdPointOfSale, MdReceiptLong } from 'react-icons/md'
 import api from '@/lib/api'
-import PageHeader from '@/components/PageHeader'
+import PageHero from '@/components/PageHero'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
 import { QuickActions, SummaryList } from '@/components/dashboard/widgets'
@@ -33,7 +33,7 @@ export function FrontDeskDashboard({ user }: { user: any }) {
 
   return (
     <>
-      <PageHeader
+      <PageHero
         title="Front Desk"
         description={`Welcome, ${user?.first_name}! Manage patient visits and registrations.`}
         actions={

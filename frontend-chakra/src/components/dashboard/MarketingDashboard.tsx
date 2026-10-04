@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button, SimpleGrid } from '@chakra-ui/react'
 import { MdBarChart, MdCampaign, MdPeople, MdPersonAdd, MdTrackChanges, MdTrendingUp } from 'react-icons/md'
 import api from '@/lib/api'
-import PageHeader from '@/components/PageHeader'
+import PageHero from '@/components/PageHero'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
 import { QuickActions, SummaryList } from '@/components/dashboard/widgets'
@@ -22,7 +22,7 @@ export function MarketingDashboard({ user }: { user: any }) {
 
   return (
     <>
-      <PageHeader
+      <PageHero
         title="Marketing Dashboard"
         description={`Welcome, ${user?.first_name}! Track campaigns and patient growth.`}
         actions={

@@ -16,12 +16,14 @@ import {
   TabPanels,
   Tabs,
   Text,
+  useColorModeValue,
 } from '@chakra-ui/react'
 import { MdApartment, MdCameraAlt, MdEmail, MdKey, MdPerson, MdSave, MdShield } from 'react-icons/md'
 import api from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/hooks/use-toast'
 import PageHeader from '@/components/PageHeader'
+import Card from '@/components/card/Card'
 import SectionCard from '@/components/card/SectionCard'
 import { AppModal, Field } from '@/components/ui'
 
@@ -98,6 +100,8 @@ export default function ProfilePage() {
     changePasswordMutation.mutate({ current_password: passwordForm.current_password, new_password: passwordForm.new_password })
   }
 
+  const ringColor = useColorModeValue('white', 'navy.800')
+  const dividerColor = useColorModeValue('secondaryGray.100', 'whiteAlpha.100')
   const roleName = (typeof user?.role === 'object' ? user?.role?.name : user?.role) || 'Staff'
 
   const accountInfo = [
@@ -121,10 +125,14 @@ export default function ProfilePage() {
           <TabPanel p="0">
             <Stack spacing="20px">
               <SimpleGrid columns={{ base: 1, md: 3 }} spacing="20px">
-                <SectionCard title="Profile Picture" description="Click the camera to upload a new avatar">
-                  <Flex direction="column" align="center" gap="16px">
+                {/* Cover banner with the avatar overlapping it */}
+                <Card p="0" overflow="hidden">
+                  <Box h="110px" bg="linear-gradient(120deg, #0B2415 0%, #14472A 50%, #3E8141 100%)" position="relative" overflow="hidden">
+                    <Box position="absolute" inset="0" bgImage="url(/login.jpg)" bgSize="cover" bgPosition="center 25%" opacity={0.35} />
+                  </Box>
+                  <Flex direction="column" align="center" px="20px" pb="22px" mt="-48px">
                     <Box position="relative">
-                      <Avatar size="2xl" src={user?.avatar_url} name={`${user?.first_name || ''} ${user?.last_name || ''}`} bg="brand.500" color="white" />
+                      <Avatar w="96px" h="96px" size="xl" src={user?.avatar_url} name={`${user?.first_name || ''} ${user?.last_name || ''}`} bg="brand.600" color="white" border="4px solid" borderColor={ringColor} />
                       <IconButton
                         as="label"
                         htmlFor="avatar-upload"
@@ -135,22 +143,36 @@ export default function ProfilePage() {
                         borderRadius="full"
                         position="absolute"
                         bottom="0"
-                        right="0"
+                        right="-4px"
                         cursor="pointer"
                         isLoading={uploadAvatarMutation.isPending}
                       />
                       <input id="avatar-upload" type="file" accept="image/*" hidden onChange={handleAvatarChange} />
                     </Box>
-                    <Box textAlign="center">
-                      <Text fontWeight="700" fontSize="lg">
-                        {user?.first_name} {user?.last_name}
-                      </Text>
-                      <Text fontSize="sm" color="secondaryGray.600">
-                        {roleName}
-                      </Text>
-                    </Box>
+                    <Text fontWeight="800" fontSize="xl" mt="10px" textAlign="center">
+                      {user?.first_name} {user?.last_name}
+                    </Text>
+                    <Text fontSize="sm" fontWeight="500" color="secondaryGray.600" textTransform="capitalize">
+                      {roleName}
+                    </Text>
+                    <SimpleGrid columns={2} w="100%" mt="18px" pt="16px" borderTop="1px solid" borderColor={dividerColor} textAlign="center">
+                      <Box>
+                        <Text fontWeight="700" noOfLines={1}>
+                          {user?.branch?.name || 'Unassigned'}
+                        </Text>
+                        <Text fontSize="xs" fontWeight="500" color="secondaryGray.600">
+                          Branch
+                        </Text>
+                      </Box>
+                      <Box>
+                        <Text fontWeight="700">{user?.created_at ? new Date(user.created_at).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '-'}</Text>
+                        <Text fontSize="xs" fontWeight="500" color="secondaryGray.600">
+                          Member since
+                        </Text>
+                      </Box>
+                    </SimpleGrid>
                   </Flex>
-                </SectionCard>
+                </Card>
 
                 <SectionCard title="Personal Information" description="Update your personal details" gridColumn={{ md: 'span 2' }}>
                   <form onSubmit={handleProfileSubmit}>

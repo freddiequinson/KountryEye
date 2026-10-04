@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Badge, Box, Button, Flex, Icon, Input, Select, Stack, Text, Textarea, useColorModeValue } from '@chakra-ui/react'
-import { MdArrowBack, MdWarningAmber } from 'react-icons/md'
+import { Avatar, Badge, Box, Button, Flex, Grid, Icon, Input, Select, Stack, Text, Textarea, useColorModeValue } from '@chakra-ui/react'
+import { MdArrowBack, MdContactEmergency, MdInfoOutline, MdPerson, MdPhone, MdWarningAmber } from 'react-icons/md'
 import api from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
 import PageHeader from '@/components/PageHeader'
-import SectionCard from '@/components/card/SectionCard'
+import Card from '@/components/card/Card'
+import { FormActions, FormSection } from '@/components/FormSection'
 import { AppModal, Field } from '@/components/ui'
 
 interface DuplicateCandidate {
@@ -114,26 +115,28 @@ export default function PatientRegistrationPage() {
   }
 
   const isBusy = checkDuplicatesMutation.isPending || registerPatientMutation.isPending
+  const previewName = `${formData.first_name} ${formData.last_name}`.trim()
+  const previewRing = useColorModeValue('white', 'navy.800')
 
   return (
     <>
       <Button variant="ghost" size="sm" leftIcon={<MdArrowBack />} onClick={() => navigate('/patients')} mb="8px">
         Back
       </Button>
-      <PageHeader title="Patient Registration" description="Register a new patient" />
+      <PageHeader title="Patient Registration" description="Add a new patient record. Only the name is required; the rest can be filled in later." />
 
-      <Box as="form" onSubmit={handleSubmit} maxW="672px" mx="auto">
-        <Stack spacing="20px">
-          <SectionCard title="Personal Information">
-            <Stack spacing="16px">
+      <Box as="form" onSubmit={handleSubmit}>
+        <Grid templateColumns={{ base: '1fr', xl: '1fr 300px' }} gap="20px" alignItems="start">
+          <Card px={{ base: '18px', md: '26px' }} py="20px">
+            <FormSection icon={MdPerson} title="Personal information" description="Legal name and basic details as they appear on the patient's ID." columns={{ base: 1, md: 3 }}>
               <Field label="First Name" isRequired>
                 <Input variant="main" value={formData.first_name} onChange={set('first_name')} />
               </Field>
               <Field label="Surname / Last Name" isRequired>
                 <Input variant="main" value={formData.last_name} onChange={set('last_name')} />
               </Field>
-              <Field label="Other Names (Middle Name)">
-                <Input variant="main" value={formData.other_names} onChange={set('other_names')} />
+              <Field label="Other Names">
+                <Input variant="main" placeholder="Middle name" value={formData.other_names} onChange={set('other_names')} />
               </Field>
               <Field label="Date of Birth" helper={formData.date_of_birth && `Age: ${calculateAge(formData.date_of_birth)}`}>
                 <Input variant="main" type="date" value={formData.date_of_birth} onChange={set('date_of_birth')} />
@@ -145,7 +148,7 @@ export default function PatientRegistrationPage() {
                 </Select>
               </Field>
               <Field label="Marital Status">
-                <Select variant="main" placeholder="Select marital status" value={formData.marital_status} onChange={set('marital_status')}>
+                <Select variant="main" placeholder="Select status" value={formData.marital_status} onChange={set('marital_status')}>
                   <option value="single">Single</option>
                   <option value="married">Married</option>
                   <option value="divorced">Divorced</option>
@@ -161,43 +164,76 @@ export default function PatientRegistrationPage() {
               <Field label="Ghana Card Number">
                 <Input variant="main" placeholder="GHA-XXXXXXXXX-X" value={formData.ghana_card} onChange={set('ghana_card')} />
               </Field>
-            </Stack>
-          </SectionCard>
+            </FormSection>
 
-          <SectionCard title="Contact Information">
-            <Stack spacing="16px">
+            <FormSection icon={MdPhone} title="Contact" description="How the clinic reaches the patient for reminders and follow-ups.">
               <Field label="Phone Number">
                 <Input variant="main" placeholder="+233 XX XXX XXXX" value={formData.phone} onChange={set('phone')} />
               </Field>
               <Field label="Email">
-                <Input variant="main" type="email" value={formData.email} onChange={set('email')} />
+                <Input variant="main" type="email" placeholder="name@example.com" value={formData.email} onChange={set('email')} />
               </Field>
-              <Field label="Address">
-                <Textarea variant="main" placeholder="Full address" value={formData.address} onChange={set('address')} />
+              <Field label="Address" gridColumn={{ md: 'span 2' }}>
+                <Textarea variant="main" rows={2} placeholder="Full address" value={formData.address} onChange={set('address')} />
               </Field>
-            </Stack>
-          </SectionCard>
+            </FormSection>
 
-          <SectionCard title="Emergency Contact / Next of Kin">
-            <Stack spacing="16px">
+            <FormSection icon={MdContactEmergency} title="Emergency contact" description="Next of kin to call if something goes wrong.">
               <Field label="Name">
                 <Input variant="main" value={formData.emergency_contact_name} onChange={set('emergency_contact_name')} />
               </Field>
               <Field label="Phone Number">
                 <Input variant="main" value={formData.emergency_contact_phone} onChange={set('emergency_contact_phone')} />
               </Field>
-            </Stack>
-          </SectionCard>
+            </FormSection>
+          </Card>
 
-          <Flex justify="end" gap="12px">
-            <Button variant="light" onClick={() => navigate('/frontdesk')}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="brand" isLoading={isBusy} loadingText="Processing...">
-              Register Patient
-            </Button>
-          </Flex>
-        </Stack>
+          {/* Live preview of the record being created */}
+          <Card position={{ xl: 'sticky' }} top={{ xl: '96px' }} p="0" overflow="hidden" display={{ base: 'none', xl: 'flex' }}>
+            <Box h="72px" bg="linear-gradient(120deg, #14472A 0%, #3E8141 100%)" />
+            <Flex direction="column" align="center" px="20px" pb="20px" mt="-34px" textAlign="center">
+              <Avatar size="lg" name={previewName || undefined} bg="brand.600" color="white" border="4px solid" borderColor={previewRing} />
+              <Text fontWeight="700" fontSize="16px" mt="10px" noOfLines={2}>
+                {previewName || 'New patient'}
+              </Text>
+              <Text fontSize="13px" fontWeight="500" color="secondaryGray.600">
+                Patient number is assigned on save
+              </Text>
+              <Stack w="100%" spacing="0" mt="16px" textAlign="left">
+                {[
+                  ['Age', formData.date_of_birth ? calculateAge(formData.date_of_birth) : '-'],
+                  ['Sex', formData.sex || '-'],
+                  ['Phone', formData.phone || '-'],
+                  ['Emergency', formData.emergency_contact_name || '-'],
+                ].map(([label, value]) => (
+                  <Flex key={label} justify="space-between" gap="12px" py="9px" borderTop="1px dashed" borderColor={borderColor} fontSize="13px">
+                    <Text color="secondaryGray.600" fontWeight="500">
+                      {label}
+                    </Text>
+                    <Text fontWeight="700" textTransform="capitalize" noOfLines={1}>
+                      {value}
+                    </Text>
+                  </Flex>
+                ))}
+              </Stack>
+              <Flex w="100%" gap="8px" mt="14px" p="10px" borderRadius="10px" bg="brand.50" _dark={{ bg: 'whiteAlpha.100' }} textAlign="left">
+                <Icon as={MdInfoOutline} color="brand.600" mt="2px" flexShrink={0} />
+                <Text fontSize="12px" fontWeight="500" color="secondaryGray.700" _dark={{ color: 'secondaryGray.400' }}>
+                  We check for existing patients with the same details before saving.
+                </Text>
+              </Flex>
+            </Flex>
+          </Card>
+        </Grid>
+
+        <FormActions hint="After saving you go straight to recording the visit.">
+          <Button variant="light" onClick={() => navigate('/frontdesk')}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="brand" isLoading={isBusy} loadingText="Processing...">
+            Register Patient
+          </Button>
+        </FormActions>
       </Box>
 
       <AppModal

@@ -12,14 +12,24 @@ export const inputStyles = {
       variants: {
         main: (props: StyleFunctionProps) => ({
           field: {
-            bg: mode("transparent", "navy.800")(props),
+            bg: mode("white", "navy.800")(props),
             border: "1px solid",
             color: mode("secondaryGray.900", "white")(props),
-            borderColor: mode("secondaryGray.100", "whiteAlpha.100")(props),
-            borderRadius: "16px",
+            borderColor: mode("secondaryGray.400", "whiteAlpha.200")(props),
+            borderRadius: "10px",
             fontSize: "sm",
-            p: "20px",
-            _placeholder: { color: "secondaryGray.400" },
+            fontWeight: "500",
+            h: "42px",
+            px: "14px",
+            transition: "border-color .15s ease, box-shadow .15s ease",
+            _placeholder: { color: "secondaryGray.500", fontWeight: "400" },
+            _hover: { borderColor: mode("secondaryGray.500", "whiteAlpha.400")(props) },
+            _focusVisible: {
+              borderColor: "brand.500",
+              boxShadow: "0 0 0 3px rgba(76, 155, 79, 0.18)",
+            },
+            _disabled: { bg: mode("secondaryGray.300", "whiteAlpha.50")(props), opacity: 0.8 },
+            _invalid: { borderColor: "red.500", boxShadow: "0 0 0 3px rgba(238, 93, 80, 0.15)" },
           },
         }),
         auth: (props: StyleFunctionProps) => ({
@@ -32,7 +42,7 @@ export const inputStyles = {
               "secondaryGray.100",
               "rgba(135, 140, 189, 0.3)"
             )(props),
-            borderRadius: "16px",
+            borderRadius: "12px",
             _placeholder: { color: "secondaryGray.600", fontWeight: "400" },
           },
         }),
@@ -41,7 +51,7 @@ export const inputStyles = {
             bg: "transparent",
             border: "1px solid",
             borderColor: "secondaryGray.100",
-            borderRadius: "16px",
+            borderRadius: "12px",
             _placeholder: { color: "secondaryGray.600" },
           },
         }),
@@ -65,12 +75,24 @@ export const inputStyles = {
       variants: {
         main: (props: StyleFunctionProps) => ({
           field: {
-            bg: "transparent",
+            bg: mode("white", "navy.800")(props),
             border: "1px solid",
-
-            borderColor: "secondaryGray.100",
-            borderRadius: "16px",
-            _placeholder: { color: "secondaryGray.600" },
+            color: mode("secondaryGray.900", "white")(props),
+            borderColor: mode("secondaryGray.400", "whiteAlpha.200")(props),
+            borderRadius: "10px",
+            fontSize: "sm",
+            fontWeight: "500",
+            h: "42px",
+            px: "14px",
+            transition: "border-color .15s ease, box-shadow .15s ease",
+            _placeholder: { color: "secondaryGray.500", fontWeight: "400" },
+            _hover: { borderColor: mode("secondaryGray.500", "whiteAlpha.400")(props) },
+            _focusVisible: {
+              borderColor: "brand.500",
+              boxShadow: "0 0 0 3px rgba(76, 155, 79, 0.18)",
+            },
+            _disabled: { bg: mode("secondaryGray.300", "whiteAlpha.50")(props), opacity: 0.8 },
+            _invalid: { borderColor: "red.500", boxShadow: "0 0 0 3px rgba(238, 93, 80, 0.15)" },
           },
         }),
         auth: (props: StyleFunctionProps) => ({
@@ -79,7 +101,7 @@ export const inputStyles = {
             border: "1px solid",
 
             borderColor: "secondaryGray.100",
-            borderRadius: "16px",
+            borderRadius: "12px",
             _placeholder: { color: "secondaryGray.600" },
           },
         }),
@@ -89,7 +111,7 @@ export const inputStyles = {
             border: "1px solid",
 
             borderColor: "secondaryGray.100",
-            borderRadius: "16px",
+            borderRadius: "12px",
             _placeholder: { color: "secondaryGray.600" },
           },
         }),
@@ -113,16 +135,26 @@ export const inputStyles = {
       variants: {
         main: (props: StyleFunctionProps) => ({
           field: {
-            bg: mode("transparent", "navy.800")(props),
+            bg: mode("white", "navy.800")(props),
             border: "1px solid",
-            color: "secondaryGray.600",
-            borderColor: mode("secondaryGray.100", "whiteAlpha.100")(props),
-            borderRadius: "16px",
-            _placeholder: { color: "secondaryGray.600" },
+            color: mode("secondaryGray.900", "white")(props),
+            borderColor: mode("secondaryGray.400", "whiteAlpha.200")(props),
+            borderRadius: "10px",
+            fontSize: "sm",
+            fontWeight: "500",
+            h: "42px",
+            px: "14px",
+            transition: "border-color .15s ease, box-shadow .15s ease",
+            _placeholder: { color: "secondaryGray.500", fontWeight: "400" },
+            _hover: { borderColor: mode("secondaryGray.500", "whiteAlpha.400")(props) },
+            _focusVisible: {
+              borderColor: "brand.500",
+              boxShadow: "0 0 0 3px rgba(76, 155, 79, 0.18)",
+            },
+            _disabled: { bg: mode("secondaryGray.300", "whiteAlpha.50")(props), opacity: 0.8 },
+            _invalid: { borderColor: "red.500", boxShadow: "0 0 0 3px rgba(238, 93, 80, 0.15)" },
           },
-          icon: {
-            color: "secondaryGray.600",
-          },
+          icon: { color: "secondaryGray.600" },
         }),
         mini: (props: StyleFunctionProps) => ({
           field: {
@@ -180,7 +212,7 @@ export const inputStyles = {
             border: "1px solid",
 
             borderColor: "secondaryGray.100",
-            borderRadius: "16px",
+            borderRadius: "12px",
             _placeholder: { color: "secondaryGray.600" },
           },
         }),
@@ -190,7 +222,7 @@ export const inputStyles = {
             border: "1px solid",
 
             borderColor: "secondaryGray.100",
-            borderRadius: "16px",
+            borderRadius: "12px",
             _placeholder: { color: "secondaryGray.600" },
           },
         }),
@@ -212,7 +244,7 @@ export const inputStyles = {
     //         border: "1px solid",
     //         color: mode("secondaryGray.900", "white")(props),
     //         borderColor: mode("secondaryGray.100", "whiteAlpha.100")(props),
-    //         borderRadius: "16px",
+    //         borderRadius: "12px",
     //         _placeholder: { color: "secondaryGray.600" },
     //       },
     //     }),
