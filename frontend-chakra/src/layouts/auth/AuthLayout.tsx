@@ -38,18 +38,31 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             borderBottomLeftRadius={{ lg: '120px', xl: '200px' }}
             overflow="hidden"
           >
+            {/* green wash over the photo, heavier at the bottom where the copy sits */}
             <Flex
               direction="column"
               justify="end"
               w="100%"
               p="48px"
               ps={{ lg: '120px', xl: '200px' }}
-              bgGradient="linear(to-t, blackAlpha.700, transparent)"
+              bg="linear-gradient(to top, rgba(11,36,21,0.92) 0%, rgba(20,71,42,0.55) 38%, rgba(20,71,42,0.08) 70%)"
             >
-              <Heading color="white" fontSize="3xl" mb="8px">
+              <Text fontSize="12px" fontWeight="700" letterSpacing="0.14em" textTransform="uppercase" color="brand.200" mb="10px">
                 Kountry Eyecare
+              </Text>
+              <Heading color="white" fontSize={{ lg: '34px', xl: '40px' }} fontWeight="800" lineHeight="1.12" maxW="520px" mb="12px">
+                Every patient, visit and sale in one clear view.
               </Heading>
-              <Text color="whiteAlpha.800">Integrated Clinic Management System</Text>
+              <Text color="whiteAlpha.800" fontWeight="500" maxW="460px" mb="22px">
+                Integrated clinic management for front desk, doctors, technicians and the back office.
+              </Text>
+              <Flex gap="8px" wrap="wrap">
+                {['Front desk', 'Consultations', 'Point of sale', 'Inventory', 'Reports'].map((label) => (
+                  <Box key={label} px="12px" py="6px" borderRadius="full" fontSize="12px" fontWeight="600" color="white" bg="whiteAlpha.200" border="1px solid" borderColor="whiteAlpha.300" backdropFilter="blur(8px)">
+                    {label}
+                  </Box>
+                ))}
+              </Flex>
             </Flex>
           </Flex>
         </Box>
@@ -61,7 +74,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
 
 // Shared heading + form column used by every auth page.
 export function AuthForm({ title, subtitle, children }: { title: string; subtitle: ReactNode; children: ReactNode }) {
-  const textColor = useColorModeValue('navy.700', 'white')
+  const textColor = useColorModeValue('secondaryGray.900', 'white')
 
   return (
     <Flex
@@ -77,10 +90,10 @@ export function AuthForm({ title, subtitle, children }: { title: string; subtitl
       flexDirection="column"
     >
       <Box me="auto">
-        <Heading color={textColor} fontSize="36px" mb="10px">
+        <Heading color={textColor} fontSize="36px" fontWeight="800" mb="8px">
           {title}
         </Heading>
-        <Text mb="36px" ms="4px" color="gray.400" fontWeight="400" fontSize="md">
+        <Text mb="32px" color="secondaryGray.600" fontWeight="500" fontSize="md">
           {subtitle}
         </Text>
       </Box>

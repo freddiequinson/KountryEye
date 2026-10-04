@@ -34,6 +34,7 @@ import {
 } from '@chakra-ui/react'
 import { MdAccessTime, MdBusiness, MdDelete, MdPersonAdd, MdPersonOff, MdChecklist, MdHowToReg, MdVisibility, MdVisibilityOff } from 'react-icons/md'
 import api from '@/lib/api'
+import { PersonCell } from '@/components/Person'
 import { useToast } from '@/hooks/use-toast'
 import PageHeader from '@/components/PageHeader'
 import Card from '@/components/card/Card'
@@ -284,8 +285,8 @@ export default function EmployeesPage() {
                     ) : (
                       filteredEmployees.map((employee: Employee) => (
                         <Tr key={employee.id} {...rowLink(() => navigate(`/admin/employees/${employee.id}`))}>
-                          <Td fontWeight="600">
-                            {employee.first_name} {employee.last_name}
+                          <Td>
+                            <PersonCell name={`${employee.first_name} ${employee.last_name}`} />
                           </Td>
                           <Td>{employee.email}</Td>
                           <Td>{employee.role?.name || '-'}</Td>
@@ -356,7 +357,7 @@ export default function EmployeesPage() {
                         <Td>{record.clock_in ? new Date(record.clock_in).toLocaleTimeString() : '-'}</Td>
                         <Td>{record.clock_out ? new Date(record.clock_out).toLocaleTimeString() : '-'}</Td>
                         <Td>
-                          <Badge colorScheme={record.status === 'present' ? 'brand' : 'gray'}>{record.status}</Badge>
+                          <Badge colorScheme={record.status === 'present' ? 'brand' : 'gray'}>{String(record.status ?? '').replace(/_/g, ' ')}</Badge>
                         </Td>
                       </Tr>
                     ))}

@@ -118,7 +118,7 @@ export default function MarketingPage() {
                               colorScheme={campaign.status === 'active' ? 'green' : 'gray'}
                               variant={campaign.status === 'active' || campaign.status === 'completed' ? 'subtle' : 'outline'}
                             >
-                              {campaign.status}
+                              {String(campaign.status ?? '').replace(/_/g, ' ')}
                             </Badge>
                           </Td>
                         </Tr>

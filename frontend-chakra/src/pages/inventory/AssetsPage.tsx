@@ -1079,7 +1079,7 @@ export default function AssetsPage() {
                               )}
                             </Td>
                             <Td>
-                              <Badge colorScheme={log.status === 'completed' ? 'brand' : 'gray'}>{log.status}</Badge>
+                              <Badge colorScheme={log.status === 'completed' ? 'brand' : 'gray'}>{String(log.status ?? '').replace(/_/g, ' ')}</Badge>
                             </Td>
                           </Tr>
                         )

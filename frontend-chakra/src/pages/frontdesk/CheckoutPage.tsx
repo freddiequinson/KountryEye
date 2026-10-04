@@ -270,7 +270,7 @@ export default function CheckoutPage() {
                       GH₵{scan.amount.toLocaleString()}
                     </Text>
                     <Badge colorScheme={statusScheme(scan.status === 'paid')} ms="8px">
-                      {scan.status}
+                      {String(scan.status ?? '').replace(/_/g, ' ')}
                     </Badge>
                   </Box>
                 </Flex>
@@ -305,7 +305,7 @@ export default function CheckoutPage() {
                       GH₵{item.total.toLocaleString()}
                     </Text>
                     <Badge colorScheme={statusScheme(item.status === 'completed')} ms="8px">
-                      {item.status}
+                      {String(item.status ?? '').replace(/_/g, ' ')}
                     </Badge>
                   </Box>
                 </Flex>

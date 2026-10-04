@@ -662,7 +662,7 @@ export default function ReferralPaymentsPage() {
                                       <Td>{referral.referral_date ? new Date(referral.referral_date).toLocaleDateString() : '-'}</Td>
                                       <Td>{ghs(referral.service_fee)}</Td>
                                       <Td>
-                                        <Badge colorScheme={referralScheme[referral.status] || 'blue'}>{referral.status}</Badge>
+                                        <Badge colorScheme={referralScheme[referral.status] || 'blue'}>{String(referral.status ?? '').replace(/_/g, ' ')}</Badge>
                                       </Td>
                                     </Tr>
                                   ))}

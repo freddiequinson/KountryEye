@@ -83,7 +83,7 @@ function PrescriptionItemCard({ item, showType }: { item: any; showType?: boolea
             GHS {(item.quantity * item.unit_price).toFixed(2)}
           </Text>
           <Badge colorScheme={paidScheme(item.prescription.status)} mt="8px">
-            {item.prescription.status}
+            {String(item.prescription.status ?? '').replace(/_/g, ' ')}
           </Badge>
         </Box>
       </Flex>
@@ -273,7 +273,7 @@ export default function VisitDetailPage() {
               <RowBox key={prescription.id} display="block" p="16px">
                 <Flex justify="space-between" align="center" mb="12px">
                   <Flex gap="8px">
-                    <Badge colorScheme={paidScheme(prescription.status)}>{prescription.status}</Badge>
+                    <Badge colorScheme={paidScheme(prescription.status)}>{String(prescription.status ?? '').replace(/_/g, ' ')}</Badge>
                     {prescription.is_dispensed && <Badge variant="outline">Dispensed</Badge>}
                   </Flex>
                   <Text fontSize="sm" color="secondaryGray.600">

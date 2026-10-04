@@ -55,7 +55,7 @@ export default function SalesPage() {
 
       <Card>
         <Box overflowX="auto">
-          <Table variant="simple">
+          <Table variant="simple" sx={{ td: { whiteSpace: 'nowrap' } }}>
             <Thead>
               <Tr>
                 <Th>Receipt No.</Th>

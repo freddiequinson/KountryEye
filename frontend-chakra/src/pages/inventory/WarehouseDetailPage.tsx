@@ -251,7 +251,7 @@ export default function WarehouseDetailPage() {
                           <Td>{new Date(transfer.request_date).toLocaleDateString()}</Td>
                           <Td>
                             <Badge colorScheme={transfer.status === 'completed' ? 'green' : transfer.status === 'approved' ? 'yellow' : 'gray'}>
-                              {transfer.status}
+                              {String(transfer.status ?? '').replace(/_/g, ' ')}
                             </Badge>
                           </Td>
                         </Tr>

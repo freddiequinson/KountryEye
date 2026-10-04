@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Box, Flex, Icon, Text, useColorModeValue } from '@chakra-ui/react'
 import NumberFlow from '@number-flow/react'
 import type { IconType } from 'react-icons'
+import { MdAccessTime, MdApartment, MdCheckCircle, MdErrorOutline, MdEvent, MdInsights, MdInventory2, MdMedicalServices, MdPayments, MdPeople, MdVisibility } from 'react-icons/md'
 import Card from '@/components/card/Card'
 
 type Props = {
@@ -14,11 +15,29 @@ type Props = {
   onClick?: () => void
 }
 
+// Cards that don't pass an icon get one picked from their label, so stat rows look consistent.
+const ICON_HINTS: [RegExp, IconType][] = [
+  [/revenue|sales|income|profit|value|amount|paid|payment|price|top-up|limit|used|owed|memo|fund/i, MdPayments],
+  [/patient|employee|staff|user|registration|member|client|referral/i, MdPeople],
+  [/waiting|pending|late|due|awaiting|expir/i, MdAccessTime],
+  [/consult|prescription|doctor/i, MdMedicalServices],
+  [/visit|check-in|day|attendance|present|record/i, MdEvent],
+  [/stock|product|item|inventory|asset|warehouse|categor|transfer/i, MdInventory2],
+  [/complete|active|created|updated|approved/i, MdCheckCircle],
+  [/absent|faulty|out of|alert|rejected/i, MdErrorOutline],
+  [/branch/i, MdApartment],
+  [/scan/i, MdVisibility],
+]
+const iconFor = (name: ReactNode) => (typeof name === 'string' ? ICON_HINTS.find(([re]) => re.test(name))?.[1] : undefined) || MdInsights
+
 // 'green.500' -> the CSS variable Chakra generates for that token
 const cssVar = (token: string) => `var(--chakra-colors-${token.replace('.', '-')})`
 
 // Metric tile: tinted icon chip, label, large value (numbers roll when they change), optional help line.
-export default function StatCard({ name, value, icon, iconColor = 'brand.500', valueColor, helpText, onClick }: Props) {
+export default function StatCard({ name, value, icon: iconProp, iconColor: iconColorProp, valueColor, helpText, onClick }: Props) {
+  const icon = iconProp || iconFor(name)
+  // the chip follows the value colour when the caller only set that
+  const iconColor = iconColorProp || valueColor || 'brand.500'
   const textColor = useColorModeValue('secondaryGray.900', 'white')
   const accent = cssVar(iconColor)
 
@@ -50,7 +69,7 @@ export default function StatCard({ name, value, icon, iconColor = 'brand.500', v
         <Text fontSize="13px" fontWeight="600" color="secondaryGray.600" noOfLines={1}>
           {name}
         </Text>
-        {icon && (
+        {(
           <Flex w="38px" h="38px" minW="38px" borderRadius="11px" align="center" justify="center" bg={`color-mix(in srgb, ${accent} 14%, transparent)`} color={iconColor}>
             <Icon as={icon} w="20px" h="20px" />
           </Flex>

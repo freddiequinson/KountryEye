@@ -132,9 +132,8 @@ export default function LoginPage() {
             type="submit"
             fontSize="sm"
             variant="brand"
-            fontWeight="500"
+            size="lg"
             w="100%"
-            h="50"
             mb="24px"
             isLoading={loginMutation.isPending}
             loadingText="Signing in..."
@@ -142,7 +141,7 @@ export default function LoginPage() {
             Sign In
           </Button>
         </form>
-        <Text color="gray.400" fontSize="xs" textAlign="center">
+        <Text color="secondaryGray.500" fontSize="xs" fontWeight="500" textAlign="center">
           By continuing, you agree to our Terms of Service and Privacy Policy.
         </Text>
       </AuthForm>

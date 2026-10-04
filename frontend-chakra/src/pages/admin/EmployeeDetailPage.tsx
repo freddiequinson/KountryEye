@@ -33,7 +33,6 @@ import {
   useColorModeValue,
 } from '@chakra-ui/react'
 import {
-  MdArrowBack,
   MdBarChart,
   MdBusiness,
   MdChecklist,
@@ -47,6 +46,7 @@ import {
   MdVpnKey,
 } from 'react-icons/md'
 import api from '@/lib/api'
+import { EntityHeader } from '@/components/Person'
 import { useToast } from '@/hooks/use-toast'
 import Card from '@/components/card/Card'
 import StatCard from '@/components/card/StatCard'
@@ -229,52 +229,29 @@ export default function EmployeeDetailPage() {
 
   return (
     <>
-      {/* Header */}
-      <Flex align={{ base: 'start', md: 'center' }} gap="16px" mb="20px" direction={{ base: 'column', md: 'row' }}>
-        <Flex align="center" gap="16px" flex="1">
-          <IconButton aria-label="Back" variant="ghost" icon={<MdArrowBack />} onClick={() => navigate('/admin/employees')} />
-          <Box>
-            <Heading size="lg" data-tour="page-title">
-              {employee.first_name} {employee.last_name}
-            </Heading>
-            <Text color="secondaryGray.600">
-              {employee.role?.name || 'No role'} • {employee.branch?.name || 'No branch'}
-            </Text>
-          </Box>
-        </Flex>
-        <Flex gap="8px">
-          <Button variant="light" leftIcon={<MdVpnKey />} onClick={() => resetPasswordMutation.mutate()} isLoading={resetPasswordMutation.isPending}>
-            Reset Password
-          </Button>
-          <Button colorScheme="red" onClick={() => deactivateMutation.mutate()} isLoading={deactivateMutation.isPending}>
-            Deactivate
-          </Button>
-        </Flex>
-      </Flex>
-
-      {/* Employee Info Card */}
-      <Card mb="20px">
-        <SimpleGrid columns={{ base: 2, md: 4 }} spacing="24px">
-          {[
-            { icon: MdEmail, label: 'Email', value: employee.email },
-            { icon: MdPhone, label: 'Phone', value: employee.phone || '-' },
-            { icon: MdShield, label: 'Role', value: employee.role?.name || '-' },
-            { icon: MdBusiness, label: 'Branch', value: employee.branch?.name || '-' },
-          ].map((item) => (
-            <Flex key={item.label} align="center" gap="12px">
-              <Icon as={item.icon} w="20px" h="20px" color="secondaryGray.600" />
-              <Box minW="0">
-                <Text fontSize="sm" color="secondaryGray.600">
-                  {item.label}
-                </Text>
-                <Text fontWeight="500" noOfLines={1}>
-                  {item.value}
-                </Text>
-              </Box>
-            </Flex>
-          ))}
-        </SimpleGrid>
-      </Card>
+      <EntityHeader
+        name={`${employee.first_name} ${employee.last_name}`}
+        subtitle={`${employee.role?.name || 'No role'} · ${employee.branch?.name || 'No branch'}`}
+        avatarSrc={employee.avatar_url}
+        badges={<Badge colorScheme={employee.is_active === false ? 'red' : 'green'}>{employee.is_active === false ? 'Inactive' : 'Active'}</Badge>}
+        onBack={() => navigate('/admin/employees')}
+        actions={
+          <>
+            <Button variant="light" leftIcon={<MdVpnKey />} onClick={() => resetPasswordMutation.mutate()} isLoading={resetPasswordMutation.isPending}>
+              Reset Password
+            </Button>
+            <Button colorScheme="red" variant="outline" onClick={() => deactivateMutation.mutate()} isLoading={deactivateMutation.isPending}>
+              Deactivate
+            </Button>
+          </>
+        }
+        facts={[
+          { icon: MdEmail, label: 'Email', value: employee.email },
+          { icon: MdPhone, label: 'Phone', value: employee.phone || '-' },
+          { icon: MdShield, label: 'Role', value: employee.role?.name || '-' },
+          { icon: MdBusiness, label: 'Branch', value: employee.branch?.name || '-' },
+        ]}
+      />
 
       {/* Stats Cards */}
       <Flex justify="space-between" align="center" mb="16px" wrap="wrap" gap="12px">
@@ -466,7 +443,7 @@ export default function EmployeeDetailPage() {
                         </Flex>
                         {record && (
                           <Text fontSize="xs" px="6px" py="2px" borderRadius="4px" color="white" bg={attendanceColor[record.status] || 'gray.500'}>
-                            {record.status}
+                            {String(record.status ?? '').replace(/_/g, ' ')}
                           </Text>
                         )}
                         {showAbsent && (
@@ -516,7 +493,7 @@ export default function EmployeeDetailPage() {
                             <Td>{timeOrDash(record.clock_out)}</Td>
                             <Td>
                               <Badge colorScheme={record.status === 'present' ? 'green' : 'gray'} variant={record.status === 'present' ? 'solid' : 'subtle'}>
-                                {record.status}
+                                {String(record.status ?? '').replace(/_/g, ' ')}
                               </Badge>
                             </Td>
                             <Td color="secondaryGray.600">{record.notes || '-'}</Td>

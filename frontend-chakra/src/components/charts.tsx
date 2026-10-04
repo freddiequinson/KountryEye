@@ -1,7 +1,8 @@
 // Thin ApexCharts wrappers with the Horizon look (replaces recharts).
 import Chart from 'react-apexcharts'
 import type { ApexOptions } from 'apexcharts'
-import { useColorMode } from '@chakra-ui/react'
+import { Center, Icon, Text, useColorMode } from '@chakra-ui/react'
+import { MdInsights } from 'react-icons/md'
 
 export const CHART_COLORS = ['#4C9B4F', '#0CC0DF', '#FFB547', '#EE5D50', '#7551FF', '#01B574', '#3965FF', '#A3AED0']
 
@@ -20,6 +21,17 @@ function useBaseOptions(): ApexOptions {
   }
 }
 
+function NoData({ height }: { height: number }) {
+  return (
+    <Center h={`${height}px`} flexDirection="column" gap="6px" color="secondaryGray.500">
+      <Icon as={MdInsights} w="28px" h="28px" opacity={0.6} />
+      <Text fontSize="sm" fontWeight="500">
+        No data for this period
+      </Text>
+    </Center>
+  )
+}
+
 export function PieChart({ labels, values, height = 256, formatter }: { labels: string[]; values: number[]; height?: number; formatter?: Formatter }) {
   const base = useBaseOptions()
   const { colorMode } = useColorMode()
@@ -31,6 +43,7 @@ export function PieChart({ labels, values, height = 256, formatter }: { labels: 
     tooltip: { ...base.tooltip, ...(formatter ? { y: { formatter } } : {}) },
     stroke: { width: 3, colors: [colorMode === 'dark' ? '#111C44' : '#ffffff'] },
   }
+  if (!values.some((v) => v > 0)) return <NoData height={height} />
   return <Chart type="donut" series={values} options={options} height={height} />
 }
 
@@ -61,6 +74,7 @@ export function BarChart({
     tooltip: { ...base.tooltip, ...(formatter ? { y: { formatter } } : {}) },
     legend: { ...base.legend, show: series.length > 1 },
   }
+  if (!categories.length) return <NoData height={height} />
   return <Chart type="bar" series={series} options={options} height={height} />
 }
 

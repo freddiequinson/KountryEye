@@ -405,7 +405,7 @@ export default function FundRequestsPage() {
                 <Text textTransform="capitalize">{selectedRequest.purpose || 'Other'}</Text>
               </Detail>
               <Detail label="Status">
-                <Badge colorScheme={STATUS[selectedRequest.status]?.scheme || 'gray'}>{selectedRequest.status}</Badge>
+                <Badge colorScheme={STATUS[selectedRequest.status]?.scheme || 'gray'}>{String(selectedRequest.status ?? '').replace(/_/g, ' ')}</Badge>
               </Detail>
             </SimpleGrid>
 

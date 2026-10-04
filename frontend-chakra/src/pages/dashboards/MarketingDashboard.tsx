@@ -68,7 +68,7 @@ export default function MarketingDashboard() {
                     </Text>
                   </Box>
                   <Badge colorScheme={campaign.status === 'active' ? 'green' : 'gray'} borderRadius="full">
-                    {campaign.status}
+                    {String(campaign.status ?? '').replace(/_/g, ' ')}
                   </Badge>
                 </RowBox>
               ))}

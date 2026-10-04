@@ -326,7 +326,7 @@ export default function InventoryPage() {
                             <Td>{imp.expected_date ? new Date(imp.expected_date).toLocaleDateString() : '-'}</Td>
                             <Td>GH₵{imp.total_cost?.toLocaleString() || '0'}</Td>
                             <Td>
-                              <Badge colorScheme={imp.status === 'received' ? 'green' : imp.status === 'pending' ? 'yellow' : 'gray'}>{imp.status}</Badge>
+                              <Badge colorScheme={imp.status === 'received' ? 'green' : imp.status === 'pending' ? 'yellow' : 'gray'}>{String(imp.status ?? '').replace(/_/g, ' ')}</Badge>
                             </Td>
                           </Tr>
                         ))
@@ -409,7 +409,7 @@ export default function InventoryPage() {
                           <Td>{new Date(transfer.request_date).toLocaleDateString()}</Td>
                           <Td>
                             <Badge colorScheme={transfer.status === 'completed' ? 'green' : transfer.status === 'approved' ? 'yellow' : 'gray'}>
-                              {transfer.status}
+                              {String(transfer.status ?? '').replace(/_/g, ' ')}
                             </Badge>
                           </Td>
                           <Td>

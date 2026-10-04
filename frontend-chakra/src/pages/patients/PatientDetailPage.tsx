@@ -7,7 +7,6 @@ import {
   Button,
   Divider,
   Flex,
-  Heading,
   Icon,
   IconButton,
   Input,
@@ -30,12 +29,13 @@ import {
   Tr,
   useColorModeValue,
 } from '@chakra-ui/react'
-import { MdAdd, MdArrowBack, MdCheckCircle, MdCreditCard, MdDescription, MdEdit, MdErrorOutline, MdEvent, MdHistory, MdVisibility } from 'react-icons/md'
+import { MdAdd, MdCake, MdCheckCircle, MdContactEmergency, MdCreditCard, MdDescription, MdEdit, MdEmail, MdErrorOutline, MdEvent, MdHistory, MdLocationOn, MdPhone, MdVisibility } from 'react-icons/md'
 import api from '@/lib/api'
 import type { Patient, Visit } from '@/types'
 import { useToast } from '@/hooks/use-toast'
 import Card from '@/components/card/Card'
 import SectionCard from '@/components/card/SectionCard'
+import { EntityHeader } from '@/components/Person'
 import { RowBox } from '@/components/dashboard/widgets'
 import { AppModal, EmptyState, Field, TableBox, TableMessageRow } from '@/components/ui'
 
@@ -51,6 +51,8 @@ function InfoLine({ label, value }: { label: string; value: React.ReactNode }) {
     </Text>
   )
 }
+
+const ageOf = (dob: string) => `${Math.floor((Date.now() - new Date(dob).getTime()) / 31557600000)} yrs`
 
 export default function PatientDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -285,54 +287,44 @@ export default function PatientDetailPage() {
 
   return (
     <>
-      <Flex align="center" gap="16px" mb="20px" wrap="wrap">
-        <Button variant="ghost" size="sm" leftIcon={<MdArrowBack />} onClick={() => navigate('/patients')}>
-          Back
-        </Button>
-        <Heading size="lg" data-tour="page-title">
-          {patient.first_name} {patient.last_name}
-        </Heading>
-        <Badge variant="outline">{patient.patient_number}</Badge>
-      </Flex>
-
-      <SimpleGrid columns={{ base: 1, md: 2, xl: 4 }} spacing="20px" mb="20px">
-        <SectionCard title="Contact">
-          <Stack spacing="8px">
-            <InfoLine label="Phone" value={patient.phone || '-'} />
-            <InfoLine label="Email" value={patient.email || '-'} />
-            <InfoLine label="Address" value={patient.address || '-'} />
-          </Stack>
-        </SectionCard>
-        <SectionCard title="Demographics">
-          <Stack spacing="8px">
-            <InfoLine label="Sex" value={patient.sex || '-'} />
-            <InfoLine label="DOB" value={patient.date_of_birth || '-'} />
-            <InfoLine label="Occupation" value={patient.occupation || '-'} />
-          </Stack>
-        </SectionCard>
-        <SectionCard title="Emergency Contact">
-          <Stack spacing="8px">
-            <InfoLine label="Name" value={patient.emergency_contact_name || '-'} />
-            <InfoLine label="Phone" value={patient.emergency_contact_phone || '-'} />
-          </Stack>
-        </SectionCard>
-        <SectionCard
-          title="Payment Status"
-          border="1px solid"
-          borderColor={hasBalance ? 'red.200' : 'green.200'}
-          actions={<Icon as={hasBalance ? MdErrorOutline : MdCheckCircle} color={hasBalance ? 'red.500' : 'green.500'} />}
-        >
-          <Text fontSize="2xl" fontWeight="bold" color={hasBalance ? 'red.500' : 'green.500'}>
-            {hasBalance ? `GHS ${patientBalance?.balance?.toFixed(2) || '0.00'}` : 'Paid Up'}
-          </Text>
-          <Text fontSize="xs" color="secondaryGray.600" mt="4px">
-            Total Billed: GHS {patientBalance?.total_billed?.toFixed(2) || '0.00'}
-          </Text>
-          <Text fontSize="xs" color="secondaryGray.600">
-            Total Paid: GHS {patientBalance?.total_paid?.toFixed(2) || '0.00'}
-          </Text>
-        </SectionCard>
-      </SimpleGrid>
+      <EntityHeader
+        name={`${patient.first_name} ${patient.last_name}`}
+        subtitle={[patient.sex, patient.date_of_birth && ageOf(patient.date_of_birth), patient.occupation].filter(Boolean).join(' · ') || 'Patient'}
+        badges={<Badge variant="outline">{patient.patient_number}</Badge>}
+        onBack={() => navigate('/patients')}
+        facts={[
+          { icon: MdPhone, label: 'Phone', value: patient.phone || '-' },
+          { icon: MdEmail, label: 'Email', value: patient.email || '-' },
+          { icon: MdLocationOn, label: 'Address', value: patient.address || '-' },
+          { icon: MdCake, label: 'Date of birth', value: patient.date_of_birth || '-' },
+          { icon: MdContactEmergency, label: 'Emergency contact', value: patient.emergency_contact_name || '-' },
+          { icon: MdPhone, label: 'Emergency phone', value: patient.emergency_contact_phone || '-' },
+        ]}
+        aside={
+          <>
+            <Flex align="center" justify="space-between" mb="6px">
+              <Text fontSize="11px" fontWeight="700" letterSpacing="0.06em" textTransform="uppercase" color="secondaryGray.500">
+                Payment status
+              </Text>
+              <Icon as={hasBalance ? MdErrorOutline : MdCheckCircle} color={hasBalance ? 'red.500' : 'green.500'} />
+            </Flex>
+            <Text fontSize="28px" fontWeight="800" lineHeight="1.1" color={hasBalance ? 'red.500' : 'green.500'}>
+              {hasBalance ? `GHS ${patientBalance?.balance?.toFixed(2) || '0.00'}` : 'Paid Up'}
+            </Text>
+            <Text fontSize="xs" fontWeight="500" color="secondaryGray.600" mt="2px" mb="10px">
+              {hasBalance ? 'outstanding' : 'no outstanding balance'}
+            </Text>
+            <Flex justify="space-between" fontSize="13px" py="6px" borderTop="1px dashed" borderColor="secondaryGray.100" _dark={{ borderColor: "whiteAlpha.200" }}>
+              <Text color="secondaryGray.600">Total billed</Text>
+              <Text fontWeight="700">GHS {patientBalance?.total_billed?.toFixed(2) || '0.00'}</Text>
+            </Flex>
+            <Flex justify="space-between" fontSize="13px" py="6px" borderTop="1px dashed" borderColor="secondaryGray.100" _dark={{ borderColor: "whiteAlpha.200" }}>
+              <Text color="secondaryGray.600">Total paid</Text>
+              <Text fontWeight="700">GHS {patientBalance?.total_paid?.toFixed(2) || '0.00'}</Text>
+            </Flex>
+          </>
+        }
+      />
 
       <Tabs variant="soft-rounded">
         <Flex justify="space-between" align="center" mb="16px" gap="12px" wrap="wrap">
@@ -385,7 +377,7 @@ export default function PatientDetailPage() {
                             <Badge
                               colorScheme={visit.status === 'completed' ? 'green' : visit.status === 'in_consultation' ? 'yellow' : 'gray'}
                             >
-                              {visit.status}
+                              {String(visit.status ?? '').replace(/_/g, ' ')}
                             </Badge>
                           </Td>
                           <Td>
@@ -545,7 +537,7 @@ export default function PatientDetailPage() {
                               colorScheme={scan.status === 'completed' || scan.status === 'reviewed' ? 'green' : 'gray'}
                               variant={scan.status === 'pending' || scan.status === 'completed' || scan.status === 'reviewed' ? 'subtle' : 'outline'}
                             >
-                              {scan.status}
+                              {String(scan.status ?? '').replace(/_/g, ' ')}
                             </Badge>
                           </Td>
                           <Td maxW="200px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">

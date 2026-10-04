@@ -1479,7 +1479,7 @@ export default function MessagesPage() {
                   <Text fontSize="2xl" fontWeight="700" color="blue.500">
                     GH₵{details.amount}
                   </Text>
-                  <Badge mt="8px">{details.status}</Badge>
+                  <Badge mt="8px">{String(details.status ?? '').replace(/_/g, ' ')}</Badge>
                 </Box>
                 <DetailGrid
                   items={[
@@ -1499,7 +1499,7 @@ export default function MessagesPage() {
                     Visit #{details.id}
                   </Text>
                   <Text color="secondaryGray.600">{details.patient_name || 'Unknown Patient'}</Text>
-                  <Badge mt="8px">{details.status}</Badge>
+                  <Badge mt="8px">{String(details.status ?? '').replace(/_/g, ' ')}</Badge>
                 </Box>
                 <DetailGrid
                   items={[

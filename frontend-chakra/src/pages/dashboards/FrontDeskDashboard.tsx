@@ -82,7 +82,7 @@ export default function FrontDeskDashboard() {
                     </Text>
                   </Box>
                   <Badge colorScheme={statusScheme(visit.status)} borderRadius="full">
-                    {visit.status}
+                    {String(visit.status ?? '').replace(/_/g, ' ')}
                   </Badge>
                 </RowBox>
               ))}

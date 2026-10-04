@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Box, Button, IconButton, Input, Select, SimpleGrid, Stack, Table, Tbody, Td, Th, Thead, Tr } from '@chakra-ui/react'
 import { MdAdd, MdDownload, MdVisibility } from 'react-icons/md'
 import api from '@/lib/api'
+import { PersonCell } from '@/components/Person'
 import { useAuthStore } from '@/stores/auth'
 import type { Patient } from '@/types'
 import { useToast } from '@/hooks/use-toast'
@@ -131,7 +132,7 @@ export default function PatientsPage() {
                   <Tr key={patient.id}>
                     <Td fontWeight="600">{patient.patient_number}</Td>
                     <Td>
-                      {patient.first_name} {patient.last_name}
+                      <PersonCell name={`${patient.first_name} ${patient.last_name}`} />
                     </Td>
                     <Td>{patient.phone || '-'}</Td>
                     <Td>{patient.email || '-'}</Td>

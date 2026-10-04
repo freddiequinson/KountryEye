@@ -244,7 +244,7 @@ export default function UserProfilePage() {
                         <Tr key={record.id}>
                           <Td>{formatDate(record.date)}</Td>
                           <Td>
-                            <Badge colorScheme={attendanceScheme[record.status] || 'gray'}>{record.status}</Badge>
+                            <Badge colorScheme={attendanceScheme[record.status] || 'gray'}>{String(record.status ?? '').replace(/_/g, ' ')}</Badge>
                           </Td>
                           <Td>{record.clock_in ? formatDateTime(record.clock_in) : '-'}</Td>
                           <Td>{record.clock_out ? formatDateTime(record.clock_out) : '-'}</Td>
@@ -316,7 +316,7 @@ export default function UserProfilePage() {
                           <Td>{formatCurrency(request.amount)}</Td>
                           <Td textTransform="capitalize">{request.purpose || 'Other'}</Td>
                           <Td>
-                            <Badge colorScheme={memoScheme[request.status] || 'blue'}>{request.status}</Badge>
+                            <Badge colorScheme={memoScheme[request.status] || 'blue'}>{String(request.status ?? '').replace(/_/g, ' ')}</Badge>
                           </Td>
                           <Td color="secondaryGray.600">{formatDate(request.created_at)}</Td>
                         </Tr>

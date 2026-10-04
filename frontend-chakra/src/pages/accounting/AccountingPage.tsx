@@ -1,12 +1,11 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Badge, Box, Button, Divider, Flex, Input, SimpleGrid, Stack, Tab, Table, TabList, TabPanel, TabPanels, Tabs, Tbody, Td, Text, Textarea, Th, Thead, Tr } from '@chakra-ui/react'
+import { Badge, Box, Button, Flex, Icon, Input, SimpleGrid, Stack, Tab, Table, TabList, TabPanel, TabPanels, Tabs, Tbody, Td, Text, Textarea, Th, Thead, Tr } from '@chakra-ui/react'
 import { MdTrendingDown, MdTrendingUp } from 'react-icons/md'
 import api from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
 import PageHeader from '@/components/PageHeader'
 import Card from '@/components/card/Card'
-import SectionCard from '@/components/card/SectionCard'
 import { AppModal, Field, TableMessageRow } from '@/components/ui'
 
 const today = () => new Date().toISOString().split('T')[0]
@@ -15,25 +14,39 @@ const emptyExpense = () => ({ amount: '', description: '', vendor: '', reference
 
 const formatCurrency = (amount: number) => amount.toLocaleString('en-US', { style: 'currency', currency: 'GHS' })
 
+// Profit for a period up top, then income vs expenses with a bar showing how much of income was spent.
 function PeriodCard({ title, data }: { title: string; data?: { income: number; expenses: number; profit: number } }) {
+  const income = data?.income || 0
+  const expenses = data?.expenses || 0
+  const profit = data?.profit ?? 0
+  const spent = income > 0 ? Math.min(100, (expenses / income) * 100) : expenses > 0 ? 100 : 0
   return (
-    <SectionCard title={<Text fontSize="sm">{title}</Text>}>
-      <Stack spacing="4px">
-        <Flex justify="space-between" fontSize="sm">
-          <Text color="green.500">Income</Text>
-          <Text>{formatCurrency(data?.income || 0)}</Text>
+    <Card>
+      <Flex justify="space-between" align="center" mb="10px">
+        <Text fontSize="11px" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="secondaryGray.500">
+          {title}
+        </Text>
+        <Badge colorScheme={profit >= 0 ? 'green' : 'red'}>{profit >= 0 ? 'Profit' : 'Loss'}</Badge>
+      </Flex>
+      <Text fontSize="28px" fontWeight="800" lineHeight="1.1" color={profit >= 0 ? 'secondaryGray.900' : 'red.500'} _dark={{ color: profit >= 0 ? 'white' : 'red.300' }}>
+        {formatCurrency(profit)}
+      </Text>
+      <Box h="6px" borderRadius="full" bg="green.100" _dark={{ bg: 'whiteAlpha.200' }} mt="14px" mb="12px" overflow="hidden">
+        <Box h="100%" w={`${spent}%`} bg="red.500" borderRadius="full" transition="width .4s ease" />
+      </Box>
+      <Flex justify="space-between" fontSize="13px" fontWeight="600" wrap="wrap" gap="6px 16px">
+        <Flex align="center" gap="6px">
+          <Icon as={MdTrendingUp} color="green.500" />
+          <Text color="secondaryGray.600">Income</Text>
+          <Text>{formatCurrency(income)}</Text>
         </Flex>
-        <Flex justify="space-between" fontSize="sm">
-          <Text color="red.500">Expenses</Text>
-          <Text>{formatCurrency(data?.expenses || 0)}</Text>
+        <Flex align="center" gap="6px">
+          <Icon as={MdTrendingDown} color="red.500" />
+          <Text color="secondaryGray.600">Expenses</Text>
+          <Text>{formatCurrency(expenses)}</Text>
         </Flex>
-        <Divider />
-        <Flex justify="space-between" fontWeight="500" pt="4px">
-          <Text>Profit</Text>
-          <Text color={(data?.profit ?? 0) >= 0 ? 'green.500' : 'red.500'}>{formatCurrency(data?.profit || 0)}</Text>
-        </Flex>
-      </Stack>
-    </SectionCard>
+      </Flex>
+    </Card>
   )
 }
 

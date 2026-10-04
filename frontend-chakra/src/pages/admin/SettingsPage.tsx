@@ -54,6 +54,7 @@ import {
   MdWarning,
 } from 'react-icons/md'
 import api from '@/lib/api'
+import { PersonCell } from '@/components/Person'
 import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/stores/auth'
 import PageHeader from '@/components/PageHeader'
@@ -636,13 +637,8 @@ export default function SettingsPage() {
                     ) : (
                       visibleUsers.map((user: User) => (
                         <Tr key={user.id}>
-                          <Td fontWeight="600">
-                            {user.first_name} {user.last_name}
-                            {user.is_superuser && (
-                              <Badge ms="8px" colorScheme="purple">
-                                Admin
-                              </Badge>
-                            )}
+                          <Td>
+                            <PersonCell name={`${user.first_name} ${user.last_name}`} sub={user.is_superuser ? 'Administrator' : undefined} />
                           </Td>
                           <Td>{user.email}</Td>
                           <Td>{getRoleName(user.role_id)}</Td>

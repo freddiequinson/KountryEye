@@ -783,7 +783,7 @@ export default function ConsultationPage() {
                             <Flex align="center" gap="8px">
                               <Text fontSize="sm">Qty: {item.quantity}</Text>
                               <Badge colorScheme={prescription.status === 'paid' ? 'green' : 'gray'} fontSize="xs">
-                                {prescription.status}
+                                {String(prescription.status ?? '').replace(/_/g, ' ')}
                               </Badge>
                             </Flex>
                           </RowBox>
@@ -1068,7 +1068,7 @@ export default function ConsultationPage() {
                             <Badge colorScheme={done ? 'brand' : 'gray'} variant={done || scan.status === 'pending' ? 'subtle' : 'outline'}>
                               {scan.status === 'pending' && <Icon as={MdAccessTime} me="4px" verticalAlign="middle" />}
                               {scan.status === 'completed' && <Icon as={MdCheckCircle} me="4px" verticalAlign="middle" />}
-                              {scan.status}
+                              {String(scan.status ?? '').replace(/_/g, ' ')}
                             </Badge>
                           </Flex>
 
@@ -1139,7 +1139,7 @@ export default function ConsultationPage() {
                             {scan.scan_date ? new Date(scan.scan_date).toLocaleDateString() : ''}
                           </Text>
                         </Flex>
-                        <Badge colorScheme={scan.status === 'completed' ? 'brand' : 'gray'}>{scan.status}</Badge>
+                        <Badge colorScheme={scan.status === 'completed' ? 'brand' : 'gray'}>{String(scan.status ?? '').replace(/_/g, ' ')}</Badge>
                       </RowBox>
                     ))}
                   </Stack>
