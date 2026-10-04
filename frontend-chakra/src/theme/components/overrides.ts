@@ -47,6 +47,7 @@ export const overrideStyles = {
             fontWeight: "700",
             letterSpacing: "0.04em",
             py: "12px",
+            px: "16px",
             borderColor: mode("secondaryGray.100", "whiteAlpha.100")(props),
             whiteSpace: "nowrap",
           },
@@ -56,6 +57,7 @@ export const overrideStyles = {
             fontSize: "14px",
             fontWeight: "700",
             py: "14px",
+            px: "16px",
             whiteSpace: "nowrap",
           },
           tbody: {

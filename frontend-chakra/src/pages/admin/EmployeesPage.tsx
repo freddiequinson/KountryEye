@@ -299,7 +299,7 @@ export default function EmployeesPage() {
                               <IconButton
                                 aria-label="View details"
                                 title="View details"
-                                variant="light"
+                                variant="ghost"
                                 size="sm"
                                 icon={<MdVisibility />}
                                 onClick={() => navigate(`/admin/employees/${employee.id}`)}
@@ -307,7 +307,7 @@ export default function EmployeesPage() {
                               <IconButton
                                 aria-label="Assign Branch"
                                 title="Assign Branch"
-                                variant="light"
+                                variant="ghost"
                                 size="sm"
                                 icon={<MdBusiness />}
                                 onClick={() => {
@@ -318,12 +318,12 @@ export default function EmployeesPage() {
                               <IconButton
                                 aria-label={employee.is_active ? 'Deactivate' : 'Activate'}
                                 title={employee.is_active ? 'Deactivate' : 'Activate'}
-                                variant={employee.is_active ? 'light' : 'brand'}
+                                variant={employee.is_active ? 'ghost' : 'brand'}
                                 size="sm"
                                 icon={employee.is_active ? <MdPersonOff /> : <MdHowToReg />}
                                 onClick={() => toggleActiveMutation.mutate({ id: employee.id, is_active: !employee.is_active })}
                               />
-                              <IconButton aria-label="Delete" title="Delete" colorScheme="red" size="sm" icon={<MdDelete />} onClick={() => setDeleteConfirm(employee)} />
+                              <IconButton aria-label="Delete" title="Delete" variant="ghost" color="red.500" size="sm" icon={<MdDelete />} onClick={() => setDeleteConfirm(employee)} />
                             </Flex>
                           </Td>
                         </Tr>

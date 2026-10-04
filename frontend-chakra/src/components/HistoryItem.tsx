@@ -35,7 +35,7 @@ export default function HistoryItem({
       {image ? (
         <Image src={image} w="66px" h="66px" minW="66px" borderRadius="20px" objectFit="cover" me="16px" />
       ) : (
-        <Flex w="66px" h="66px" minW="66px" borderRadius="20px" bg={tileBg} color={tileColor} align="center" justify="center" direction="column" me="16px" fontWeight="700" lineHeight="1.1">
+        <Flex w={{ base: '54px', md: '66px' }} h={{ base: '54px', md: '66px' }} flexShrink={0} borderRadius={{ base: '16px', md: '20px' }} bg={tileBg} color={tileColor} align="center" justify="center" direction="column" me="16px" fontWeight="700" lineHeight="1.1">
           {icon ? <Icon as={icon} w="28px" h="28px" /> : tile}
         </Flex>
       )}
@@ -50,7 +50,7 @@ export default function HistoryItem({
         )}
       </Box>
       {value && (
-        <Text as="div" fontWeight="700" fontSize="md" color={textColor} me={{ base: '10px', md: '28px' }} whiteSpace="nowrap">
+        <Text as="div" display={{ base: 'none', md: 'block' }} fontWeight="700" fontSize="md" color={textColor} me="28px" whiteSpace="nowrap">
           {value}
         </Text>
       )}
