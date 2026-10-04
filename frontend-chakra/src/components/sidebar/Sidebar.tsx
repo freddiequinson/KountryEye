@@ -1,8 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { motion } from 'framer-motion'
-import { Badge, Box, Button, Collapse, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerOverlay, Flex, Icon, Image, Text, Tooltip, useColorModeValue } from '@chakra-ui/react'
+import { Badge, Box, Button, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerOverlay, Flex, Icon, Image, Text, Tooltip, useColorModeValue } from '@chakra-ui/react'
 import type { IconType } from 'react-icons'
 import { MdExpandMore, MdHelpOutline } from 'react-icons/md'
 import { useAuthStore } from '@/stores/auth'
@@ -55,9 +54,8 @@ function NavItemLink({
         data-tour={tour}
         role="group"
       >
-        {/* the brand bar slides between items when the route changes */}
         {active && (
-          <Box as={motion.div} layoutId={collapsed ? 'nav-bar-collapsed' : 'nav-bar'} position="absolute" left="-12px" top="8px" bottom="8px" w="4px" borderRightRadius="4px" bg="brand.500" />
+          <Box position="absolute" left="0" top="10px" bottom="10px" w="3px" borderRadius="3px" bg="brand.500" />
         )}
         <Icon as={icon} w="20px" h="20px" me={collapsed ? '0' : '12px'} flexShrink={0} transition="transform .2s ease" _groupHover={{ transform: 'scale(1.15) rotate(-6deg)' }} />
         {!collapsed && (
@@ -96,8 +94,8 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
   const location = useLocation()
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  // sections the user opened or closed by hand; anything else is open only if it holds the current page
-  const [toggled, setToggled] = useState<Record<string, boolean>>({})
+  // which sections are open; starts with just the one holding the current page (see effect below)
+  const [open, setOpen] = useState<Record<string, boolean>>({})
   const textColor = useColorModeValue('secondaryGray.900', 'white')
   const divider = useColorModeValue('secondaryGray.100', 'whiteAlpha.100')
 
@@ -118,9 +116,11 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
     .filter((url) => location.pathname === url || (url !== '/' && location.pathname.startsWith(url + '/')))
     .sort((a, b) => b.length - a.length)[0]
 
-  // default: only the section holding the current page is open (the first one when the page isn't in the menu)
-  const homeSection = sections.find((sec) => sec.items.some((i) => i.url === activeUrl)) || sections[0]
-  const isSectionOpen = (section: (typeof sections)[number]) => toggled[section.id] ?? section.id === homeSection?.id
+  // Navigating into a section opens it. Sections never close on their own, so the list doesn't jump around.
+  const homeId = (sections.find((sec) => sec.items.some((i) => i.url === activeUrl)) || sections[0])?.id
+  useEffect(() => {
+    if (homeId) setOpen((prev) => (prev[homeId] ? prev : { ...prev, [homeId]: true }))
+  }, [homeId])
 
   return (
     <Flex direction="column" h="100%">
@@ -155,7 +155,7 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
 
       <Box flex="1" overflowY="auto" overflowX="hidden" className="thin-scrollbar" px="12px" py="14px">
         {sections.map((section, index) => {
-          const isOpen = isSectionOpen(section)
+          const isOpen = !!open[section.id]
           return (
             <Box key={section.id} mb="10px">
               {collapsed ? (
@@ -171,7 +171,7 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
                   mb="2px"
                   color="secondaryGray.500"
                   _hover={{ color: 'secondaryGray.700' }}
-                  onClick={() => setToggled((prev) => ({ ...prev, [section.id]: !isOpen }))}
+                  onClick={() => setOpen((prev) => ({ ...prev, [section.id]: !isOpen }))}
                   data-tour={`section-${section.id}`}
                 >
                   <Text flex="1" textAlign="left" fontSize="11px" fontWeight="700" textTransform="uppercase" letterSpacing="0.1em">
@@ -180,8 +180,8 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
                   <Icon as={MdExpandMore} transform={isOpen ? 'none' : 'rotate(-90deg)'} transition="transform 0.2s" />
                 </Flex>
               )}
-              <Collapse in={collapsed || isOpen} animateOpacity style={{ overflow: 'visible' }}>
-                {section.items.map((item) => (
+              {(collapsed || isOpen) &&
+                section.items.map((item) => (
                   <NavItemLink
                     key={item.url}
                     to={item.url}
@@ -194,7 +194,6 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
                     onClick={onNavigate}
                   />
                 ))}
-              </Collapse>
             </Box>
           )
         })}
