@@ -60,6 +60,7 @@ import { useAuthStore } from '@/stores/auth'
 import PageHeader from '@/components/PageHeader'
 import Card from '@/components/card/Card'
 import SectionCard from '@/components/card/SectionCard'
+import { TabbedSections } from '@/components/card/TabCard'
 import { AppModal, ConfirmDialog, Field, TableBox, TableMessageRow } from '@/components/ui'
 
 interface User {
@@ -904,7 +905,7 @@ export default function SettingsPage() {
 
           {/* System */}
           <TabPanel p="0">
-            <SimpleGrid columns={{ base: 1, md: 2 }} spacing="20px">
+            <TabbedSections mb="20px">
               <SectionCard title="AI Features" description="Configure AI-powered clinical analysis">
                 <Stack spacing="16px">
                   <Flex justify="space-between" align="center" gap="12px">
@@ -947,8 +948,9 @@ export default function SettingsPage() {
                   </StatRow>
                 </Stack>
               </SectionCard>
+            </TabbedSections>
 
-              <Card gridColumn={{ md: 'span 2' }} border="1px solid" borderColor="red.300">
+              <Card border="1px solid" borderColor="red.300">
                 <Flex align="center" gap="8px" color="red.500" mb="4px">
                   <Icon as={MdWarning} w="20px" h="20px" />
                   <Heading size="md">Danger Zone</Heading>
@@ -968,7 +970,6 @@ export default function SettingsPage() {
                   </Button>
                 </Flex>
               </Card>
-            </SimpleGrid>
           </TabPanel>
         </TabPanels>
       </Tabs>

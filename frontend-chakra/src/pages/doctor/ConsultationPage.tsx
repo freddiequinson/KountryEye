@@ -674,7 +674,7 @@ export default function ConsultationPage() {
 
               <SectionCard title="Refraction">
                 {eyeColumns((eye) => (
-                  <SimpleGrid columns={3} spacing="12px">
+                  <SimpleGrid columns={3} spacing="12px" alignItems="end">
                     <Field label="Sphere (SPH)">
                       <Input variant="main" placeholder="e.g., -2.00" value={clinicalRecord[`refraction_${eye}_sphere`]} onChange={rec(`refraction_${eye}_sphere`)} />
                     </Field>

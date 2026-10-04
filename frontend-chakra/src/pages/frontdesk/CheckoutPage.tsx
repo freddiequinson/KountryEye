@@ -11,7 +11,6 @@ import {
   Flex,
   Heading,
   Icon,
-  IconButton,
   Input,
   SimpleGrid,
   Spinner,
@@ -29,11 +28,11 @@ import {
   MdLogout,
   MdPerson,
   MdPrint,
-  MdReceipt,
   MdVisibility,
 } from 'react-icons/md'
 import { FaStethoscope } from 'react-icons/fa'
 import api from '@/lib/api'
+import PageHeader from '@/components/PageHeader'
 import { useToast } from '@/hooks/use-toast'
 import Card from '@/components/card/Card'
 import SectionCard from '@/components/card/SectionCard'
@@ -173,21 +172,14 @@ export default function CheckoutPage() {
 
   return (
     <>
-      {/* Header */}
-      <Flex justify="space-between" align={{ base: 'start', md: 'center' }} direction={{ base: 'column', md: 'row' }} gap="12px" mb="20px">
-        <Flex align="center" gap="16px">
-          <IconButton aria-label="Back" variant="ghost" icon={<MdArrowBack />} onClick={() => navigate(-1)} />
-          <Box>
-            <Heading size="lg" display="flex" alignItems="center" gap="8px" data-tour="page-title">
-              <Icon as={MdReceipt} />
-              Patient Checkout
-            </Heading>
-            <Text color="secondaryGray.600">
-              Visit #{summary.visit_number} • {summary.visit_date?.split('T')[0]}
-            </Text>
-          </Box>
-        </Flex>
-        <Flex gap="8px" wrap="wrap">
+      <Button variant="ghost" size="sm" leftIcon={<MdArrowBack />} onClick={() => navigate(-1)} mb="8px">
+        Back
+      </Button>
+      <PageHeader
+        title="Patient Checkout"
+        description={`Visit #${summary.visit_number} · ${summary.visit_date?.split('T')[0]}`}
+        actions={
+          <>
           <Button variant="light" leftIcon={<MdPrint />} onClick={() => openPdf(`/checkout/visits/${visitId}/checkout-receipt`, 'Failed to generate receipt')}>
             Print Receipt
           </Button>
@@ -206,8 +198,9 @@ export default function CheckoutPage() {
               Checked Out
             </Badge>
           )}
-        </Flex>
-      </Flex>
+          </>
+        }
+      />
 
       <Stack spacing="20px">
         {/* Patient Info */}

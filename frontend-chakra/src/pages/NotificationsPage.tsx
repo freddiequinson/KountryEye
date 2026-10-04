@@ -1,19 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Box, Button, Flex, HStack, Icon, Spinner, Stack, Text, useColorModeValue } from '@chakra-ui/react'
+import { Box, Button, Flex, HStack, Spinner, useColorModeValue } from '@chakra-ui/react'
 import { MdDelete, MdDoneAll, MdNotificationsNone } from 'react-icons/md'
 import api from '@/lib/api'
 import PageHeader from '@/components/PageHeader'
 import SectionCard from '@/components/card/SectionCard'
 import { EmptyState } from '@/components/ui'
+import HistoryItem from '@/components/HistoryItem'
 import { formatRelativeTime, notificationIcons, type Notification } from '@/components/navbar/NotificationDropdown'
 
 export default function NotificationsPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const unreadBg = useColorModeValue('brand.50', 'whiteAlpha.100')
-  const hoverBg = useColorModeValue('secondaryGray.100', 'whiteAlpha.50')
-  const dividerColor = useColorModeValue('gray.100', 'whiteAlpha.100')
 
   const { data: notifications = [], isLoading } = useQuery({
     queryKey: ['notifications', 'all'],
@@ -75,44 +74,28 @@ export default function NotificationsPage() {
         ) : notifications.length === 0 ? (
           <EmptyState icon={MdNotificationsNone}>No notifications</EmptyState>
         ) : (
-          <Stack spacing="0" divider={<Box borderBottom="1px solid" borderColor={dividerColor} />}>
+          <Box mx={{ md: '-8px' }}>
             {notifications.map((notification: Notification) => {
               const [icon, color] = notificationIcons[notification.notification_type] || notificationIcons.system
               return (
-                <Flex
-                  key={notification.id}
-                  gap="16px"
-                  align="start"
-                  p="16px"
-                  borderRadius="12px"
-                  cursor="pointer"
-                  bg={notification.is_read ? undefined : unreadBg}
-                  _hover={{ bg: hoverBg }}
-                  onClick={() => handleNotificationClick(notification)}
-                >
-                  <Icon as={icon} color={color} w="20px" h="20px" mt="2px" />
-                  <Box flex="1" minW="0">
-                    <Flex justify="space-between" align="center" gap="8px">
-                      <Text fontSize="sm" fontWeight={notification.is_read ? 'normal' : '700'}>
+                <Box key={notification.id} borderRadius="20px" bg={notification.is_read ? undefined : unreadBg} mb="4px">
+                  <HistoryItem
+                    icon={icon}
+                    tileColor={color}
+                    name={
+                      <Flex as="span" align="center" gap="8px">
                         {notification.title}
-                      </Text>
-                      <HStack spacing="8px" flexShrink={0}>
-                        {!notification.is_read && <Box w="8px" h="8px" borderRadius="full" bg="brand.500" />}
-                        <Text fontSize="xs" color="secondaryGray.600">
-                          {formatRelativeTime(notification.created_at)}
-                        </Text>
-                      </HStack>
-                    </Flex>
-                    {notification.message && (
-                      <Text fontSize="sm" color="secondaryGray.600" mt="4px">
-                        {notification.message}
-                      </Text>
-                    )}
-                  </Box>
-                </Flex>
+                        {!notification.is_read && <Box as="span" w="8px" h="8px" borderRadius="full" bg="brand.500" flexShrink={0} />}
+                      </Flex>
+                    }
+                    sub={notification.message}
+                    end={formatRelativeTime(notification.created_at)}
+                    onClick={() => handleNotificationClick(notification)}
+                  />
+                </Box>
               )
             })}
-          </Stack>
+          </Box>
         )}
       </SectionCard>
     </>
