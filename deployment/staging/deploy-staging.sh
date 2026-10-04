@@ -8,6 +8,8 @@
 #
 # Usage: sudo bash deploy-staging.sh [branch]        first run also clones the prod DB
 #        sudo REFRESH_DB=1 bash deploy-staging.sh    redeploy + re-clone prod data
+#        sudo SKIP_FRONTEND_BUILD=1 bash deploy-staging.sh   frontend built locally, then:
+#          scp -r frontend-chakra/dist/* root@SERVER:/var/www/kountryeye-staging/frontend-dist/
 set -euo pipefail
 
 BRANCH=${1:-staging}
@@ -49,11 +51,15 @@ mkdir -p data uploads
 chown -R www-data:www-data "$STAGING/backend/data" "$STAGING/backend/uploads" "$ENV"
 
 # --- Frontend (new Chakra UI) ---
-cd "$STAGING/frontend-chakra"
-npm ci --no-audit --no-fund
-npm run build
+# SKIP_FRONTEND_BUILD=1: build locally and upload dist/ to $STAGING/frontend-dist
+# instead (the 1GB droplet can run out of memory building it).
 mkdir -p "$STAGING/frontend-dist"
-rsync -a --delete dist/ "$STAGING/frontend-dist/"
+if [ "${SKIP_FRONTEND_BUILD:-0}" != 1 ]; then
+  cd "$STAGING/frontend-chakra"
+  npm ci --no-audit --no-fund
+  npm run build
+  rsync -a --delete dist/ "$STAGING/frontend-dist/"
+fi
 
 # --- Service + nginx (separate files; prod's are untouched) ---
 cp "$SRC/kountryeye-staging.service" /etc/systemd/system/
