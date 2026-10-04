@@ -94,8 +94,8 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
   const location = useLocation()
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  // which sections are open; starts with just the one holding the current page (see effect below)
-  const [open, setOpen] = useState<Record<string, boolean>>({})
+  // accordion: one section open at a time (null = all closed)
+  const [openId, setOpenId] = useState<string | null>(null)
   const textColor = useColorModeValue('secondaryGray.900', 'white')
   const divider = useColorModeValue('secondaryGray.100', 'whiteAlpha.100')
 
@@ -116,10 +116,10 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
     .filter((url) => location.pathname === url || (url !== '/' && location.pathname.startsWith(url + '/')))
     .sort((a, b) => b.length - a.length)[0]
 
-  // Navigating into a section opens it. Sections never close on their own, so the list doesn't jump around.
+  // The section holding the current page opens on load and whenever you navigate into another section.
   const homeId = (sections.find((sec) => sec.items.some((i) => i.url === activeUrl)) || sections[0])?.id
   useEffect(() => {
-    if (homeId) setOpen((prev) => (prev[homeId] ? prev : { ...prev, [homeId]: true }))
+    if (homeId) setOpenId(homeId)
   }, [homeId])
 
   return (
@@ -155,7 +155,7 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
 
       <Box flex="1" overflowY="auto" overflowX="hidden" className="thin-scrollbar" px="12px" py="14px">
         {sections.map((section, index) => {
-          const isOpen = !!open[section.id]
+          const isOpen = openId === section.id
           return (
             <Box key={section.id} mb="10px">
               {collapsed ? (
@@ -171,7 +171,7 @@ export function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; 
                   mb="2px"
                   color="secondaryGray.500"
                   _hover={{ color: 'secondaryGray.700' }}
-                  onClick={() => setOpen((prev) => ({ ...prev, [section.id]: !isOpen }))}
+                  onClick={() => setOpenId(isOpen ? null : section.id)}
                   data-tour={`section-${section.id}`}
                 >
                   <Text flex="1" textAlign="left" fontSize="11px" fontWeight="700" textTransform="uppercase" letterSpacing="0.1em">
