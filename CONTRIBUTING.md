@@ -96,7 +96,7 @@ Production and staging run the same backend code, on separate copies of the data
 
 ## Staging
 
-Staging is at `http://144.126.199.94:8080` and runs the `staging` branch against a copy of the production data. Deploys are done by the project owner after a pull request is merged. The scripts are in `deployment/staging/`.
+Staging runs the `staging` branch against a copy of the production data. Ask the project owner for the address; it is not published here because this repository is public. Deploys are done by the project owner after a pull request is merged. The scripts are in `deployment/staging/`.
 
 ## AI coding agents
 
