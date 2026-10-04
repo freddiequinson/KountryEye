@@ -34,6 +34,8 @@ cd "$STAGING/backend"
 [ -d venv ] || python3 -m venv venv
 venv/bin/pip install -q --upgrade pip
 venv/bin/pip install -q -r requirements.txt
+# Match prod's exact package versions (it has packages installed by hand).
+[ -x "$PROD/backend/venv/bin/pip" ] && "$PROD/backend/venv/bin/pip" freeze | venv/bin/pip install -q -r /dev/stdin
 
 ENV="$STAGING/backend/.env"
 if [ ! -f "$ENV" ]; then
