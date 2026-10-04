@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Box, Button, Flex, Icon, Input, InputGroup, InputLeftElement, Select, SimpleGrid, Stack, Text, Textarea } from '@chakra-ui/react'
-import { MdAdd, MdApartment, MdArrowBack, MdCheck, MdPerson, MdPhone, MdSearch } from 'react-icons/md'
+import { Box, Button, Flex, Icon, Input, InputGroup, InputLeftElement, Select, Stack, Text, Textarea } from '@chakra-ui/react'
+import { MdAdd, MdApartment, MdArrowBack, MdCheck, MdDescription, MdLocalHospital, MdPerson, MdPhone, MdSearch } from 'react-icons/md'
 import api from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
 import PageHeader from '@/components/PageHeader'
-import SectionCard from '@/components/card/SectionCard'
+import Card from '@/components/card/Card'
+import { FormActions, FormSection } from '@/components/FormSection'
 import { AppModal, Field } from '@/components/ui'
 
 interface ReferralDoctor {
@@ -134,9 +135,9 @@ export default function NewReferralPage() {
       <PageHeader title="New External Referral" description="Record a new referral from an external doctor" />
 
       <form onSubmit={handleSubmit}>
-        <SimpleGrid columns={{ base: 1, lg: 2 }} spacing="20px">
-          <SectionCard title="Referring Doctor" description="Enter the doctor's phone number to look them up or add a new one">
-            <Stack spacing="16px">
+        <Card px={{ base: '18px', md: '26px' }} py="20px">
+          <FormSection icon={MdLocalHospital} title="Referring doctor" description="Enter the doctor's phone number to look them up, or add a new one." columns={1}>
+            <Stack spacing="16px" maxW="560px">
               <Flex gap="8px" align="end">
                 <Field label="Doctor's Phone Number" flex="1">
                   <InputGroup>
@@ -185,14 +186,13 @@ export default function NewReferralPage() {
                 </Button>
               )}
             </Stack>
-          </SectionCard>
+          </FormSection>
 
-          <SectionCard title="Client Information" description="Details of the referred client">
-            <Stack spacing="16px">
-              <Field label="Full Name" isRequired>
+          <FormSection icon={MdPerson} title="Client" description="Details of the person being referred.">
+              <Field label="Full Name" isRequired gridColumn={{ md: 'span 2' }}>
                 <Input variant="main" placeholder="Enter client's full name" value={client.name} onChange={setClientField('name')} />
               </Field>
-              <SimpleGrid columns={2} spacing="16px">
+              <>
                 <Field label="Phone">
                   <Input variant="main" placeholder="Phone number" value={client.phone} onChange={setClientField('phone')} />
                 </Field>
@@ -208,38 +208,35 @@ export default function NewReferralPage() {
                     <option value="female">Female</option>
                   </Select>
                 </Field>
-              </SimpleGrid>
-              <Field label="Address">
+              </>
+              <Field label="Address" gridColumn={{ md: 'span 2' }}>
                 <Textarea variant="main" rows={2} placeholder="Client's address" value={client.address} onChange={setClientField('address')} />
               </Field>
-            </Stack>
-          </SectionCard>
+          </FormSection>
 
-          <SectionCard title="Referral Details" gridColumn={{ lg: 'span 2' }}>
-            <Stack spacing="16px">
-              <SimpleGrid columns={{ base: 1, md: 2 }} spacing="16px">
+          <FormSection icon={MdDescription} title="Referral details" description="Why they were referred and what the service costs.">
+              <>
                 <Field label="Reason for Referral">
                   <Textarea variant="main" rows={3} placeholder="Why was this client referred?" value={reason} onChange={(e) => setReason(e.target.value)} />
                 </Field>
                 <Field label="Additional Notes">
                   <Textarea variant="main" rows={3} placeholder="Any additional notes..." value={notes} onChange={(e) => setNotes(e.target.value)} />
                 </Field>
-              </SimpleGrid>
-              <Field label="Service Fee (GH₵)" maxW="xs">
+              </>
+              <Field label="Service Fee (GH₵)">
                 <Input variant="main" type="number" step="0.01" placeholder="0.00" value={serviceFee} onChange={(e) => setServiceFee(e.target.value)} />
               </Field>
-            </Stack>
-          </SectionCard>
-        </SimpleGrid>
+          </FormSection>
+        </Card>
 
-        <Flex justify="end" gap="12px" mt="20px">
+        <FormActions hint="The referral opens once it is created, ready for scans.">
           <Button variant="light" onClick={() => navigate(-1)}>
             Cancel
           </Button>
           <Button type="submit" variant="brand" isLoading={createReferralMutation.isPending}>
             Create Referral
           </Button>
-        </Flex>
+        </FormActions>
       </form>
 
       <AppModal

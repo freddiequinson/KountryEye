@@ -28,6 +28,7 @@ import { useToast } from '@/hooks/use-toast'
 import PageHeader from '@/components/PageHeader'
 import Card from '@/components/card/Card'
 import SectionCard from '@/components/card/SectionCard'
+import { FormActions } from '@/components/FormSection'
 import { EmptyState, Field, SearchInput } from '@/components/ui'
 import { SCAN_TYPE_FULL_LABELS } from './shared'
 
@@ -193,10 +194,10 @@ export default function NewScanPage() {
       <PageHeader title="New Scan" description="Record OCT, Visual Field, Fundus, or Pachymeter scan results" />
 
       <form onSubmit={handleSubmit}>
-        <SimpleGrid columns={{ base: 1, lg: 3 }} spacing="20px">
-          <Stack spacing="20px">
-            <SectionCard title="Scan Type">
-              <SimpleGrid columns={2} spacing="8px">
+        <Stack spacing="20px">
+          <>
+            <SectionCard title="1. Scan type">
+              <SimpleGrid columns={{ base: 2, md: 4 }} spacing="12px">
                 {Object.entries(SCAN_TYPE_FULL_LABELS).map(([key, label]) => (
                   <Button key={key} variant={scanType === key ? 'brand' : 'light'} h="auto" py="12px" flexDirection="column" gap="4px" whiteSpace="normal" onClick={() => setScanType(key)}>
                     <Icon as={MdVisibility} w="20px" h="20px" />
@@ -221,8 +222,8 @@ export default function NewScanPage() {
               )}
             </SectionCard>
 
-            <SectionCard title="Patient / Client" description="Select an existing patient or external referral">
-              <Tabs variant="soft-rounded" size="sm" defaultIndex={externalReferralId ? 1 : 0} isFitted>
+            <SectionCard title="2. Patient / client" description="Select an existing patient or external referral">
+              <Tabs variant="soft-rounded" size="sm" defaultIndex={externalReferralId ? 1 : 0}>
                 <TabList mb="16px">
                   <Tab>Patient</Tab>
                   <Tab>External Referral</Tab>
@@ -299,9 +300,9 @@ export default function NewScanPage() {
                 </TabPanels>
               </Tabs>
             </SectionCard>
-          </Stack>
+          </>
 
-          <Stack spacing="20px" gridColumn={{ lg: 'span 2' }}>
+          <Stack spacing="20px">
             {scanType ? (
               <>
                 <SectionCard title={`${SCAN_TYPE_FULL_LABELS[scanType] || scanType} Results`}>
@@ -389,16 +390,16 @@ export default function NewScanPage() {
               </Card>
             )}
           </Stack>
-        </SimpleGrid>
+        </Stack>
 
-        <Flex justify="end" gap="12px" mt="20px">
+        <FormActions hint={scanType ? `${SCAN_TYPE_FULL_LABELS[scanType]} · GH₵ ${priceFor(scanType)}` : 'Pick a scan type to begin'}>
           <Button variant="light" onClick={() => navigate(-1)} isDisabled={isUploading}>
             Cancel
           </Button>
           <Button type="submit" variant="brand" isLoading={createScanMutation.isPending || isUploading} loadingText={isUploading ? uploadStatus || 'Uploading...' : 'Saving...'}>
             Save Scan
           </Button>
-        </Flex>
+        </FormActions>
       </form>
     </>
   )
