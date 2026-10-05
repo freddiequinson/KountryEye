@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useLocation, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -35,6 +35,8 @@ import Card from '@/components/card/Card'
 import StatCard from '@/components/card/StatCard'
 import { RowBox } from '@/components/dashboard/widgets'
 import { AppModal, Field, SearchInput, TableMessageRow } from '@/components/ui'
+import { IntakeSection } from '@/components/IntakeSheet'
+import { PaymentModal } from './PaymentModal'
 
 interface Visit {
   id: number
@@ -59,6 +61,13 @@ interface PendingPrescription {
 }
 
 const TABS = ['visits', 'visit-payments', 'payments', 'registrations']
+
+const PRESCRIPTION_PAYMENT_METHODS = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'card', label: 'Card' },
+  { value: 'transfer', label: 'Bank Transfer' },
+  { value: 'insurance', label: 'Insurance' },
+]
 
 const emptyVisitForm = {
   visit_type: 'full_checkup',
@@ -92,7 +101,6 @@ export default function FrontDeskPage() {
   const infoBg = useColorModeValue('blue.50', 'whiteAlpha.100')
   const hoverBg = useColorModeValue('secondaryGray.300', 'whiteAlpha.100')
   const borderColor = useColorModeValue('secondaryGray.100', 'whiteAlpha.100')
-  const visitPaymentAmountRef = useRef<HTMLInputElement>(null)
 
   // Date filter state
   const [dateFilter, setDateFilter] = useState(searchParams.get('period') || 'today')
@@ -110,7 +118,7 @@ export default function FrontDeskPage() {
   const [selectedPatient, setSelectedPatient] = useState<any>(null)
   const [activeTab, setActiveTab] = useState('visits')
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false)
-  const [receiptData, setReceiptData] = useState({ url: '', receiptNumber: '', patientName: '', totalAmount: 0 })
+  const [receiptData, setReceiptData] = useState({ url: '', receiptNumber: '', patientName: '', totalAmount: 0, amountDue: 0, paymentMethod: '' })
 
   // Handle navigation state from patient registration
   useEffect(() => {
@@ -143,7 +151,6 @@ export default function FrontDeskPage() {
       .catch((error) => console.error('Failed to detect visit type:', error))
   }, [selectedPatient?.id])
 
-  const [paymentForm, setPaymentForm] = useState({ payment_method: 'cash', amount_paid: 0, reference: '' })
 
   const { data: todayVisits = [] } = useQuery({
     queryKey: ['today-visits', dateFilter, customStartDate, customEndDate],
@@ -256,9 +263,20 @@ export default function FrontDeskPage() {
 
   const processPaymentMutation = useMutation({
     mutationFn: (data: any) => api.post(`/clinical/prescriptions/${selectedPrescription?.id}/payment`, data),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['pending-prescriptions'] })
       setIsPaymentDialogOpen(false)
+      if (selectedPrescription) {
+        setReceiptData({
+          url: `/receipts/prescription/${selectedPrescription.id}`,
+          receiptNumber: `RX-${String(selectedPrescription.id).padStart(6, '0')}`,
+          patientName: selectedPrescription.patient_name,
+          totalAmount: variables.amount_paid,
+          amountDue: selectedPrescription.total_amount,
+          paymentMethod: variables.payment_method,
+        })
+        setIsReceiptModalOpen(true)
+      }
       setSelectedPrescription(null)
       toast({ title: 'Payment processed successfully' })
     },
@@ -268,7 +286,8 @@ export default function FrontDeskPage() {
   })
 
   const processVisitPaymentMutation = useMutation({
-    mutationFn: (data: { visitId: number; amount: number }) => api.post(`/patients/visits/${data.visitId}/pay`, { amount: data.amount }),
+    mutationFn: (data: { visitId: number; amount: number; payment_method: string }) =>
+      api.post(`/patients/visits/${data.visitId}/pay`, { amount: data.amount, payment_method: data.payment_method }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['pending-payment-visits'] })
       queryClient.invalidateQueries({ queryKey: ['today-visits'] })
@@ -278,10 +297,12 @@ export default function FrontDeskPage() {
       const visit = selectedVisitForPayment
       if (visit) {
         setReceiptData({
-          url: `/api/v1/receipts/visit/${visitId}`,
+          url: `/receipts/visit/${visitId}`,
           receiptNumber: `VIS-${String(visitId).padStart(6, '0')}`,
           patientName: visit.patient_name || 'Unknown',
           totalAmount: variables.amount,
+          amountDue: visit.balance || 0,
+          paymentMethod: variables.payment_method,
         })
         setIsReceiptModalOpen(true)
       }
@@ -384,7 +405,6 @@ export default function FrontDeskPage() {
 
   const openPaymentDialog = (prescription: PendingPrescription) => {
     setSelectedPrescription(prescription)
-    setPaymentForm({ payment_method: 'cash', amount_paid: prescription.total_amount, reference: '' })
     setIsPaymentDialogOpen(true)
   }
 
@@ -753,325 +773,237 @@ export default function FrontDeskPage() {
           </>
         }
       >
-        <Stack spacing="16px">
-          <Field label="Search Patient">
-            <Box data-tour="patient-search">
-              <SearchInput maxW="100%" placeholder="Search by name or patient number..." value={patientSearch} onChange={setPatientSearch} />
-            </Box>
-            {patientSearch.length >= 2 && !selectedPatient && (
-              <Box border="1px solid" borderColor={borderColor} borderRadius="12px" minH="120px" maxH="192px" overflowY="auto" mt="8px">
-                {searchResults.length > 0 ? (
-                  <>
-                    {searchResults.map((patient: any) => (
-                      <Box
-                        key={patient.id}
-                        p="8px"
-                        borderBottom="1px solid"
-                        borderColor={borderColor}
-                        cursor="pointer"
-                        _hover={{ bg: hoverBg }}
-                        onClick={() => {
-                          setSelectedPatient(patient)
-                          setPatientSearch('')
-                        }}
-                      >
-                        <Flex justify="space-between" align="start">
-                          <Text fontWeight="500">
-                            {patient.first_name} {patient.last_name}
+        <Box>
+          <IntakeSection number={1} title="Patient" columns={1}>
+            <Field label="Search Patient">
+              <Box data-tour="patient-search">
+                <SearchInput maxW="100%" placeholder="Search by name or patient number..." value={patientSearch} onChange={setPatientSearch} />
+              </Box>
+              {patientSearch.length >= 2 && !selectedPatient && (
+                <Box border="1px solid" borderColor={borderColor} borderRadius="12px" minH="120px" maxH="192px" overflowY="auto" mt="8px">
+                  {searchResults.length > 0 ? (
+                    <>
+                      {searchResults.map((patient: any) => (
+                        <Box
+                          key={patient.id}
+                          p="8px"
+                          borderBottom="1px solid"
+                          borderColor={borderColor}
+                          cursor="pointer"
+                          _hover={{ bg: hoverBg }}
+                          onClick={() => {
+                            setSelectedPatient(patient)
+                            setPatientSearch('')
+                          }}
+                        >
+                          <Flex justify="space-between" align="start">
+                            <Text fontWeight="500">
+                              {patient.first_name} {patient.last_name}
+                            </Text>
+                            <Badge>{patient.patient_number}</Badge>
+                          </Flex>
+                          <Text fontSize="xs" color="secondaryGray.600" mt="2px">
+                            {patient.phone}
+                            {patient.date_of_birth && <span style={{ marginLeft: 8 }}>DOB: {new Date(patient.date_of_birth).toLocaleDateString()}</span>}
                           </Text>
-                          <Badge>{patient.patient_number}</Badge>
-                        </Flex>
-                        <Text fontSize="xs" color="secondaryGray.600" mt="2px">
-                          {patient.phone}
-                          {patient.date_of_birth && <span style={{ marginLeft: 8 }}>DOB: {new Date(patient.date_of_birth).toLocaleDateString()}</span>}
-                        </Text>
+                        </Box>
+                      ))}
+                      <Box p="8px" bg={mutedBg}>
+                        <Button variant="ghost" size="sm" w="100%" leftIcon={<MdPersonAdd />} onClick={goRegister}>
+                          Not found? Register New Patient
+                        </Button>
                       </Box>
-                    ))}
-                    <Box p="8px" bg={mutedBg}>
-                      <Button variant="ghost" size="sm" w="100%" leftIcon={<MdPersonAdd />} onClick={goRegister}>
-                        Not found? Register New Patient
+                    </>
+                  ) : (
+                    <Box p="16px" textAlign="center">
+                      <Text color="secondaryGray.600" mb="8px">
+                        No patients found matching "{patientSearch}"
+                      </Text>
+                      <Button variant="light" size="sm" leftIcon={<MdPersonAdd />} onClick={goRegister}>
+                        Register New Patient
                       </Button>
                     </Box>
+                  )}
+                </Box>
+              )}
+              {selectedPatient && (
+                <Flex align="center" justify="space-between" p="8px 12px" bg={mutedBg} borderRadius="12px" mt="8px">
+                  <Box>
+                    <Text as="span" fontWeight="500">
+                      {selectedPatient.first_name} {selectedPatient.last_name}
+                    </Text>
+                    <Text as="span" fontSize="sm" color="secondaryGray.600" ms="8px">
+                      {selectedPatient.patient_number}
+                    </Text>
+                  </Box>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedPatient(null)}>
+                    Change
+                  </Button>
+                </Flex>
+              )}
+            </Field>
+          </IntakeSection>
+
+          <IntakeSection number={2} title="Visit" columns={1}>
+            <Field label="Visit Type (Auto-detected)">
+              <Box p="12px" bg={mutedBg} borderRadius="12px">
+                {visitTypeInfo ? (
+                  <>
+                    <Text fontWeight="600" color="brand.500">
+                      {visitTypeInfo.visit_type === 'initial'
+                        ? 'Initial Visit'
+                        : visitTypeInfo.visit_type === 'review'
+                          ? 'Review Visit'
+                          : visitTypeInfo.visit_type === 'subsequent'
+                            ? 'Subsequent Visit'
+                            : visitTypeInfo.visit_type.toUpperCase()}
+                    </Text>
+                    <Text fontSize="xs" color="secondaryGray.600" mt="4px">
+                      {visitTypeInfo.reason}
+                    </Text>
                   </>
                 ) : (
-                  <Box p="16px" textAlign="center">
-                    <Text color="secondaryGray.600" mb="8px">
-                      No patients found matching "{patientSearch}"
-                    </Text>
-                    <Button variant="light" size="sm" leftIcon={<MdPersonAdd />} onClick={goRegister}>
-                      Register New Patient
-                    </Button>
-                  </Box>
+                  <Text color="secondaryGray.600">Select a patient to detect visit type</Text>
                 )}
               </Box>
-            )}
-            {selectedPatient && (
-              <Flex align="center" justify="space-between" p="8px 12px" bg={mutedBg} borderRadius="12px" mt="8px">
-                <Box>
-                  <Text as="span" fontWeight="500">
-                    {selectedPatient.first_name} {selectedPatient.last_name}
-                  </Text>
-                  <Text as="span" fontSize="sm" color="secondaryGray.600" ms="8px">
-                    {selectedPatient.patient_number}
-                  </Text>
-                </Box>
-                <Button variant="ghost" size="sm" onClick={() => setSelectedPatient(null)}>
-                  Change
-                </Button>
-              </Flex>
-            )}
-          </Field>
+            </Field>
 
-          <Field label="Visit Type (Auto-detected)">
-            <Box p="12px" bg={mutedBg} borderRadius="12px">
-              {visitTypeInfo ? (
-                <>
-                  <Text fontWeight="600" color="brand.500">
-                    {visitTypeInfo.visit_type === 'initial'
-                      ? 'Initial Visit'
-                      : visitTypeInfo.visit_type === 'review'
-                        ? 'Review Visit'
-                        : visitTypeInfo.visit_type === 'subsequent'
-                          ? 'Subsequent Visit'
-                          : visitTypeInfo.visit_type.toUpperCase()}
-                  </Text>
-                  <Text fontSize="xs" color="secondaryGray.600" mt="4px">
-                    {visitTypeInfo.reason}
-                  </Text>
-                </>
-              ) : (
-                <Text color="secondaryGray.600">Select a patient to detect visit type</Text>
-              )}
-            </Box>
-          </Field>
-
-          <Field label="Consultation Type">
-            <Select
-              variant="main"
-              placeholder="Select consultation type"
-              value={visitForm.consultation_type_id}
-              onChange={(e) => setVisitForm({ ...visitForm, consultation_type_id: e.target.value })}
-            >
-              {consultationTypes.map((type: any) => (
-                <option key={type.id} value={type.id.toString()}>
-                  {type.name} - GH₵{type.base_fee?.toLocaleString()}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          <Field label="Payment Type">
-            <Select variant="main" value={visitForm.payment_type} onChange={(e) => setVisitForm({ ...visitForm, payment_type: e.target.value })}>
-              <option value="cash">Cash</option>
-              <option value="momo">Mobile Money</option>
-              <option value="insurance">Insurance</option>
-              <option value="visioncare">VisionCare Membership</option>
-            </Select>
-          </Field>
-
-          {visitForm.payment_type === 'insurance' && (
-            <RowBox display="block" p="16px">
-              <Stack spacing="16px">
-                <Field label="Insurance Provider">
-                  <Select
-                    variant="main"
-                    placeholder="Select insurance provider"
-                    value={visitForm.insurance_provider}
-                    onChange={(e) => setVisitForm({ ...visitForm, insurance_provider: e.target.value })}
-                  >
-                    {insuranceCompanies.map((company: { id: number; name: string; code: string }) => (
-                      <option key={company.id} value={company.name}>
-                        {company.name} ({company.code})
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <SimpleGrid columns={2} spacing="16px">
-                  <Field label="Insurance ID">
-                    <Input variant="main" value={visitForm.insurance_id} onChange={(e) => setVisitForm({ ...visitForm, insurance_id: e.target.value })} />
-                  </Field>
-                  <Field label="Membership Number">
-                    <Input variant="main" value={visitForm.insurance_number} onChange={(e) => setVisitForm({ ...visitForm, insurance_number: e.target.value })} />
-                  </Field>
-                </SimpleGrid>
-                <Field label="Insurance Limit (GH₵)" helper="Maximum amount insurance will cover. Costs exceeding this will be paid by patient.">
-                  <Input
-                    variant="main"
-                    type="number"
-                    placeholder="Enter insurance coverage limit"
-                    value={visitForm.insurance_limit}
-                    onChange={(e) => setVisitForm({ ...visitForm, insurance_limit: e.target.value })}
-                  />
-                </Field>
-                {visitForm.insurance_limit && visitForm.consultation_type_id && (
-                  <Box p="12px" bg={infoBg} border="1px solid" borderColor="blue.200" borderRadius="12px" fontSize="sm">
-                    <Flex justify="space-between">
-                      <Text>Insurance Limit:</Text>
-                      <Text fontWeight="500">GH₵{insuranceLimit.toLocaleString()}</Text>
-                    </Flex>
-                    <Flex justify="space-between">
-                      <Text>Consultation Fee:</Text>
-                      <Text fontWeight="500">GH₵{fee.toLocaleString()}</Text>
-                    </Flex>
-                    <Divider my="4px" />
-                    {insuranceLimit < fee ? (
-                      <Flex justify="space-between" color="red.500" fontWeight="500">
-                        <Text>Patient Top-up Required:</Text>
-                        <Text>GH₵{(fee - insuranceLimit).toLocaleString()}</Text>
-                      </Flex>
-                    ) : (
-                      <Flex justify="space-between" color="green.500" fontWeight="500">
-                        <Text>Remaining for Medications:</Text>
-                        <Text>GH₵{(insuranceLimit - fee).toLocaleString()}</Text>
-                      </Flex>
-                    )}
-                  </Box>
-                )}
-              </Stack>
-            </RowBox>
-          )}
-
-          {visitForm.consultation_type_id && (
-            <Flex justify="space-between" align="center" p="16px" bg={mutedBg} borderRadius="12px">
-              <Text fontWeight="500">Consultation Fee</Text>
-              <Text fontSize="lg" fontWeight="bold">
-                GH₵{fee.toLocaleString()}
-              </Text>
-            </Flex>
-          )}
-        </Stack>
-      </AppModal>
-
-      {/* Prescription Payment Dialog */}
-      <AppModal
-        isOpen={isPaymentDialogOpen}
-        onClose={() => setIsPaymentDialogOpen(false)}
-        title="Process Payment"
-        footer={
-          <>
-            <Button variant="light" onClick={() => setIsPaymentDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="brand"
-              isLoading={processPaymentMutation.isPending}
-              loadingText="Processing..."
-              onClick={() => processPaymentMutation.mutate({ ...paymentForm, prescription_id: selectedPrescription?.id })}
-            >
-              Complete Payment & Print Receipt
-            </Button>
-          </>
-        }
-      >
-        {selectedPrescription && (
-          <Stack spacing="16px">
-            <Box p="16px" bg={mutedBg} borderRadius="12px">
-              <Text fontWeight="500" mb="8px">
-                {selectedPrescription.patient_name}
-              </Text>
-              <Stack spacing="4px" fontSize="sm">
-                {selectedPrescription.items.map((item, i) => (
-                  <Flex key={i} justify="space-between">
-                    <Text>
-                      {item.name} x{item.quantity}
-                    </Text>
-                    <Text>GH₵{(item.quantity * item.unit_price).toLocaleString()}</Text>
-                  </Flex>
+            <Field label="Consultation Type">
+              <Select
+                variant="main"
+                placeholder="Select consultation type"
+                value={visitForm.consultation_type_id}
+                onChange={(e) => setVisitForm({ ...visitForm, consultation_type_id: e.target.value })}
+              >
+                {consultationTypes.map((type: any) => (
+                  <option key={type.id} value={type.id.toString()}>
+                    {type.name} - GH₵{type.base_fee?.toLocaleString()}
+                  </option>
                 ))}
-              </Stack>
-              <Divider my="8px" />
-              <Flex justify="space-between" fontWeight="bold">
-                <Text>Total</Text>
-                <Text>GH₵{selectedPrescription.total_amount.toLocaleString()}</Text>
-              </Flex>
-            </Box>
-            <Field label="Payment Method">
-              <Select variant="main" value={paymentForm.payment_method} onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value })}>
-                <option value="cash">Cash</option>
-                <option value="card">Card</option>
-                <option value="transfer">Bank Transfer</option>
-                <option value="insurance">Insurance</option>
               </Select>
             </Field>
-            <Field label="Amount Paid (GH₵)">
-              <Input
-                variant="main"
-                type="number"
-                value={paymentForm.amount_paid}
-                onChange={(e) => setPaymentForm({ ...paymentForm, amount_paid: parseFloat(e.target.value) || 0 })}
-              />
+          </IntakeSection>
+
+          <IntakeSection number={3} title="Payment" columns={1}>
+            <Field label="Payment Type">
+              <Select variant="main" value={visitForm.payment_type} onChange={(e) => setVisitForm({ ...visitForm, payment_type: e.target.value })}>
+                <option value="cash">Cash</option>
+                <option value="momo">Mobile Money</option>
+                <option value="insurance">Insurance</option>
+                <option value="visioncare">VisionCare Membership</option>
+              </Select>
             </Field>
-            {paymentForm.payment_method !== 'cash' && (
-              <Field label="Reference / Transaction ID">
-                <Input
-                  variant="main"
-                  placeholder="Enter reference number"
-                  value={paymentForm.reference}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })}
-                />
-              </Field>
+
+            {visitForm.payment_type === 'insurance' && (
+              <RowBox display="block" p="16px">
+                <Stack spacing="16px">
+                  <Field label="Insurance Provider">
+                    <Select
+                      variant="main"
+                      placeholder="Select insurance provider"
+                      value={visitForm.insurance_provider}
+                      onChange={(e) => setVisitForm({ ...visitForm, insurance_provider: e.target.value })}
+                    >
+                      {insuranceCompanies.map((company: { id: number; name: string; code: string }) => (
+                        <option key={company.id} value={company.name}>
+                          {company.name} ({company.code})
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <SimpleGrid columns={2} spacing="16px">
+                    <Field label="Insurance ID">
+                      <Input variant="main" value={visitForm.insurance_id} onChange={(e) => setVisitForm({ ...visitForm, insurance_id: e.target.value })} />
+                    </Field>
+                    <Field label="Membership Number">
+                      <Input variant="main" value={visitForm.insurance_number} onChange={(e) => setVisitForm({ ...visitForm, insurance_number: e.target.value })} />
+                    </Field>
+                  </SimpleGrid>
+                  <Field label="Insurance Limit (GH₵)" helper="Maximum amount insurance will cover. Costs exceeding this will be paid by patient.">
+                    <Input
+                      variant="main"
+                      type="number"
+                      placeholder="Enter insurance coverage limit"
+                      value={visitForm.insurance_limit}
+                      onChange={(e) => setVisitForm({ ...visitForm, insurance_limit: e.target.value })}
+                    />
+                  </Field>
+                  {visitForm.insurance_limit && visitForm.consultation_type_id && (
+                    <Box p="12px" bg={infoBg} border="1px solid" borderColor="blue.200" borderRadius="12px" fontSize="sm">
+                      <Flex justify="space-between">
+                        <Text>Insurance Limit:</Text>
+                        <Text fontWeight="500">GH₵{insuranceLimit.toLocaleString()}</Text>
+                      </Flex>
+                      <Flex justify="space-between">
+                        <Text>Consultation Fee:</Text>
+                        <Text fontWeight="500">GH₵{fee.toLocaleString()}</Text>
+                      </Flex>
+                      <Divider my="4px" />
+                      {insuranceLimit < fee ? (
+                        <Flex justify="space-between" color="red.500" fontWeight="500">
+                          <Text>Patient Top-up Required:</Text>
+                          <Text>GH₵{(fee - insuranceLimit).toLocaleString()}</Text>
+                        </Flex>
+                      ) : (
+                        <Flex justify="space-between" color="green.500" fontWeight="500">
+                          <Text>Remaining for Medications:</Text>
+                          <Text>GH₵{(insuranceLimit - fee).toLocaleString()}</Text>
+                        </Flex>
+                      )}
+                    </Box>
+                  )}
+                </Stack>
+              </RowBox>
             )}
-          </Stack>
-        )}
+
+            {visitForm.consultation_type_id && (
+              <Flex justify="space-between" align="center" p="16px" bg={mutedBg} borderRadius="12px">
+                <Text fontWeight="500">Consultation Fee</Text>
+                <Text fontSize="lg" fontWeight="bold">
+                  GH₵{fee.toLocaleString()}
+                </Text>
+              </Flex>
+            )}
+          </IntakeSection>
+        </Box>
       </AppModal>
 
-      {/* Visit Payment Dialog */}
-      <AppModal
+      <PaymentModal
+        title="Process Payment"
+        bill={
+          selectedPrescription && {
+            patientName: selectedPrescription.patient_name,
+            subtitle: `Prescription · ${selectedPrescription.patient_number}`,
+            lines: selectedPrescription.items.map((item) => ({ label: `${item.name} x${item.quantity}`, amount: item.quantity * item.unit_price })),
+            due: selectedPrescription.total_amount,
+          }
+        }
+        methods={PRESCRIPTION_PAYMENT_METHODS}
+        withReference
+        isOpen={isPaymentDialogOpen}
+        onClose={() => setIsPaymentDialogOpen(false)}
+        isLoading={processPaymentMutation.isPending}
+        onSubmit={(payment) =>
+          processPaymentMutation.mutate({ payment_method: payment.payment_method, amount_paid: payment.amount, reference: payment.reference, prescription_id: selectedPrescription?.id })
+        }
+      />
+
+      <PaymentModal
+        title="Record Visit Payment"
+        bill={
+          selectedVisitForPayment && {
+            patientName: selectedVisitForPayment.patient_name || 'Unknown',
+            subtitle: `Visit ${selectedVisitForPayment.visit_number || 'N/A'}`,
+            lines: [{ label: 'Consultation fee', amount: selectedVisitForPayment.consultation_fee || 0 }],
+            alreadyPaid: selectedVisitForPayment.amount_paid || 0,
+            due: selectedVisitForPayment.balance || 0,
+          }
+        }
         isOpen={isVisitPaymentDialogOpen}
         onClose={() => setIsVisitPaymentDialogOpen(false)}
-        title="Record Visit Payment"
-        footer={
-          <>
-            <Button variant="light" onClick={() => setIsVisitPaymentDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="brand"
-              isLoading={processVisitPaymentMutation.isPending}
-              loadingText="Processing..."
-              onClick={() => {
-                const amount = parseFloat(visitPaymentAmountRef.current?.value || '0')
-                if (amount > 0 && selectedVisitForPayment) {
-                  processVisitPaymentMutation.mutate({ visitId: selectedVisitForPayment.id, amount })
-                }
-              }}
-            >
-              Record Payment
-            </Button>
-          </>
-        }
-      >
-        {selectedVisitForPayment && (
-          <Stack spacing="16px">
-            <Box p="16px" bg={mutedBg} borderRadius="12px">
-              <Text fontWeight="500" mb="4px">
-                {selectedVisitForPayment.patient_name}
-              </Text>
-              <Text fontSize="sm" color="secondaryGray.600" mb="8px">
-                Visit: {selectedVisitForPayment.visit_number || 'N/A'}
-              </Text>
-              <Stack spacing="4px" fontSize="sm">
-                <Flex justify="space-between">
-                  <Text>Consultation Fee</Text>
-                  <Text>GH₵{(selectedVisitForPayment.consultation_fee || 0).toLocaleString()}</Text>
-                </Flex>
-                <Flex justify="space-between">
-                  <Text>Already Paid</Text>
-                  <Text>GH₵{(selectedVisitForPayment.amount_paid || 0).toLocaleString()}</Text>
-                </Flex>
-              </Stack>
-              <Divider my="8px" />
-              <Flex justify="space-between" fontWeight="bold" color="red.500">
-                <Text>Balance Due</Text>
-                <Text>GH₵{(selectedVisitForPayment.balance || 0).toLocaleString()}</Text>
-              </Flex>
-            </Box>
-            <Field label="Payment Amount (GH₵)">
-              <Input variant="main" type="number" ref={visitPaymentAmountRef} defaultValue={selectedVisitForPayment.balance || 0} />
-            </Field>
-          </Stack>
-        )}
-      </AppModal>
+        isLoading={processVisitPaymentMutation.isPending}
+        onSubmit={(payment) => selectedVisitForPayment && processVisitPaymentMutation.mutate({ visitId: selectedVisitForPayment.id, amount: payment.amount, payment_method: payment.payment_method })}
+      />
 
       <ReceiptModal
         isOpen={isReceiptModalOpen}
@@ -1080,6 +1012,8 @@ export default function FrontDeskPage() {
         receiptNumber={receiptData.receiptNumber}
         patientName={receiptData.patientName}
         totalAmount={receiptData.totalAmount}
+        amountDue={receiptData.amountDue}
+        paymentMethod={receiptData.paymentMethod}
       />
 
       {/* Registration View/Edit Dialog */}
