@@ -646,6 +646,17 @@ async def import_products_csv(
     }
 
 
+async def get_vat_rate(db: AsyncSession) -> float:
+    """VAT percentage set by the admin (system setting 'vat_rate'); 0 when unset or invalid."""
+    from app.models.settings import SystemSetting
+
+    result = await db.execute(select(SystemSetting.value).where(SystemSetting.key == "vat_rate"))
+    try:
+        return max(float(result.scalar_one_or_none() or 0), 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 @router.post("/create", response_model=SaleResponse)
 async def create_sale(
     sale_in: SaleCreate,
@@ -690,7 +701,10 @@ async def create_sale(
     
     discount_from_percent = subtotal * (sale_in.discount_percent / 100)
     total_discount = sale_in.discount_amount + discount_from_percent
-    total_amount = subtotal - total_discount
+    # Item prices and the subtotal are base prices; VAT is added on top of the discounted amount
+    net_amount = subtotal - total_discount
+    tax_amount = round(net_amount * (await get_vat_rate(db)) / 100, 2)
+    total_amount = net_amount + tax_amount
     
     sale = Sale(
         receipt_number=generate_receipt_number(sale_in.branch_id),
@@ -703,6 +717,7 @@ async def create_sale(
         discount_amount=sale_in.discount_amount,
         discount_percent=sale_in.discount_percent,
         discount_reason=sale_in.discount_reason,
+        tax_amount=tax_amount,
         total_amount=total_amount,
         payment_method=sale_in.payment_method,
         payment_status="completed",
@@ -757,7 +772,7 @@ async def create_sale(
     
     # Eagerly load the sale with items to avoid MissingGreenlet error
     result = await db.execute(
-        select(Sale).options(selectinload(Sale.items)).where(Sale.id == sale.id)
+        select(Sale).options(selectinload(Sale.items), selectinload(Sale.cashier)).where(Sale.id == sale.id)
     )
     sale = result.scalar_one()
     return sale
@@ -772,7 +787,7 @@ async def get_sales(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    query = select(Sale).options(selectinload(Sale.items))
+    query = select(Sale).options(selectinload(Sale.items), selectinload(Sale.cashier))
     if branch_id:
         query = query.where(Sale.branch_id == branch_id)
     if patient_id:
@@ -789,7 +804,7 @@ async def get_sale(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    result = await db.execute(select(Sale).where(Sale.id == sale_id))
+    result = await db.execute(select(Sale).options(selectinload(Sale.cashier)).where(Sale.id == sale_id))
     sale = result.scalar_one_or_none()
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")

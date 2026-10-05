@@ -127,6 +127,7 @@ class SaleResponse(BaseModel):
     patient_id: Optional[int] = None
     prescription_id: Optional[int] = None
     cashier_id: int
+    cashier_name: Optional[str] = None
     subtotal: float
     discount_amount: float
     discount_percent: float

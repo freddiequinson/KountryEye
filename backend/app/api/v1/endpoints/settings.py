@@ -50,6 +50,14 @@ async def update_setting(
     if not current_user.is_superuser and current_user.role not in ['admin', 'doctor', 'optometrist']:
         raise HTTPException(status_code=403, detail="Not authorized to change settings")
     
+    if key == "vat_rate":
+        try:
+            rate = float(data.get("value"))
+        except (TypeError, ValueError):
+            rate = -1
+        if not 0 <= rate <= 100:
+            raise HTTPException(status_code=400, detail="VAT rate must be a number between 0 and 100")
+    
     result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
     setting = result.scalar_one_or_none()
     
