@@ -172,7 +172,7 @@ export default function AttendancePage() {
 
   return (
     <>
-      <PageHeader title="Attendance" description="Clock in and out for your shift" />
+      <PageHeader plain title="Attendance" description="Clock in and out for your shift" />
 
       {/* Clock card: the time, today's status and the one action that matters */}
       <Box position="relative" overflow="hidden" borderRadius="20px" mb="20px" color="white" bg="linear-gradient(120deg, #0B2415 0%, #14472A 50%, #2F7A3F 100%)" boxShadow="0 20px 40px -24px rgba(11, 36, 21, 0.7)">

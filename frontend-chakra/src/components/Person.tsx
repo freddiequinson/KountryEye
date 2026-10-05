@@ -71,7 +71,8 @@ export function EntityHeader({
 
       <Flex px={{ base: '18px', md: '26px' }} gap="18px" align={{ base: 'start', md: 'end' }} direction={{ base: 'column', md: 'row' }} mt="-30px">
         <Avatar name={clean} src={avatarSrc} w="84px" h="84px" size="xl" borderRadius="22px" bg={colorFor(clean)} color="white" border="4px solid" borderColor={ring} flexShrink={0} />
-        <Box flex="1" minW="0" pb="4px">
+        {/* Sits a little below the avatar's foot on desktop so the name clears the green strip. */}
+        <Box flex="1" minW="0" mb={{ md: '-6px' }}>
           <Flex align="center" gap="10px" wrap="wrap">
             <Heading as="h1" fontSize={{ base: '22px', md: '26px' }} fontWeight="800" data-tour="page-title">
               {clean}
@@ -91,7 +92,7 @@ export function EntityHeader({
         )}
       </Flex>
 
-      <Flex direction={{ base: 'column', xl: 'row' }} mt="20px" borderTop="1px solid" borderColor={border}>
+      <Flex direction={{ base: 'column', xl: 'row' }} mt="24px" borderTop="1px solid" borderColor={border}>
         <SimpleGrid flex="1" columns={{ base: 1, sm: 2, lg: aside ? 3 : 4 }} spacingX="24px" spacingY="16px" px={{ base: '18px', md: '26px' }} py="20px">
           {facts.map((fact) => (
             <Flex key={fact.label} gap="12px" align="center" minW="0">
