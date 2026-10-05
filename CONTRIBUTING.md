@@ -72,6 +72,7 @@ Reuse the shared pieces instead of writing one-off layouts. They live in `fronte
 | Name with avatar in a table | `PersonCell` in `Person.tsx` |
 | List row with a tile, name, value | `HistoryItem` |
 | Long form | `FormSection` and `FormActions` in `FormSection.tsx` |
+| Patient intake form (registration, self-registration, patient and visit pop-ups) | `IntakeSheet`, `IntakeSection`, `ChoiceField` in `IntakeSheet.tsx`; the shared patient fields are `PatientIntakeFields` |
 | Modal, confirm dialog, field, search box, empty state, pagination, table wrapper | `ui.tsx` |
 | Charts | `charts.tsx` (ApexCharts) |
 | Calendar | `calendar/MiniCalendar` |
