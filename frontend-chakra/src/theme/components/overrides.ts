@@ -1,5 +1,40 @@
 import { mode, type StyleFunctionProps } from "@chakra-ui/theme-tools";
 
+// Table look used across the app: ruled rows under a quiet header, sentence-case column names,
+// a hairline under every row, regular-weight cells.
+const linedTable = (props: StyleFunctionProps) => ({
+  th: {
+    color: mode("secondaryGray.600", "secondaryGray.500")(props),
+    fontFamily: "body",
+    fontSize: "14px",
+    fontWeight: "500",
+    letterSpacing: "normal",
+    textTransform: "none",
+    h: "48px",
+    py: "0",
+    px: "16px",
+    borderBottom: "1px solid",
+    borderColor: mode("secondaryGray.100", "whiteAlpha.100")(props),
+    whiteSpace: "nowrap",
+  },
+  td: {
+    color: mode("secondaryGray.900", "white")(props),
+    fontSize: "14px",
+    fontWeight: "400",
+    p: "16px",
+    borderBottom: "1px solid",
+    borderColor: mode("secondaryGray.100", "whiteAlpha.100")(props),
+    whiteSpace: "nowrap",
+  },
+  tbody: {
+    tr: {
+      transition: "background .12s ease",
+      _hover: { bg: mode("secondaryGray.300", "whiteAlpha.50")(props) },
+      "&:last-of-type td": { borderBottomWidth: "0" },
+    },
+  },
+});
+
 // Look for Chakra parts the Horizon template doesn't style itself.
 export const overrideStyles = {
   components: {
@@ -39,69 +74,9 @@ export const overrideStyles = {
     },
     Table: {
       variants: {
-        simple: (props: StyleFunctionProps) => ({
-          th: {
-            color: mode("secondaryGray.600", "secondaryGray.500")(props),
-            fontFamily: "body",
-            fontSize: "12px",
-            fontWeight: "700",
-            letterSpacing: "0.04em",
-            py: "12px",
-            px: "16px",
-            borderColor: mode("secondaryGray.100", "whiteAlpha.100")(props),
-            whiteSpace: "nowrap",
-          },
-          td: {
-            color: mode("secondaryGray.900", "white")(props),
-            borderColor: "transparent",
-            fontSize: "14px",
-            fontWeight: "700",
-            py: "14px",
-            px: "16px",
-            whiteSpace: "nowrap",
-          },
-          tbody: {
-            tr: {
-              transition: "background .12s ease",
-              _hover: { bg: mode("secondaryGray.300", "whiteAlpha.50")(props) },
-              "td:first-of-type": { borderLeftRadius: "12px" },
-              "td:last-of-type": { borderRightRadius: "12px" },
-            },
-          },
-        }),
-        // Ruled rows under a quiet header: sentence-case column names, a hairline under every row, regular-weight cells.
-        lined: (props: StyleFunctionProps) => ({
-          th: {
-            color: mode("secondaryGray.600", "secondaryGray.500")(props),
-            fontFamily: "body",
-            fontSize: "14px",
-            fontWeight: "500",
-            letterSpacing: "normal",
-            textTransform: "none",
-            h: "48px",
-            py: "0",
-            px: "16px",
-            borderBottom: "1px solid",
-            borderColor: mode("secondaryGray.100", "whiteAlpha.100")(props),
-            whiteSpace: "nowrap",
-          },
-          td: {
-            color: mode("secondaryGray.900", "white")(props),
-            fontSize: "14px",
-            fontWeight: "400",
-            p: "16px",
-            borderBottom: "1px solid",
-            borderColor: mode("secondaryGray.100", "whiteAlpha.100")(props),
-            whiteSpace: "nowrap",
-          },
-          tbody: {
-            tr: {
-              transition: "background .12s ease",
-              _hover: { bg: mode("secondaryGray.300", "whiteAlpha.50")(props) },
-              "&:last-of-type td": { borderBottomWidth: "0" },
-            },
-          },
-        }),
+        // `simple` is what every page uses; `lined` is the same style under its original name.
+        simple: linedTable,
+        lined: linedTable,
       },
     },
     // Segmented-control look: a tinted track with a raised selected tab.

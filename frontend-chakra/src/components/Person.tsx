@@ -9,8 +9,8 @@ const AVATAR_COLORS = ['brand.600', 'secondary.600', 'orange.500', 'blue.500', '
 const colorFor = (name: string) => AVATAR_COLORS[[...name].reduce((n, c) => n + c.charCodeAt(0), 0) % AVATAR_COLORS.length]
 
 // Table cell for a person: initials avatar, name and an optional second line.
-// `round` is the look for `lined` tables: circular avatar and a lighter name.
-export function PersonCell({ name, sub, src, round }: { name: string; sub?: ReactNode; src?: string; round?: boolean }) {
+// Round avatar and regular-weight name by default; pass round={false} for the square, bold variant.
+export function PersonCell({ name, sub, src, round = true }: { name: string; sub?: ReactNode; src?: string; round?: boolean }) {
   const clean = name.trim() || 'Unknown'
   const side = round ? '36px' : '34px'
   return (
