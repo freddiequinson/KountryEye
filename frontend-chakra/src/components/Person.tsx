@@ -9,13 +9,15 @@ const AVATAR_COLORS = ['brand.600', 'secondary.600', 'orange.500', 'blue.500', '
 const colorFor = (name: string) => AVATAR_COLORS[[...name].reduce((n, c) => n + c.charCodeAt(0), 0) % AVATAR_COLORS.length]
 
 // Table cell for a person: initials avatar, name and an optional second line.
-export function PersonCell({ name, sub, src }: { name: string; sub?: ReactNode; src?: string }) {
+// `round` is the look for `lined` tables: circular avatar and a lighter name.
+export function PersonCell({ name, sub, src, round }: { name: string; sub?: ReactNode; src?: string; round?: boolean }) {
   const clean = name.trim() || 'Unknown'
+  const side = round ? '36px' : '34px'
   return (
-    <Flex align="center" gap="12px" minW="0">
-      <Avatar name={clean} src={src} w="34px" h="34px" size="sm" borderRadius="10px" bg={colorFor(clean)} color="white" />
+    <Flex align="center" gap={round ? '10px' : '12px'} minW="0">
+      <Avatar name={clean} src={src} w={side} h={side} size="sm" borderRadius={round ? 'full' : '10px'} bg={colorFor(clean)} color="white" />
       <Box minW="0">
-        <Text fontWeight="700" fontSize="sm" noOfLines={1}>
+        <Text fontWeight={round ? '500' : '700'} fontSize="sm" noOfLines={1}>
           {clean}
         </Text>
         {sub && (

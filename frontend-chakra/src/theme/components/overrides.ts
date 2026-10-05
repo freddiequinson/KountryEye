@@ -69,6 +69,39 @@ export const overrideStyles = {
             },
           },
         }),
+        // Ruled rows under a quiet header: sentence-case column names, a hairline under every row, regular-weight cells.
+        lined: (props: StyleFunctionProps) => ({
+          th: {
+            color: mode("secondaryGray.600", "secondaryGray.500")(props),
+            fontFamily: "body",
+            fontSize: "14px",
+            fontWeight: "500",
+            letterSpacing: "normal",
+            textTransform: "none",
+            h: "48px",
+            py: "0",
+            px: "16px",
+            borderBottom: "1px solid",
+            borderColor: mode("secondaryGray.100", "whiteAlpha.100")(props),
+            whiteSpace: "nowrap",
+          },
+          td: {
+            color: mode("secondaryGray.900", "white")(props),
+            fontSize: "14px",
+            fontWeight: "400",
+            p: "16px",
+            borderBottom: "1px solid",
+            borderColor: mode("secondaryGray.100", "whiteAlpha.100")(props),
+            whiteSpace: "nowrap",
+          },
+          tbody: {
+            tr: {
+              transition: "background .12s ease",
+              _hover: { bg: mode("secondaryGray.300", "whiteAlpha.50")(props) },
+              "&:last-of-type td": { borderBottomWidth: "0" },
+            },
+          },
+        }),
       },
     },
     // Segmented-control look: a tinted track with a raised selected tab.

@@ -110,7 +110,7 @@ export default function PatientsPage() {
         </Box>
 
         <Box overflowX="auto" data-tour="patient-list">
-          <Table variant="simple">
+          <Table variant="lined">
             <Thead>
               <Tr>
                 <Th>Patient No.</Th>
@@ -130,14 +130,16 @@ export default function PatientsPage() {
               ) : (
                 patients.map((patient: Patient) => (
                   <Tr key={patient.id}>
-                    <Td fontWeight="600">{patient.patient_number}</Td>
+                    <Td fontFamily="mono">{patient.patient_number}</Td>
                     <Td>
-                      <PersonCell name={`${patient.first_name} ${patient.last_name}`} />
+                      <PersonCell round name={`${patient.first_name} ${patient.last_name}`} />
                     </Td>
                     <Td>{patient.phone || '-'}</Td>
                     <Td>{patient.email || '-'}</Td>
                     <Td textTransform="capitalize">{patient.sex || '-'}</Td>
-                    <Td>{new Date(patient.created_at).toLocaleDateString()}</Td>
+                    <Td color="secondaryGray.600">
+                      {new Date(patient.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                    </Td>
                     <Td>
                       <IconButton
                         aria-label="View patient"

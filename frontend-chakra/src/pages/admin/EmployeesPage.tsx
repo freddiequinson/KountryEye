@@ -266,7 +266,7 @@ export default function EmployeesPage() {
                 </FormControl>
               </Flex>
               <Box overflowX="auto">
-                <Table variant="simple">
+                <Table variant="lined">
                   <Thead>
                     <Tr>
                       <Th>Name</Th>
@@ -286,9 +286,9 @@ export default function EmployeesPage() {
                       filteredEmployees.map((employee: Employee) => (
                         <Tr key={employee.id} {...rowLink(() => navigate(`/admin/employees/${employee.id}`))}>
                           <Td>
-                            <PersonCell name={`${employee.first_name} ${employee.last_name}`} />
+                            <PersonCell round name={`${employee.first_name} ${employee.last_name}`} />
                           </Td>
-                          <Td>{employee.email}</Td>
+                          <Td color="secondaryGray.600">{employee.email}</Td>
                           <Td>{employee.role?.name || '-'}</Td>
                           <Td>{employee.branch?.name || '-'}</Td>
                           <Td>
@@ -338,7 +338,7 @@ export default function EmployeesPage() {
           <TabPanel p="0">
             <SectionCard title="Today's Attendance">
               <Box overflowX="auto">
-                <Table variant="simple">
+                <Table variant="lined">
                   <Thead>
                     <Tr>
                       <Th>Employee</Th>
@@ -351,8 +351,8 @@ export default function EmployeesPage() {
                     {/* Employees who clocked in */}
                     {todayAttendance.map((record: any) => (
                       <Tr key={record.id} {...rowLink(() => navigate(`/admin/employees/${record.user_id}?tab=attendance`))}>
-                        <Td fontWeight="600">
-                          {record.user?.first_name} {record.user?.last_name}
+                        <Td>
+                          <PersonCell round name={`${record.user?.first_name ?? ''} ${record.user?.last_name ?? ''}`} />
                         </Td>
                         <Td>{record.clock_in ? new Date(record.clock_in).toLocaleTimeString() : '-'}</Td>
                         <Td>{record.clock_out ? new Date(record.clock_out).toLocaleTimeString() : '-'}</Td>
@@ -364,8 +364,8 @@ export default function EmployeesPage() {
                     {/* Active employees who haven't clocked in */}
                     {absentEmployees.map((emp: Employee) => (
                       <Tr key={`absent-${emp.id}`} {...rowLink(() => navigate(`/admin/employees/${emp.id}?tab=attendance`))}>
-                        <Td fontWeight="600">
-                          {emp.first_name} {emp.last_name}
+                        <Td>
+                          <PersonCell round name={`${emp.first_name} ${emp.last_name}`} />
                         </Td>
                         <Td>-</Td>
                         <Td>-</Td>
@@ -384,7 +384,7 @@ export default function EmployeesPage() {
           <TabPanel p="0">
             <Card>
               <Box overflowX="auto">
-                <Table variant="simple">
+                <Table variant="lined">
                   <Thead>
                     <Tr>
                       <Th>Task</Th>
@@ -413,7 +413,9 @@ export default function EmployeesPage() {
                             </Td>
                             <Td>{assignee ? `${assignee.first_name} ${assignee.last_name}` : '-'}</Td>
                             <Td><PriorityBadge priority={task.priority} /></Td>
-                            <Td>{task.due_date ? new Date(task.due_date).toLocaleDateString() : '-'}</Td>
+                            <Td color="secondaryGray.600">
+                              {task.due_date ? new Date(task.due_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '-'}
+                            </Td>
                             <Td><TaskStatusBadge status={task.status} /></Td>
                             <Td>
                               <Select variant="main" size="sm" w="144px" value={task.status} onChange={(e) => updateTaskMutation.mutate({ id: task.id, data: { status: e.target.value } })}>
