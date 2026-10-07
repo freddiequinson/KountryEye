@@ -177,6 +177,18 @@ async def get_visit_receipt(
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")
     
+    # The latest payment recorded against the visit says how it was paid and who took it
+    from app.models.revenue import Revenue
+    payment_result = await db.execute(
+        select(Revenue)
+        .options(joinedload(Revenue.recorded_by))
+        .where(Revenue.reference_type == "visit", Revenue.reference_id == visit.id)
+        .order_by(Revenue.id.desc())
+        .limit(1)
+    )
+    last_payment = payment_result.unique().scalar_one_or_none()
+    cashier = last_payment.recorded_by if last_payment else None
+    
     receipt_data = {
         "receipt_number": f"VIS-{visit.id:06d}",
         "date": visit.visit_date.strftime("%Y-%m-%d %H:%M") if visit.visit_date else datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -193,9 +205,9 @@ async def get_visit_receipt(
         "subtotal": float(visit.consultation_fee) if visit.consultation_fee else 0,
         "discount": 0,
         "total": float(visit.consultation_fee) if visit.consultation_fee else 0,
-        "payment_method": "Cash",
+        "payment_method": (last_payment.payment_method if last_payment else None) or "Cash",
         "amount_paid": float(visit.amount_paid) if visit.amount_paid else 0,
-        "served_by": "Front Desk",
+        "served_by": f"{cashier.first_name} {cashier.last_name}".strip() if cashier else "Front Desk",
     }
     
     pdf_buffer = generate_receipt_pdf(receipt_data)

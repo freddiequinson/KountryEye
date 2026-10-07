@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Box, Button, IconButton, Input, Select, SimpleGrid, Stack, Table, Tbody, Td, Th, Thead, Tr } from '@chakra-ui/react'
+import { Box, Button, IconButton, Input, Table, Tbody, Td, Text, Textarea, Th, Thead, Tr } from '@chakra-ui/react'
 import { MdAdd, MdDownload, MdVisibility } from 'react-icons/md'
 import api from '@/lib/api'
 import { PersonCell } from '@/components/Person'
@@ -11,6 +11,8 @@ import { useToast } from '@/hooks/use-toast'
 import PageHeader from '@/components/PageHeader'
 import Card from '@/components/card/Card'
 import { AppModal, Field, SearchInput, TableMessageRow } from '@/components/ui'
+import { ChoiceField, IntakeSection } from '@/components/IntakeSheet'
+import { SEX_OPTIONS } from '@/components/PatientIntakeFields'
 
 const emptyForm = {
   first_name: '',
@@ -47,7 +49,8 @@ export default function PatientsPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (data: typeof formData) => api.post('/patients', data),
+    // Blank optional fields are left out: the API rejects an empty date of birth, sex or email
+    mutationFn: (data: typeof formData) => api.post('/patients', Object.fromEntries(Object.entries(data).filter(([, value]) => value !== ''))),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patients'] })
       setIsDialogOpen(false)
@@ -78,7 +81,7 @@ export default function PatientsPage() {
     createMutation.mutate(formData)
   }
 
-  const set = (key: keyof typeof emptyForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+  const set = (key: keyof typeof emptyForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setFormData({ ...formData, [key]: e.target.value })
 
   return (
@@ -160,6 +163,7 @@ export default function PatientsPage() {
       <AppModal
         isOpen={isDialogOpen}
         onClose={() => setIsDialogOpen(false)}
+        size="xl"
         title="Register New Patient"
         footer={
           <>
@@ -173,36 +177,40 @@ export default function PatientsPage() {
         }
       >
         <form id="new-patient-form" onSubmit={handleSubmit}>
-          <Stack spacing="16px">
-            <SimpleGrid columns={2} spacing="16px">
-              <Field label="First Name" isRequired>
-                <Input variant="main" value={formData.first_name} onChange={set('first_name')} />
-              </Field>
-              <Field label="Last Name" isRequired>
-                <Input variant="main" value={formData.last_name} onChange={set('last_name')} />
-              </Field>
-            </SimpleGrid>
-            <Field label="Phone">
-              <Input variant="main" value={formData.phone} onChange={set('phone')} />
+          <IntakeSection number={1} title="Patient information">
+            <Field label="First Name" isRequired>
+              <Input variant="main" value={formData.first_name} onChange={set('first_name')} />
             </Field>
-            <Field label="Email">
+            <Field label="Surname / Last Name" isRequired>
+              <Input variant="main" value={formData.last_name} onChange={set('last_name')} />
+            </Field>
+            <Field label="Date of Birth">
+              <Input variant="main" type="date" value={formData.date_of_birth} onChange={set('date_of_birth')} />
+            </Field>
+            <ChoiceField label="Sex" value={formData.sex} onChange={(sex) => setFormData({ ...formData, sex })} options={SEX_OPTIONS} />
+          </IntakeSection>
+          <IntakeSection number={2} title="Contact">
+            <Field label="Phone Number">
+              <Input variant="main" type="tel" value={formData.phone} onChange={set('phone')} />
+            </Field>
+            <Field label="Email Address">
               <Input variant="main" type="email" value={formData.email} onChange={set('email')} />
             </Field>
-            <SimpleGrid columns={2} spacing="16px">
-              <Field label="Sex">
-                <Select variant="main" placeholder="Select" value={formData.sex} onChange={set('sex')}>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                </Select>
-              </Field>
-              <Field label="Date of Birth">
-                <Input variant="main" type="date" value={formData.date_of_birth} onChange={set('date_of_birth')} />
-              </Field>
-            </SimpleGrid>
-            <Field label="Address">
-              <Input variant="main" value={formData.address} onChange={set('address')} />
+            <Field label="Home Address" gridColumn="1 / -1">
+              <Textarea variant="main" rows={2} value={formData.address} onChange={set('address')} />
             </Field>
-          </Stack>
+          </IntakeSection>
+          <Text fontSize="sm" color="secondaryGray.600" mt="20px">
+            Need marital status, occupation, Ghana Card or an emergency contact?{' '}
+            <Button
+              variant="link"
+              colorScheme="brandScheme"
+              fontSize="sm"
+              onClick={() => navigate(`/frontdesk/register?firstName=${encodeURIComponent(formData.first_name)}&lastName=${encodeURIComponent(formData.last_name)}`)}
+            >
+              Open the full intake form
+            </Button>
+          </Text>
         </form>
       </AppModal>
     </>

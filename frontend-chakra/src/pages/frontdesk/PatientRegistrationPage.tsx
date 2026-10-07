@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Avatar, Badge, Box, Button, Flex, Grid, Icon, Input, Select, Stack, Text, Textarea, useColorModeValue } from '@chakra-ui/react'
-import { MdArrowBack, MdContactEmergency, MdInfoOutline, MdPerson, MdPhone, MdWarningAmber } from 'react-icons/md'
+import { Avatar, Badge, Box, Button, Flex, Grid, Icon, Stack, Text, useColorModeValue } from '@chakra-ui/react'
+import { MdArrowBack, MdInfoOutline, MdWarningAmber } from 'react-icons/md'
 import api from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
-import PageHeader from '@/components/PageHeader'
 import Card from '@/components/card/Card'
-import { FormActions, FormSection } from '@/components/FormSection'
-import { AppModal, Field } from '@/components/ui'
+import { FormActions } from '@/components/FormSection'
+import { IntakeSheet } from '@/components/IntakeSheet'
+import { calculateAge, emptyPatientIntake, PatientIntakeFields } from '@/components/PatientIntakeFields'
+import { AppModal } from '@/components/ui'
 
 interface DuplicateCandidate {
   id: number
@@ -18,15 +19,6 @@ interface DuplicateCandidate {
   phone: string
   date_of_birth: string
   match_score: number
-}
-
-const calculateAge = (dob: string) => {
-  const today = new Date()
-  const birthDate = new Date(dob)
-  let age = today.getFullYear() - birthDate.getFullYear()
-  const m = today.getMonth() - birthDate.getMonth()
-  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--
-  return `${age} years`
 }
 
 export default function PatientRegistrationPage() {
@@ -41,26 +33,12 @@ export default function PatientRegistrationPage() {
   const [duplicateCandidates, setDuplicateCandidates] = useState<DuplicateCandidate[]>([])
 
   const [formData, setFormData] = useState({
+    ...emptyPatientIntake,
     // Prefilled values from URL params
     first_name: searchParams.get('firstName') || '',
     last_name: searchParams.get('lastName') || '',
-    other_names: '',
-    date_of_birth: '',
-    sex: '',
-    marital_status: '',
-    phone: '',
-    email: '',
-    address: '',
-    nationality: 'Ghanaian',
-    occupation: '',
-    emergency_contact_name: '',
-    emergency_contact_phone: '',
-    ghana_card: '',
     branch_id: 1,
   })
-
-  const set = (key: keyof typeof formData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setFormData({ ...formData, [key]: e.target.value })
 
   const registerPatientMutation = useMutation({
     mutationFn: (data: typeof formData) => {
@@ -123,70 +101,22 @@ export default function PatientRegistrationPage() {
       <Button variant="ghost" size="sm" leftIcon={<MdArrowBack />} onClick={() => navigate('/patients')} mb="8px">
         Back
       </Button>
-      <PageHeader title="Patient Registration" description="Add a new patient record. Only the name is required; the rest can be filled in later." />
-
       <Box as="form" onSubmit={handleSubmit}>
         <Grid templateColumns={{ base: '1fr', xl: '1fr 300px' }} gap="20px" alignItems="start">
-          <Card px={{ base: '18px', md: '26px' }} py="20px">
-            <FormSection icon={MdPerson} title="Personal information" description="Legal name and basic details as they appear on the patient's ID." columns={{ base: 1, md: 3 }}>
-              <Field label="First Name" isRequired>
-                <Input variant="main" value={formData.first_name} onChange={set('first_name')} />
-              </Field>
-              <Field label="Surname / Last Name" isRequired>
-                <Input variant="main" value={formData.last_name} onChange={set('last_name')} />
-              </Field>
-              <Field label="Other Names">
-                <Input variant="main" placeholder="Middle name" value={formData.other_names} onChange={set('other_names')} />
-              </Field>
-              <Field label="Date of Birth" helper={formData.date_of_birth && `Age: ${calculateAge(formData.date_of_birth)}`}>
-                <Input variant="main" type="date" value={formData.date_of_birth} onChange={set('date_of_birth')} />
-              </Field>
-              <Field label="Sex">
-                <Select variant="main" placeholder="Select sex" value={formData.sex} onChange={set('sex')}>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                </Select>
-              </Field>
-              <Field label="Marital Status">
-                <Select variant="main" placeholder="Select status" value={formData.marital_status} onChange={set('marital_status')}>
-                  <option value="single">Single</option>
-                  <option value="married">Married</option>
-                  <option value="divorced">Divorced</option>
-                  <option value="widowed">Widowed</option>
-                </Select>
-              </Field>
-              <Field label="Nationality">
-                <Input variant="main" value={formData.nationality} onChange={set('nationality')} />
-              </Field>
-              <Field label="Occupation">
-                <Input variant="main" value={formData.occupation} onChange={set('occupation')} />
-              </Field>
-              <Field label="Ghana Card Number">
-                <Input variant="main" placeholder="GHA-XXXXXXXXX-X" value={formData.ghana_card} onChange={set('ghana_card')} />
-              </Field>
-            </FormSection>
-
-            <FormSection icon={MdPhone} title="Contact" description="How the clinic reaches the patient for reminders and follow-ups.">
-              <Field label="Phone Number">
-                <Input variant="main" placeholder="+233 XX XXX XXXX" value={formData.phone} onChange={set('phone')} />
-              </Field>
-              <Field label="Email">
-                <Input variant="main" type="email" placeholder="name@example.com" value={formData.email} onChange={set('email')} />
-              </Field>
-              <Field label="Address" gridColumn={{ md: 'span 2' }}>
-                <Textarea variant="main" rows={2} placeholder="Full address" value={formData.address} onChange={set('address')} />
-              </Field>
-            </FormSection>
-
-            <FormSection icon={MdContactEmergency} title="Emergency contact" description="Next of kin to call if something goes wrong.">
-              <Field label="Name">
-                <Input variant="main" value={formData.emergency_contact_name} onChange={set('emergency_contact_name')} />
-              </Field>
-              <Field label="Phone Number">
-                <Input variant="main" value={formData.emergency_contact_phone} onChange={set('emergency_contact_phone')} />
-              </Field>
-            </FormSection>
-          </Card>
+          <IntakeSheet
+            title="Patient Intake Form"
+            description="Only the name is required; the rest can be filled in later."
+            aside={
+              <Text fontSize="sm" fontWeight="700">
+                <Text as="span" color="secondaryGray.600" fontWeight="500">
+                  Date{' '}
+                </Text>
+                {new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+              </Text>
+            }
+          >
+            <PatientIntakeFields data={formData} onChange={(key, value) => setFormData({ ...formData, [key]: value })} />
+          </IntakeSheet>
 
           {/* Live preview of the record being created */}
           <Card position={{ xl: 'sticky' }} top={{ xl: '96px' }} p="0" overflow="hidden" display={{ base: 'none', xl: 'flex' }}>
