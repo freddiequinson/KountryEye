@@ -25,6 +25,7 @@ export const buttonStyles = {
       variants: {
         outline: (props: StyleFunctionProps) => ({
           borderColor: mode("secondaryGray.400", "whiteAlpha.300")(props),
+          ".banner-actions &": { color: "white", borderColor: "whiteAlpha.400", _hover: { bg: "whiteAlpha.200" } },
         }),
         brand: (props: StyleFunctionProps) => ({
           bg: mode("brand.600", "brand.500")(props),
@@ -38,6 +39,8 @@ export const buttonStyles = {
             _disabled: { bg: mode("brand.600", "brand.500")(props), transform: "none" },
           },
           _active: { ...lift._active, bg: mode("brand.800", "brand.500")(props) },
+          // On the green page banner the primary action turns white so it stands off the background.
+          ".banner-actions &": { bg: "white", color: "brand.700", boxShadow: "none", _hover: { bg: "whiteAlpha.900" }, _active: { bg: "whiteAlpha.800" } },
         }),
         darkBrand: (props: StyleFunctionProps) => ({
           bg: mode("secondaryGray.900", "white")(props),
@@ -64,6 +67,7 @@ export const buttonStyles = {
           },
           _active: { transform: "scale(0.98)" },
           ".hero-actions &": { bg: "white", color: "secondaryGray.900", borderColor: "transparent", _hover: { bg: "whiteAlpha.900" } },
+          ".banner-actions &": { bg: "whiteAlpha.200", color: "white", borderColor: "whiteAlpha.300", boxShadow: "none", _hover: { bg: "whiteAlpha.300", borderColor: "whiteAlpha.400" } },
         }),
         action: (props: StyleFunctionProps) => ({
           borderRadius: "full",

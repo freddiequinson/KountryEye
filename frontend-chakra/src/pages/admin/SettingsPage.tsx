@@ -54,6 +54,7 @@ import {
   MdWarning,
 } from 'react-icons/md'
 import api from '@/lib/api'
+import { useVatRate } from '@/hooks/use-vat-rate'
 import { PersonCell } from '@/components/Person'
 import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/stores/auth'
@@ -202,6 +203,22 @@ export default function SettingsPage() {
   const { data: visionCareMembers = [], isLoading: membersLoading } = useQuery({
     queryKey: ['visioncare-members'],
     queryFn: async () => (await api.get('/settings/visioncare/members')).data,
+  })
+
+  const vatRate = useVatRate()
+  // null until the admin edits the field, so it shows the saved rate
+  const [vatInput, setVatInput] = useState<string | null>(null)
+  const vatValue = parseFloat(vatInput ?? '')
+  const saveVatMutation = useMutation({
+    mutationFn: (value: string) => api.put('/settings/vat_rate', { value, description: 'VAT percentage added to product sales' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['setting', 'vat_rate'] })
+      setVatInput(null)
+      toast({ title: 'VAT rate updated' })
+    },
+    onError: () => {
+      toast({ title: 'Failed to update VAT rate', variant: 'destructive' })
+    },
   })
 
   const toggleAiMutation = useMutation({
@@ -927,6 +944,22 @@ export default function SettingsPage() {
                     <Badge colorScheme={aiStatus?.configured ? 'green' : 'red'}>{aiStatus?.configured ? 'Yes' : 'No'}</Badge>
                   </StatRow>
                 </Stack>
+              </SectionCard>
+
+              <SectionCard title="VAT" description="Added on top of each product's base price. The POS shows prices with VAT included and receipts show the breakdown.">
+                <Flex gap="12px" align="end" wrap="wrap">
+                  <Field label="VAT rate (%)" w="auto">
+                    <Input variant="main" type="number" min={0} max={100} step="0.01" w="160px" value={vatInput ?? String(vatRate)} onChange={(e) => setVatInput(e.target.value)} />
+                  </Field>
+                  <Button
+                    variant="brand"
+                    isDisabled={vatInput === null || !(vatValue >= 0 && vatValue <= 100)}
+                    isLoading={saveVatMutation.isPending}
+                    onClick={() => saveVatMutation.mutate(String(vatValue))}
+                  >
+                    Save
+                  </Button>
+                </Flex>
               </SectionCard>
 
               <SectionCard title="System Information">

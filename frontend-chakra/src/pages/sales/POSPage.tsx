@@ -22,6 +22,7 @@ import {
 import { MdAdd, MdCreditCard, MdDelete, MdPerson, MdRemove, MdSearch, MdShoppingCart } from 'react-icons/md'
 import { SalesReceiptModal } from '@/components/SalesReceiptModal'
 import api from '@/lib/api'
+import { useVatRate } from '@/hooks/use-vat-rate'
 import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/card/Card'
@@ -61,6 +62,7 @@ export default function POSPage() {
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [amountPaid, setAmountPaid] = useState('')
   const [discountPercent, setDiscountPercent] = useState(0)
+  const vatRate = useVatRate()
   const [completedSale, setCompletedSale] = useState<any>(null)
   const [isReceiptOpen, setIsReceiptOpen] = useState(false)
 
@@ -178,7 +180,11 @@ export default function POSPage() {
     return sum + (itemTotal - itemTotal * (item.discount_percent / 100))
   }, 0)
   const discountAmount = subtotal * (discountPercent / 100)
-  const total = subtotal - discountAmount
+  // Cart prices are base prices; everything on screen is shown with VAT added, matching what the backend charges.
+  const withVat = (amount: number) => amount * (1 + vatRate / 100)
+  const money = (amount: number) => `GH₵${withVat(amount).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+  const netAmount = subtotal - discountAmount
+  const total = netAmount + Math.round(netAmount * vatRate) / 100
   const change = parseFloat(amountPaid || '0') - total
 
   const handleCompleteSale = () => {
@@ -275,7 +281,7 @@ export default function POSPage() {
               image={product.image_url}
               name={product.name}
               sub={product.sku}
-              price={`GH₵${product.unit_price?.toLocaleString()}`}
+              price={money(parseFloat(product.unit_price) || 0)}
               stock={getProductStock(product.id)}
               onAdd={() => addToCart(product)}
             />
@@ -364,7 +370,7 @@ export default function POSPage() {
                       {item.product_name}
                     </Text>
                     <Text fontSize="xs" color="secondaryGray.600">
-                      GH₵{item.unit_price.toLocaleString()} each
+                      {money(item.unit_price)} each
                     </Text>
                     <Flex align="center" gap="6px" mt="6px">
                       <IconButton aria-label="Decrease" variant="light" size="xs" borderRadius="full" icon={<MdRemove />} onClick={() => updateQuantity(item.product_id, -1)} />
@@ -376,7 +382,7 @@ export default function POSPage() {
                   </Box>
                   <Flex direction="column" align="end" gap="6px">
                     <Text fontWeight="700" fontSize="md">
-                      GH₵{(item.quantity * item.unit_price).toLocaleString()}
+                      {money(item.quantity * item.unit_price)}
                     </Text>
                     <IconButton aria-label="Remove" variant="ghost" size="xs" color="red.500" icon={<MdDelete />} onClick={() => setCart(cart.filter((i) => i.product_id !== item.product_id))} />
                   </Flex>
@@ -390,7 +396,7 @@ export default function POSPage() {
         <Stack spacing="12px" p="20px" borderTop="1px solid" borderColor={borderColor} data-tour="payment">
           <Flex justify="space-between" fontSize="sm">
             <Text>Subtotal</Text>
-            <Text>GH₵{subtotal.toLocaleString()}</Text>
+            <Text>{money(subtotal)}</Text>
           </Flex>
           {!isFrontdesk && (
             <Flex align="center" gap="8px">
@@ -408,14 +414,14 @@ export default function POSPage() {
               />
               <Text fontSize="sm">%</Text>
               <Text ms="auto" fontSize="sm">
-                -GH₵{discountAmount.toLocaleString()}
+                -{money(discountAmount)}
               </Text>
             </Flex>
           )}
           <Divider />
           <Flex justify="space-between" align="center" fontWeight="bold">
             <Text fontSize="lg">Total</Text>
-            <Text fontSize="2xl" color="brand.600" _dark={{ color: "white" }}>GH₵{total.toLocaleString()}</Text>
+            <Text fontSize="2xl" color="brand.600" _dark={{ color: "white" }}>GH₵{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</Text>
           </Flex>
           <Button variant="brand" size="lg" leftIcon={<MdCreditCard />} isDisabled={cart.length === 0} onClick={() => setIsPaymentDialogOpen(true)}>
             Checkout
@@ -494,7 +500,7 @@ export default function POSPage() {
               Total Amount
             </Text>
             <Text fontSize="4xl" fontWeight="bold" color="brand.500">
-              GH₵{total.toLocaleString()}
+              GH₵{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </Text>
           </Box>
           <Field label="Payment Method">
@@ -511,7 +517,7 @@ export default function POSPage() {
                     Change
                   </Text>
                   <Text fontSize="2xl" fontWeight="bold" color="green.700">
-                    GH₵{change.toLocaleString()}
+                    GH₵{change.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                   </Text>
                 </Box>
               )}

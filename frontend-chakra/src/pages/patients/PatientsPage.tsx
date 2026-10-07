@@ -102,13 +102,13 @@ export default function PatientsPage() {
             </Button>
           </>
         }
-      />
-
-      <Card>
-        <Box mb="20px" data-tour="search">
+      >
+        <Box data-tour="search">
           <SearchInput placeholder="Search patients..." value={search} onChange={setSearch} />
         </Box>
+      </PageHeader>
 
+      <Card>
         <Box overflowX="auto" data-tour="patient-list">
           <Table variant="lined">
             <Thead>

@@ -90,6 +90,7 @@ async def get_visit_checkout_summary(
     product_items = []
     total_sale_charges = 0
     total_sale_paid = 0
+    total_sale_tax = 0
     
     for sale in sales:
         sale_total = float(sale.total_amount or 0)
@@ -109,6 +110,7 @@ async def get_visit_checkout_summary(
         
         total_sale_charges += sale_total
         total_sale_paid += sale_paid
+        total_sale_tax += float(sale.tax_amount or 0)
     
     # Calculate totals for this visit
     grand_total = consultation_fee + total_scan_charges + total_sale_charges
@@ -170,12 +172,14 @@ async def get_visit_checkout_summary(
             "products": {
                 "items": product_items,
                 "total": total_sale_charges,
+                "tax": total_sale_tax,
                 "paid": total_sale_paid,
                 "balance": total_sale_charges - total_sale_paid
             }
         },
         "summary": {
             "grand_total": grand_total,
+            "vat_total": total_sale_tax,
             "total_paid": total_paid,
             "balance_due": balance_due,
             "is_fully_paid": balance_due <= 0
@@ -266,7 +270,8 @@ async def get_checkout_receipt(
         visit=visit,
         patient=visit.patient,
         summary=summary_data,
-        branch=visit.branch
+        branch=visit.branch,
+        issued_by=f"{current_user.first_name} {current_user.last_name}".strip()
     )
     
     return StreamingResponse(

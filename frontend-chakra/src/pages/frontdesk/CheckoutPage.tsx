@@ -303,6 +303,11 @@ export default function CheckoutPage() {
                   </Box>
                 </Flex>
               ))}
+              {charges.products.tax > 0 && (
+                <TotalRow label="VAT">
+                  <Text>GH₵{charges.products.tax.toLocaleString()}</Text>
+                </TotalRow>
+              )}
               <TotalRow label="Total">
                 <Text fontWeight="bold">GH₵{charges.products.total.toLocaleString()}</Text>
               </TotalRow>
