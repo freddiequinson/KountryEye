@@ -38,6 +38,7 @@ import {
 } from '@chakra-ui/react'
 import { MdAccessTime, MdAdd, MdArrowBack, MdCheckCircle, MdDelete, MdDescription, MdDownload, MdSave, MdVisibility, MdWarningAmber } from 'react-icons/md'
 import api from '@/lib/api'
+import { ghs, visitBalance } from '@/lib/money'
 import Card from '@/components/card/Card'
 import { FormActions } from '@/components/FormSection'
 import { useAuthStore } from '@/stores/auth'
@@ -491,7 +492,7 @@ export default function ConsultationPage() {
             <Text fontWeight="600">Outstanding Balance</Text>
             <Text fontSize="sm">
               This patient has a partial payment. Balance due:{' '}
-              <strong>GH₵{((visit.consultation_fee || 0) - (visit.amount_paid || 0)).toLocaleString()}</strong>
+              <strong>{ghs(visitBalance(visit))}</strong>
             </Text>
             <Text fontSize="xs" mt="4px">
               Please remind the patient to complete payment at checkout.

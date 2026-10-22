@@ -214,10 +214,12 @@ class ScanPayment(Base):
     scan_id = Column(Integer, ForeignKey("technician_scans.id"), nullable=False)
     
     # Amount details
-    amount = Column(Numeric(10, 2), nullable=False)
-    
+    amount = Column(Numeric(10, 2), nullable=False)  # VAT-exclusive scan price
+    vat_amount = Column(Numeric(10, 2), default=0)
+
     # Payment status
     is_paid = Column(Boolean, default=False)
+    amount_paid = Column(Numeric(10, 2), nullable=True)  # null on older rows: use is_paid
     payment_method = Column(String(50))  # cash, mobile_money, etc.
     payment_date = Column(DateTime, nullable=True)
     

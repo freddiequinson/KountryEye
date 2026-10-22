@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Badge, Box, Button, Divider, Flex, Icon, Input, Select, SimpleGrid, Stack, Table, Tbody, Td, Text, Textarea, Th, Thead, Tr, useColorModeValue } from '@chakra-ui/react'
 import type { IconType } from 'react-icons'
 import { MdAdd, MdAccessTime, MdAttachMoney, MdCancel, MdCheckCircle, MdDescription, MdErrorOutline, MdFilterList, MdSend } from 'react-icons/md'
+import { getUserRole } from '@/config/nav'
 import api from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/hooks/use-toast'
@@ -91,7 +92,7 @@ export default function FundRequestsPage() {
   const [disburseData, setDisburseData] = useState({ disbursement_method: 'cash', disbursement_reference: '' })
   const [receiptNotes, setReceiptNotes] = useState('')
 
-  const isAdmin = user?.role === 'Admin' || user?.is_superuser
+  const isAdmin = getUserRole(user) === 'admin'
 
   const { data: requests = [], isLoading } = useQuery({
     queryKey: ['fund-requests', statusFilter],

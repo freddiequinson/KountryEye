@@ -108,7 +108,7 @@ async def get_admin_users(db: AsyncSession) -> List[User]:
         .join(Role, User.role_id == Role.id)
         .where(and_(
             User.is_active == True,
-            or_(Role.name == "Admin", User.is_superuser == True)
+            or_(func.lower(Role.name) == "admin", User.is_superuser == True)
         ))
     )
     return result.scalars().all()
@@ -192,7 +192,7 @@ async def get_fund_requests(
             select(Role).where(Role.id == current_user.role_id)
         )
         role = role_result.scalar_one_or_none()
-        if role and role.name == "Admin":
+        if role and (role.name or "").lower() == "admin":
             is_admin = True
     
     # Build query
@@ -281,7 +281,7 @@ async def get_fund_request(
     if current_user.role_id:
         role_result = await db.execute(select(Role).where(Role.id == current_user.role_id))
         role = role_result.scalar_one_or_none()
-        if role and role.name == "Admin":
+        if role and (role.name or "").lower() == "admin":
             is_admin = True
     
     if not is_admin and fund_request.requested_by_id != current_user.id:
@@ -344,7 +344,7 @@ async def review_fund_request(
     if current_user.role_id:
         role_result = await db.execute(select(Role).where(Role.id == current_user.role_id))
         role = role_result.scalar_one_or_none()
-        if role and role.name == "Admin":
+        if role and (role.name or "").lower() == "admin":
             is_admin = True
     
     if not is_admin:
@@ -397,7 +397,7 @@ async def disburse_fund_request(
     if current_user.role_id:
         role_result = await db.execute(select(Role).where(Role.id == current_user.role_id))
         role = role_result.scalar_one_or_none()
-        if role and role.name == "Admin":
+        if role and (role.name or "").lower() == "admin":
             is_admin = True
     
     if not is_admin:
@@ -538,7 +538,7 @@ async def cancel_fund_request(
     if current_user.role_id:
         role_result = await db.execute(select(Role).where(Role.id == current_user.role_id))
         role = role_result.scalar_one_or_none()
-        if role and role.name == "Admin":
+        if role and (role.name or "").lower() == "admin":
             is_admin = True
     
     if not is_admin and fund_request.requested_by_id != current_user.id:
@@ -564,7 +564,7 @@ async def get_fund_request_stats(
     if current_user.role_id:
         role_result = await db.execute(select(Role).where(Role.id == current_user.role_id))
         role = role_result.scalar_one_or_none()
-        if role and role.name == "Admin":
+        if role and (role.name or "").lower() == "admin":
             is_admin = True
     
     if is_admin:

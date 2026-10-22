@@ -52,7 +52,7 @@ import Card from '@/components/card/Card'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
 import { TabbedSections } from '@/components/card/TabCard'
-import { AppModal, EmptyState, Field, TableMessageRow } from '@/components/ui'
+import { AppModal, EmptyState, Field, TableMessageRow, TempPasswordDialog } from '@/components/ui'
 import { PriorityBadge, PRIORITY_OPTIONS, TaskStatusBadge, TASK_STATUS_OPTIONS } from './taskBadges'
 
 interface Task {
@@ -161,10 +161,12 @@ export default function EmployeeDetailPage() {
     enabled: !!employeeId,
   })
 
+  const [tempPassword, setTempPassword] = useState<string | null>(null)
+
   const resetPasswordMutation = useMutation({
     mutationFn: () => api.post(`/employees/${employeeId}/reset-password`),
     onSuccess: (response) => {
-      toast({ title: 'Password reset', description: response.data.message })
+      setTempPassword(response.data.temporary_password)
     },
     onError: () => {
       toast({ title: 'Failed to reset password', variant: 'destructive' })
@@ -230,6 +232,7 @@ export default function EmployeeDetailPage() {
 
   return (
     <>
+      <TempPasswordDialog password={tempPassword} name={employee.first_name} onClose={() => setTempPassword(null)} />
       <EntityHeader
         name={`${employee.first_name} ${employee.last_name}`}
         subtitle={`${employee.role?.name || 'No role'} · ${employee.branch?.name || 'No branch'}`}

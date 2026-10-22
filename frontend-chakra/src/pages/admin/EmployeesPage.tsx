@@ -40,7 +40,7 @@ import PageHeader from '@/components/PageHeader'
 import Card from '@/components/card/Card'
 import StatCard from '@/components/card/StatCard'
 import SectionCard from '@/components/card/SectionCard'
-import { AppModal, ConfirmDialog, Field, SearchInput, TableMessageRow } from '@/components/ui'
+import { AppModal, ConfirmDialog, Field, SearchInput, TableMessageRow, TempPasswordDialog } from '@/components/ui'
 import { PriorityBadge, PRIORITY_OPTIONS, TaskStatusBadge, TASK_STATUS_OPTIONS } from './taskBadges'
 
 interface Employee {
@@ -133,13 +133,16 @@ export default function EmployeesPage() {
     queryFn: async () => (await api.get('/employees/attendance/today')).data,
   })
 
+  const [tempPassword, setTempPassword] = useState<{ password: string; name: string } | null>(null)
+
   const createEmployeeMutation = useMutation({
     mutationFn: (data: any) => api.post('/employees', data),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['employees'] })
       setIsAddEmployeeOpen(false)
       setEmployeeForm(emptyEmployee)
-      toast({ title: 'Employee created', description: `Password: ${response.data.first_name.toLowerCase()}123` })
+      toast({ title: 'Employee created' })
+      setTempPassword({ password: response.data.temporary_password, name: response.data.first_name })
     },
     onError: () => {
       toast({ title: 'Failed to create employee', variant: 'destructive' })
@@ -165,6 +168,7 @@ export default function EmployeesPage() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] })
       toast({ title: 'Task updated' })
     },
+    onError: () => toast({ title: 'Failed to update task', variant: 'destructive' }),
   })
 
   const toggleActiveMutation = useMutation({
@@ -492,7 +496,7 @@ export default function EmployeesPage() {
             </Field>
           </SimpleGrid>
           <Text fontSize="sm" color="secondaryGray.600">
-            Password will be set to: {employeeForm.first_name.toLowerCase() || 'firstname'}123
+            A temporary password is shown after you save. They change it at first sign-in.
           </Text>
         </Stack>
       </AppModal>
@@ -552,6 +556,8 @@ export default function EmployeesPage() {
       </AppModal>
 
       {/* Delete Confirmation Dialog */}
+      <TempPasswordDialog password={tempPassword?.password ?? null} name={tempPassword?.name} onClose={() => setTempPassword(null)} />
+
       <ConfirmDialog
         isOpen={!!deleteConfirm}
         onClose={() => setDeleteConfirm(null)}

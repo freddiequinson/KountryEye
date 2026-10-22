@@ -7,7 +7,7 @@ from sqlalchemy import select, func, and_, or_, desc
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.api.v1.deps import get_current_active_user
+from app.api.v1.deps import get_current_active_user, is_admin, has_permission
 from app.models.user import User, Role
 from app.models.employee import ActivityLog
 
@@ -31,7 +31,7 @@ async def get_audit_logs(
     """
     Get audit logs with filters. Admin only.
     """
-    if not current_user.is_superuser:
+    if not (is_admin(current_user) or has_permission(current_user, "audit.view")):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     # Default date range: last 30 days
@@ -121,7 +121,7 @@ async def get_audit_summary(
     current_user: User = Depends(get_current_active_user),
 ):
     """Get summary statistics for audit logs. Admin only."""
-    if not current_user.is_superuser:
+    if not (is_admin(current_user) or has_permission(current_user, "audit.view")):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     if not end_date:
@@ -200,7 +200,7 @@ async def get_available_actions(
     current_user: User = Depends(get_current_active_user),
 ):
     """Get list of available action types for filtering"""
-    if not current_user.is_superuser:
+    if not (is_admin(current_user) or has_permission(current_user, "audit.view")):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     result = await db.execute(
@@ -216,7 +216,7 @@ async def get_available_modules(
     current_user: User = Depends(get_current_active_user),
 ):
     """Get list of available modules for filtering"""
-    if not current_user.is_superuser:
+    if not (is_admin(current_user) or has_permission(current_user, "audit.view")):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     result = await db.execute(

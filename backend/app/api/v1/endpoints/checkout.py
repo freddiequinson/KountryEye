@@ -27,8 +27,8 @@ async def get_visit_checkout_summary(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get comprehensive checkout summary for a visit including all charges"""
-    
-    # Get visit with patient and consultation type
+    from app.services.balances import visit_charges, patient_balance
+
     result = await db.execute(
         select(Visit)
         .options(selectinload(Visit.patient), selectinload(Visit.consultation_type))
@@ -37,111 +37,82 @@ async def get_visit_checkout_summary(
     visit = result.scalar_one_or_none()
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")
-    
     patient = visit.patient
-    
-    # 1. Consultation fee
-    consultation_fee = float(visit.consultation_fee or 0)
-    consultation_paid = float(visit.amount_paid or 0)
-    
-    # 2. Get scans for this visit
-    scan_result = await db.execute(
-        select(TechnicianScan)
-        .where(TechnicianScan.visit_id == visit_id)
-    )
-    scans = scan_result.scalars().all()
-    
-    scan_items = []
-    total_scan_charges = 0
-    total_scan_paid = 0
-    
-    for scan in scans:
-        # Get payment for this scan
-        payment_result = await db.execute(
-            select(ScanPayment).where(ScanPayment.scan_id == scan.id)
-        )
-        payment = payment_result.scalar_one_or_none()
-        
-        scan_amount = float(payment.amount if payment else 0)
-        scan_paid = scan_amount if (payment and payment.is_paid) else 0
-        
-        scan_items.append({
-            "id": scan.id,
-            "scan_number": scan.scan_number,
-            "scan_type": scan.scan_type,
-            "amount": scan_amount,
-            "paid": scan_paid,
-            "status": "paid" if (payment and payment.is_paid) else "pending"
-        })
-        total_scan_charges += scan_amount
-        total_scan_paid += scan_paid
-    
-    # 3. Get POS sales linked to this visit
-    from app.models.sales import SaleItem, Product
-    
-    sale_result = await db.execute(
-        select(Sale)
-        .options(selectinload(Sale.items).selectinload(SaleItem.product))
-        .where(Sale.visit_id == visit_id)
-    )
-    sales = sale_result.scalars().all()
-    
-    # Collect all product items for display
+
+    charges = await visit_charges(db, visit_id)
+    by_kind = lambda k: [c for c in charges if c.kind == k]
+    consult = next(iter(by_kind("consultation")), None)
+
+    scan_items = [{
+        "id": c.meta["scan_id"], "scan_number": c.meta["scan_number"], "scan_type": c.meta["scan_type"],
+        "amount": float(c.total), "paid": float(c.paid), "status": "paid" if c.balance <= 0 else "pending",
+    } for c in by_kind("scan")]
+
+    # Product lines, with each sale's own discount and VAT shown so the rows add up
+    sales = (await db.execute(
+        select(Sale).options(selectinload(Sale.items).selectinload(SaleItem.product)).where(Sale.visit_id == visit_id)
+    )).scalars().all()
     product_items = []
-    total_sale_charges = 0
-    total_sale_paid = 0
-    total_sale_tax = 0
-    
+    sale_tax = Decimal("0")
+    sale_discount = Decimal("0")
     for sale in sales:
-        sale_total = float(sale.total_amount or 0)
-        sale_paid = float(sale.paid_amount or 0)
-        
         for item in sale.items:
-            product_name = item.product.name if item.product else f"Product #{item.product_id}"
             product_items.append({
                 "product_id": item.product_id,
-                "product_name": product_name,
+                "product_name": item.product.name if item.product else f"Product #{item.product_id}",
                 "quantity": item.quantity,
                 "unit_price": float(item.unit_price),
                 "total": float(item.total),
                 "receipt_number": sale.receipt_number,
-                "status": sale.payment_status or "completed"
+                "status": sale.payment_status or "completed",
             })
-        
-        total_sale_charges += sale_total
-        total_sale_paid += sale_paid
-        total_sale_tax += float(sale.tax_amount or 0)
-    
-    # Calculate totals for this visit
-    grand_total = consultation_fee + total_scan_charges + total_sale_charges
-    total_paid = consultation_paid + total_scan_paid + total_sale_paid
-    balance_due = grand_total - total_paid
-    
-    # Get consultation type name
-    consultation_type_name = None
-    if visit.consultation_type:
-        consultation_type_name = visit.consultation_type.name
-    
-    # Calculate patient's overall debt from ALL visits (excluding current visit)
-    previous_visits_result = await db.execute(
-        select(Visit).where(
-            Visit.patient_id == patient.id,
-            Visit.id != visit_id  # Exclude current visit
-        )
-    )
-    previous_visits = previous_visits_result.scalars().all()
-    
-    previous_debt = 0
-    for pv in previous_visits:
-        pv_fee = float(pv.consultation_fee or 0)
-        pv_paid = float(pv.amount_paid or 0)
-        if pv_fee > pv_paid:
-            previous_debt += (pv_fee - pv_paid)
-    
-    # Total debt = current visit balance + previous visits debt
+        sale_tax += Decimal(str(sale.tax_amount or 0))
+        sale_discount += Decimal(str(sale.discount_amount or 0))
+        if sale.discount_percent:
+            sale_discount += (Decimal(str(sale.subtotal or 0)) * Decimal(str(sale.discount_percent)) / 100).quantize(Decimal("0.01"))
+
+    prescription_items = [{
+        "id": c.id, "label": c.label, "amount": float(c.total), "paid": float(c.paid), "balance": float(c.balance),
+    } for c in by_kind("prescription")]
+
+    def sums(kind):
+        cs = by_kind(kind)
+        t = sum((c.total for c in cs), Decimal("0")); p = sum((c.paid for c in cs), Decimal("0"))
+        return float(t), float(p), float(max(t - p, 0))
+
+    s_t, s_p, s_b = sums("scan")
+    p_t, p_p, p_b = sums("sale")
+    rx_t, rx_p, rx_b = sums("prescription")
+    grand_total = sum((c.total for c in charges), Decimal("0"))
+    total_paid = sum((c.paid for c in charges), Decimal("0"))
+    balance_due = sum((c.balance for c in charges), Decimal("0"))
+
+    # Invoice lines at their pre-VAT price, so lines - discount + VAT = grand total
+    from app.services.billing import money
+    lines = []
+    vat_total = Decimal("0")
+    if consult and money(visit.consultation_fee) > 0:
+        name = f"Consultation - {visit.consultation_type.name}" if visit.consultation_type else "Consultation fee"
+        lines.append({"description": name, "quantity": 1, "amount": float(money(visit.consultation_fee))})
+        vat_total += money(visit.vat_amount)
+    for c in by_kind("prescription"):
+        lines.append({"description": c.label.replace("Prescription", "Prescription items"), "quantity": 1,
+                      "amount": float(c.total - money(c.obj.vat_amount))})
+        vat_total += money(c.obj.vat_amount)
+    for c in by_kind("scan"):
+        lines.append({"description": f"{(c.meta['scan_type'] or 'scan').upper()} scan", "quantity": 1, "amount": float(money(c.obj.amount))})
+        vat_total += money(c.obj.vat_amount)
+    for item in product_items:
+        lines.append({"description": item["product_name"], "quantity": item["quantity"], "amount": item["total"]})
+    vat_total += sale_tax
+    rates = {float(r) for r in [visit.vat_rate] + [getattr(c.obj, "vat_rate", None) for c in by_kind("prescription")] + [s.vat_rate for s in sales] if r}
+    lines_subtotal = sum((Decimal(str(l["amount"])) for l in lines), Decimal("0"))
+
+    previous_debt = await patient_balance(db, patient.id, exclude_visit_id=visit_id)
     total_patient_debt = balance_due + previous_debt
     has_outstanding_debt = total_patient_debt > 0
-    
+    consult_vat = float(getattr(visit, "vat_amount", 0) or 0)
+
     return {
         "visit_id": visit_id,
         "visit_number": visit.visit_number,
@@ -157,37 +128,40 @@ async def get_visit_checkout_summary(
         },
         "charges": {
             "consultation": {
-                "type": consultation_type_name,
-                "fee": consultation_fee,
-                "paid": consultation_paid,
-                "balance": consultation_fee - consultation_paid,
+                "type": visit.consultation_type.name if visit.consultation_type else None,
+                "fee": float(consult.total) if consult else 0,
+                "net": float(visit.consultation_fee or 0),
+                "vat": consult_vat,
+                "paid": float(consult.paid) if consult else 0,
+                "balance": float(consult.balance) if consult else 0,
                 "payment_status": visit.payment_status
             },
-            "scans": {
-                "items": scan_items,
-                "total": total_scan_charges,
-                "paid": total_scan_paid,
-                "balance": total_scan_charges - total_scan_paid
-            },
+            "scans": {"items": scan_items, "total": s_t, "paid": s_p, "balance": s_b},
+            "prescriptions": {"items": prescription_items, "total": rx_t, "paid": rx_p, "balance": rx_b},
             "products": {
                 "items": product_items,
-                "total": total_sale_charges,
-                "tax": total_sale_tax,
-                "paid": total_sale_paid,
-                "balance": total_sale_charges - total_sale_paid
+                "total": p_t,
+                "discount": float(sale_discount),
+                "tax": float(sale_tax),
+                "paid": p_p,
+                "balance": p_b
             }
         },
+        "lines": lines,
         "summary": {
-            "grand_total": grand_total,
-            "vat_total": total_sale_tax,
-            "total_paid": total_paid,
-            "balance_due": balance_due,
+            "subtotal": float(lines_subtotal),
+            "discount": float(sale_discount),
+            "vat_rate": rates.pop() if len(rates) == 1 else None,
+            "grand_total": float(grand_total),
+            "vat_total": float(vat_total),
+            "total_paid": float(total_paid),
+            "balance_due": float(balance_due),
             "is_fully_paid": balance_due <= 0
         },
         "patient_debt": {
-            "previous_visits_debt": previous_debt,
-            "current_visit_balance": balance_due,
-            "total_debt": total_patient_debt,
+            "previous_visits_debt": float(previous_debt),
+            "current_visit_balance": float(balance_due),
+            "total_debt": float(total_patient_debt),
             "has_outstanding_debt": has_outstanding_debt,
             "debt_warning": f"This patient has an outstanding debt of GHS {total_patient_debt:.2f}" if has_outstanding_debt else None
         }
@@ -201,43 +175,54 @@ async def process_visit_checkout(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Process checkout payment for remaining balance"""
-    
-    amount = Decimal(str(data.get("amount", 0)))
-    payment_method = data.get("payment_method", "cash")
-    
-    if amount <= 0:
-        raise HTTPException(status_code=400, detail="Amount must be greater than 0")
-    
-    # Get visit
-    result = await db.execute(
-        select(Visit)
-        .options(selectinload(Visit.patient))
-        .where(Visit.id == visit_id)
-    )
-    visit = result.scalar_one_or_none()
+    """Take a payment at checkout and spread it over what is still owed on the visit:
+    consultation first, then prescriptions, scans and products."""
+    from app.services.balances import visit_charges, apply_payment_to_charge, PAY_ORDER, REVENUE_CATEGORY, REFERENCE_TYPE
+    from app.services.billing import parse_amount
+
+    visit = (await db.execute(
+        select(Visit).options(selectinload(Visit.patient)).where(Visit.id == visit_id)
+    )).scalar_one_or_none()
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")
-    
-    # Record revenue
-    revenue = Revenue(
-        category="checkout_payment",
-        description=f"Checkout payment for visit {visit.visit_number}",
-        amount=amount,
-        payment_method=payment_method,
-        reference_type="visit_checkout",
-        reference_id=visit_id,
-        patient_id=visit.patient_id,
-        branch_id=visit.branch_id,
-        recorded_by_id=current_user.id
-    )
-    db.add(revenue)
-    
+
+    charges = sorted((c for c in await visit_charges(db, visit_id) if c.balance > 0), key=lambda c: PAY_ORDER[c.kind])
+    owed = sum((c.balance for c in charges), Decimal("0"))
+    if owed <= 0:
+        raise HTTPException(status_code=400, detail="Nothing is owed on this visit")
+    offered = parse_amount(data.get("amount"), owed)
+    payment_method = str(data.get("payment_method") or "cash")[:50]
+    patient_name = f" - {visit.patient.first_name} {visit.patient.last_name}" if visit.patient else ""
+
+    remaining = offered
+    applied_lines = []
+    for c in charges:
+        if remaining <= 0:
+            break
+        take = min(remaining, c.balance)
+        apply_payment_to_charge(c, take, payment_method)
+        db.add(Revenue(
+            category=REVENUE_CATEGORY[c.kind],
+            description=f"Checkout: {c.label}{patient_name}",
+            amount=take,
+            payment_method=payment_method,
+            reference_type=REFERENCE_TYPE[c.kind],
+            reference_id=c.meta["scan_id"] if c.kind == "scan" else c.id,
+            patient_id=visit.patient_id,
+            branch_id=visit.branch_id,
+            recorded_by_id=current_user.id
+        ))
+        applied_lines.append({"kind": c.kind, "label": c.label, "amount": float(take)})
+        remaining -= take
+
     await db.commit()
-    
+    applied = offered - remaining
     return {
         "message": "Checkout payment recorded",
-        "amount": float(amount),
+        "amount": float(applied),
+        "change": float(remaining),
+        "balance": float(owed - applied),
+        "applied_to": applied_lines,
         "payment_method": payment_method,
         "visit_id": visit_id
     }
@@ -304,25 +289,11 @@ async def complete_visit_checkout(
         raise HTTPException(status_code=404, detail="Visit not found")
     
     patient = visit.patient
-    
-    # Calculate current visit balance
-    consultation_fee = float(visit.consultation_fee or 0)
-    amount_paid = float(visit.amount_paid or 0)
-    current_balance = consultation_fee - amount_paid
-    
-    # Calculate total patient debt from all visits
-    all_visits_result = await db.execute(
-        select(Visit).where(Visit.patient_id == patient.id)
-    )
-    all_visits = all_visits_result.scalars().all()
-    
-    total_debt = 0
-    for v in all_visits:
-        v_fee = float(v.consultation_fee or 0)
-        v_paid = float(v.amount_paid or 0)
-        if v_fee > v_paid:
-            total_debt += (v_fee - v_paid)
-    
+
+    from app.services.balances import patient_balance, visit_charges
+    current_balance = float(sum((c.balance for c in await visit_charges(db, visit_id)), Decimal("0")))
+    total_debt = float(await patient_balance(db, patient.id))
+
     # Check if patient has outstanding debt
     has_debt = total_debt > 0
     confirm_with_debt = (data or {}).get("confirm_with_debt", False)

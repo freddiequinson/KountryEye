@@ -1,9 +1,9 @@
 import logging
 from datetime import timedelta
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from pydantic import BaseModel
 
 from app.core.database import get_db
@@ -20,7 +20,8 @@ from app.core.email import email_enabled, send_email
 from app.core.config import settings
 from app.models.user import User
 from app.schemas.user import Token, UserCreate, UserResponse
-from app.api.v1.deps import get_current_active_user
+from app.api.v1.deps import get_current_active_user, get_current_superuser
+from app.core.ratelimit import rate_limit, check_rate, record_hit, client_ip
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -33,38 +34,48 @@ class ChangePasswordRequest(BaseModel):
 
 @router.post("/login")
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
-    # Try to find user by email or first_name (as username)
+    username = (form_data.username or "").strip()
+    bad_login = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Incorrect email/username or password",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    if not username or not form_data.password:
+        raise bad_login
+    # Only failed attempts count: 20 per IP per 5 minutes, 10 per account per 15 minutes
+    ip_key, user_key = f"login-fail-ip:{client_ip(request)}", f"login-fail-user:{username.lower()}"
+    check_rate(ip_key, 20, 300, record=False)
+    check_rate(user_key, 10, 900, record=False)
+
+    # Email (case-insensitive) or first name used as a username. Exact match, no wildcards.
     result = await db.execute(
         select(User).where(
-            (User.email == form_data.username) | 
-            (User.first_name.ilike(form_data.username))
+            (func.lower(User.email) == username.lower()) |
+            (func.lower(User.first_name) == username.lower())
         )
     )
-    user = result.scalar_one_or_none()
-    
+    candidates = result.scalars().all()
+    # Several staff can share a first name: accept whichever account the password matches
+    user = next((u for u in candidates if verify_password(form_data.password, u.hashed_password)), None)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email/username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    if not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email/username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
+        record_hit(ip_key)
+        record_hit(user_key)
+        raise bad_login
+
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
-    
+
+    from datetime import datetime
+    user.last_login = datetime.utcnow()
+    await db.commit()
+
     access_token = create_access_token(subject=user.id)
     return {
-        "access_token": access_token, 
+        "access_token": access_token,
         "token_type": "bearer",
         "must_change_password": user.must_change_password if user.must_change_password is not None else False
     }
@@ -82,8 +93,8 @@ async def change_password(
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     
     # Validate new password
-    if len(request.new_password) < 6:
-        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    if len(request.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
     
     if request.current_password == request.new_password:
         raise HTTPException(status_code=400, detail="New password must be different from current password")
@@ -121,7 +132,7 @@ def _send_reset_email(to: str, first_name: str, token: str) -> None:
         logger.exception("Failed to send password reset email to %s", to)
 
 
-@router.post("/forgot-password")
+@router.post("/forgot-password", dependencies=[Depends(rate_limit("forgot", 5, 900))])
 async def forgot_password(
     request: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
@@ -131,7 +142,7 @@ async def forgot_password(
     if not email_enabled():
         raise HTTPException(status_code=503, detail="Password reset by email is not configured. Contact your administrator.")
 
-    result = await db.execute(select(User).where(User.email == request.email.strip()))
+    result = await db.execute(select(User).where(func.lower(User.email) == request.email.strip().lower()))
     user = result.scalar_one_or_none()
     if user and user.is_active:
         token = create_reset_token(user.id, user.hashed_password)
@@ -141,7 +152,7 @@ async def forgot_password(
     return {"message": "If the account exists, a reset link has been sent"}
 
 
-@router.post("/reset-password")
+@router.post("/reset-password", dependencies=[Depends(rate_limit("reset", 10, 900))])
 async def reset_password(
     request: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db),
@@ -157,8 +168,8 @@ async def reset_password(
     if not user or not user.is_active or not reset_token_matches(fingerprint, user.hashed_password):
         raise invalid
 
-    if len(request.new_password) < 6:
-        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    if len(request.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
 
     user.hashed_password = get_password_hash(request.new_password)
     user.must_change_password = False
@@ -170,8 +181,10 @@ async def reset_password(
 @router.post("/register", response_model=UserResponse)
 async def register(
     user_in: UserCreate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_superuser),
 ):
+    """Create an account. Superadmin only; staff are normally added from Employees."""
     result = await db.execute(select(User).where(User.email == user_in.email))
     if result.scalar_one_or_none():
         raise HTTPException(

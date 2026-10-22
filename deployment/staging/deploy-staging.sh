@@ -33,9 +33,10 @@ SRC="$STAGING/deployment/staging"   # use the scripts from the deployed branch
 cd "$STAGING/backend"
 [ -d venv ] || python3 -m venv venv
 venv/bin/pip install -q --upgrade pip
+# Bring over packages prod installed by hand, then requirements.txt last so its pinned
+# (security-patched) versions win over prod's older ones.
+[ -x "$PROD/backend/venv/bin/pip" ] && "$PROD/backend/venv/bin/pip" freeze | grep -viE '^(fastapi|starlette|pydantic|python-jose|python-multipart|python-dotenv|ecdsa)==' | venv/bin/pip install -q -r /dev/stdin || true
 venv/bin/pip install -q -r requirements.txt
-# Match prod's exact package versions (it has packages installed by hand).
-[ -x "$PROD/backend/venv/bin/pip" ] && "$PROD/backend/venv/bin/pip" freeze | venv/bin/pip install -q -r /dev/stdin
 
 ENV="$STAGING/backend/.env"
 if [ ! -f "$ENV" ]; then

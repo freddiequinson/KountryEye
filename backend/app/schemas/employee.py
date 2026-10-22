@@ -84,7 +84,8 @@ class TaskResponse(BaseModel):
     due_date: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
-    
+    temporary_password: Optional[str] = None  # only set right after create/reset
+
     class Config:
         from_attributes = True
 
@@ -139,6 +140,16 @@ class EmployeeCreate(BaseModel):
     branch_id: int
 
 
+class EmployeeUpdate(BaseModel):
+    email: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    role_id: Optional[int] = None
+    branch_id: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
 class RoleInfo(BaseModel):
     id: int
     name: str
@@ -167,6 +178,7 @@ class EmployeeResponse(BaseModel):
     role: Optional[RoleInfo] = None
     branch: Optional[BranchInfo] = None
     created_at: Optional[datetime] = None
-    
+    temporary_password: Optional[str] = None  # only set right after create/reset
+
     class Config:
         from_attributes = True

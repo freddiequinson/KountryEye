@@ -30,7 +30,7 @@ export default function ResetPasswordPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    if (newPassword.length < 6) return setError('New password must be at least 6 characters')
+    if (newPassword.length < 8) return setError('New password must be at least 8 characters')
     if (newPassword !== confirmPassword) return setError('Passwords do not match')
     mutation.mutate()
   }
@@ -58,7 +58,7 @@ export default function ResetPasswordPage() {
               id="newPassword"
               isRequired
               mb="24px"
-              placeholder="Min. 6 characters"
+              placeholder="Min. 8 characters"
               autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}

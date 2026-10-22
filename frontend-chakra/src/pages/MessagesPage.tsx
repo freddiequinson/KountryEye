@@ -523,7 +523,7 @@ export default function MessagesPage() {
     const maxReconnectAttempts = 5
 
     const connectWebSocket = () => {
-      const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/messaging/ws/${user.id}`
+      const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/messaging/ws/${user.id}?token=${encodeURIComponent(useAuthStore.getState().token ?? '')}`
       try {
         wsRef.current = new WebSocket(wsUrl)
 

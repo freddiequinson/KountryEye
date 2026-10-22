@@ -252,6 +252,17 @@ async def delete_insurance_company(
 
 
 # Fee Override Endpoints
+@router.get("/{company_id}/fee-overrides")
+async def list_fee_overrides(
+    company_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Fee overrides for one insurance company (used when booking an insured visit)"""
+    company = await get_insurance_company(company_id, db, current_user)
+    return company["fee_overrides"]
+
+
 @router.post("/{company_id}/fee-overrides")
 async def create_fee_override(
     company_id: int,

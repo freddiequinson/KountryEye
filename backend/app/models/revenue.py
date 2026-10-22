@@ -29,7 +29,8 @@ class Revenue(Base):
     id = Column(Integer, primary_key=True, index=True)
     category = Column(String(50), default="other")
     description = Column(String(255), nullable=False)
-    amount = Column(Numeric(10, 2), nullable=False)
+    amount = Column(Numeric(10, 2), nullable=False)  # what was received, VAT included
+    vat_amount = Column(Numeric(10, 2), nullable=True)  # VAT inside `amount` (owed to GRA, not income)
     payment_method = Column(String(50), default="cash")
     reference_type = Column(String(50))  # 'visit', 'prescription', 'sale', 'other'
     reference_id = Column(Integer)  # ID of related record

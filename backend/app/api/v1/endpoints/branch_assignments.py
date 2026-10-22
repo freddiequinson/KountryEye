@@ -8,7 +8,7 @@ from sqlalchemy.orm import joinedload
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.api.v1.deps import get_current_active_user, get_current_superuser
+from app.api.v1.deps import get_current_active_user, get_current_superuser, is_admin, has_permission
 from app.models.user import User, BranchAssignment
 from app.models.branch import Branch
 
@@ -59,13 +59,8 @@ async def assign_branch_to_user(
     This creates a history record and sets verification required.
     """
     # Check if current user has admin permissions
-    if not current_user.is_superuser:
-        # Check for admin permission
-        has_permission = False
-        if current_user.role and current_user.role.permissions:
-            has_permission = any(p.code == "admin.users.manage" for p in current_user.role.permissions)
-        if not has_permission:
-            raise HTTPException(status_code=403, detail="You don't have permission to assign branches")
+    if not (is_admin(current_user) or has_permission(current_user, "employees.manage")):
+        raise HTTPException(status_code=403, detail="You don't have permission to assign branches")
     
     # Get the target user
     result = await db.execute(
@@ -143,12 +138,8 @@ async def get_user_branch_history(
 ):
     """Get branch assignment history for a user"""
     # Users can view their own history, admins can view anyone's
-    if user_id != current_user.id and not current_user.is_superuser:
-        has_permission = False
-        if current_user.role and current_user.role.permissions:
-            has_permission = any(p.code in ["admin.users.view", "admin.users.manage"] for p in current_user.role.permissions)
-        if not has_permission:
-            raise HTTPException(status_code=403, detail="You don't have permission to view this user's branch history")
+    if user_id != current_user.id and not (is_admin(current_user) or has_permission(current_user, "employees.view", "employees.manage")):
+        raise HTTPException(status_code=403, detail="You don't have permission to view this user's branch history")
     
     result = await db.execute(
         select(BranchAssignment)

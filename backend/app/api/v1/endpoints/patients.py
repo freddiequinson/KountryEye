@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import List, Optional
 from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,7 +9,8 @@ import csv
 import io
 
 from app.core.database import get_db
-from app.api.v1.deps import get_current_active_user
+from app.api.v1.deps import get_current_active_user, require_permission
+from app.core.ratelimit import rate_limit
 from app.models.user import User
 from app.models.patient import Patient, Visit
 from app.models.audit import AuditLog
@@ -17,11 +19,22 @@ from app.schemas.patient import (
     VisitCreate, VisitUpdate, VisitResponse
 )
 
+from app.services.billing import visit_money
+
 router = APIRouter()
 
 
 def generate_patient_number(branch_id: int, count: int) -> str:
     return f"KE-{branch_id:02d}-{count:06d}"
+
+
+async def next_patient_number(db: AsyncSession, branch_id: int, count: int) -> str:
+    """count+1 can already be taken (deleted or moved patients), so step past used numbers."""
+    number = generate_patient_number(branch_id, count)
+    while (await db.execute(select(Patient.id).where(Patient.patient_number == number))).first():
+        count += 1
+        number = generate_patient_number(branch_id, count)
+    return number
 
 
 @router.get("", response_model=List[PatientResponse])
@@ -54,7 +67,7 @@ async def get_patients(
     return result.scalars().all()
 
 
-@router.get("/export")
+@router.get("/export", dependencies=[Depends(require_permission("analytics.view", "patients.delete"))])
 async def export_patients(
     format: str = "csv",
     db: AsyncSession = Depends(get_db),
@@ -371,8 +384,7 @@ async def get_visits(
             "visit_type": v.visit_type.value if hasattr(v.visit_type, 'value') else str(v.visit_type),
             "status": v.status,
             "consultation_type": v.consultation_type.name if v.consultation_type else "",
-            "consultation_fee": float(v.consultation_fee) if v.consultation_fee else 0,
-            "amount_paid": float(v.amount_paid) if v.amount_paid else 0,
+            **visit_money(v),
             "payment_status": v.payment_status or "unpaid",
             "visit_date": v.visit_date.isoformat() if v.visit_date else "",
         }
@@ -402,9 +414,9 @@ async def create_patient(
     # Check for duplicate phone number globally
     if patient_in.phone:
         phone_check = await db.execute(
-            select(Patient).where(Patient.phone == patient_in.phone)
+            select(Patient).where(Patient.phone == patient_in.phone).limit(1)
         )
-        existing_by_phone = phone_check.scalar_one_or_none()
+        existing_by_phone = phone_check.scalars().first()
         if existing_by_phone:
             raise HTTPException(
                 status_code=400, 
@@ -416,9 +428,9 @@ async def create_patient(
     ghana_card = patient_data.get('ghana_card')
     if ghana_card:
         ghana_card_check = await db.execute(
-            select(Patient).where(Patient.ghana_card == ghana_card)
+            select(Patient).where(Patient.ghana_card == ghana_card).limit(1)
         )
-        existing_by_ghana_card = ghana_card_check.scalar_one_or_none()
+        existing_by_ghana_card = ghana_card_check.scalars().first()
         if existing_by_ghana_card:
             raise HTTPException(
                 status_code=400, 
@@ -432,7 +444,7 @@ async def create_patient(
     
     patient = Patient(
         **patient_data,
-        patient_number=generate_patient_number(patient_in.branch_id, count)
+        patient_number=await next_patient_number(db, patient_in.branch_id, count)
     )
     db.add(patient)
     
@@ -501,23 +513,22 @@ async def get_patient_balance(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get patient's payment balance across all visits"""
-    result = await db.execute(
-        select(Visit).where(Visit.patient_id == patient_id)
-    )
-    visits = result.scalars().all()
-    
-    total_billed = sum(float(v.consultation_fee or 0) for v in visits)
-    total_paid = sum(float(v.amount_paid or 0) for v in visits)
-    balance = total_billed - total_paid
-    
+    """What the patient owes across visits, prescriptions, scans and sales"""
+    from app.services.balances import patient_charges
+    charges = await patient_charges(db, patient_id)
+    total_billed = sum((c.total for c in charges), Decimal("0"))
+    total_paid = sum((c.paid for c in charges), Decimal("0"))
     return {
         "patient_id": patient_id,
-        "total_billed": total_billed,
-        "total_paid": total_paid,
-        "balance": balance,
-        "visits_count": len(visits),
-        "unpaid_visits": len([v for v in visits if (v.consultation_fee or 0) > (v.amount_paid or 0)])
+        "total_billed": float(total_billed),
+        "total_paid": float(total_paid),
+        "balance": float(sum((c.balance for c in charges), Decimal("0"))),
+        "visits_count": len([c for c in charges if c.kind == "consultation"]),
+        "unpaid_visits": len([c for c in charges if c.kind == "consultation" and c.balance > 0]),
+        "items": [
+            {"kind": c.kind, "id": c.id, "label": c.label, "total": float(c.total), "paid": float(c.paid), "balance": float(c.balance)}
+            for c in charges if c.balance > 0
+        ],
     }
 
 
@@ -605,6 +616,36 @@ async def detect_visit_type(
     }
 
 
+async def resolve_consultation_fee(db, ct, visit_type, payment_type, insurance_provider):
+    """Fee for a visit: the type's base fee, or the insurer's override for insured visits.
+    Mirrors what the booking screen shows, so the bill matches what staff saw."""
+    from decimal import Decimal
+    from app.models.insurance import InsuranceCompany, InsuranceFeeOverride
+    fee = Decimal(str(ct.base_fee or 0))
+    if payment_type != "insurance" or not insurance_provider:
+        return fee
+    company = (await db.execute(
+        select(InsuranceCompany).where(InsuranceCompany.name == insurance_provider).limit(1)
+    )).scalars().first()
+    if not company:
+        return fee
+    override = (await db.execute(
+        select(InsuranceFeeOverride).where(
+            InsuranceFeeOverride.insurance_company_id == company.id,
+            InsuranceFeeOverride.consultation_type_id == ct.id,
+        ).limit(1)
+    )).scalars().first()
+    if not override:
+        return fee
+    vt = getattr(visit_type, "value", visit_type)
+    by_type = {"initial": override.initial_fee, "review": override.review_fee, "subsequent": override.subsequent_fee}.get(vt)
+    if by_type is not None:
+        return Decimal(str(by_type))
+    if override.override_fee is not None:
+        return Decimal(str(override.override_fee))
+    return fee
+
+
 @router.post("/visits", response_model=VisitResponse)
 async def create_visit(
     visit_in: VisitCreate,
@@ -630,8 +671,16 @@ async def create_visit(
         ct_result = await db.execute(select(ConsultationType).where(ConsultationType.id == consultation_type_id))
         ct = ct_result.scalar_one_or_none()
         if ct:
-            consultation_fee = Decimal(str(ct.base_fee or 0))
+            consultation_fee = await resolve_consultation_fee(
+                db, ct, visit_data.get('visit_type'), payment_type, visit_data.get('insurance_provider')
+            )
     
+    # VAT goes on top of the fee; insurance and VisionCare cover the VAT-inclusive amount
+    from app.services.vat import get_vat_rate, vat_on, vat_share
+    vat_rate = await get_vat_rate(db)
+    vat_amount = vat_on(consultation_fee, vat_rate)
+    gross_fee = consultation_fee + vat_amount
+
     # Generate visit number
     from datetime import date
     today = date.today()
@@ -661,26 +710,26 @@ async def create_visit(
         
         if insurance_limit > 0:
             # Calculate how much insurance covers vs patient pays
-            if consultation_fee <= insurance_limit:
+            if gross_fee <= insurance_limit:
                 # Insurance covers full consultation fee
-                insurance_used = consultation_fee
-                insurance_coverage = consultation_fee
-                amount_paid = consultation_fee
+                insurance_used = gross_fee
+                insurance_coverage = gross_fee
+                amount_paid = gross_fee
                 payment_status = "paid"
                 status = "waiting"
             else:
                 # Insurance covers up to limit, patient pays the rest
                 insurance_used = insurance_limit
                 insurance_coverage = insurance_limit
-                patient_topup = consultation_fee - insurance_limit
+                patient_topup = gross_fee - insurance_limit
                 # Insurance portion is paid, patient needs to pay topup
                 amount_paid = insurance_limit  # Insurance has paid its portion
                 payment_status = "partial"  # Partial payment - insurance paid, patient owes balance
                 status = "pending_payment"  # Still pending until patient pays topup
         else:
             # No limit specified, insurance covers full amount (legacy behavior)
-            insurance_coverage = consultation_fee
-            amount_paid = consultation_fee
+            insurance_coverage = gross_fee
+            amount_paid = gross_fee
             payment_status = "paid"
             status = "waiting"
         
@@ -704,8 +753,8 @@ async def create_visit(
             if is_valid:
                 visioncare_member_id = member.member_id
                 # VisionCare covers the full consultation fee
-                insurance_coverage = consultation_fee
-                amount_paid = consultation_fee
+                insurance_coverage = gross_fee
+                amount_paid = gross_fee
                 payment_status = "paid"
                 status = "waiting"  # Move directly to waiting queue
             else:
@@ -739,6 +788,8 @@ async def create_visit(
         recorded_by_id=current_user.id,
         consultation_type_id=consultation_type_id,
         consultation_fee=consultation_fee,
+        vat_rate=vat_rate,
+        vat_amount=vat_amount,
         amount_paid=amount_paid,
         status=status,
         payment_status=payment_status,
@@ -757,6 +808,7 @@ async def create_visit(
             category="consultation",
             description=f"Consultation fee - {patient_name}",
             amount=amount_paid,
+            vat_amount=vat_share(amount_paid, vat_amount, gross_fee),
             payment_method=payment_type,
             reference_type="visit",
             reference_id=visit.id,
@@ -790,68 +842,70 @@ async def update_visit(
     return visit
 
 
-@router.post("/visits/{visit_id}/pay")
+async def apply_visit_payment(db, visit, payment_data: dict, current_user) -> dict:
+    """Record a payment against a visit. Anything above the balance is change, not revenue."""
+    from app.models.revenue import Revenue
+    from app.services.billing import money, visit_total, visit_balance, parse_amount
+
+    balance = visit_balance(visit)
+    if balance <= 0:
+        raise HTTPException(status_code=400, detail="This visit is already fully paid")
+    offered = parse_amount(payment_data.get("amount"), balance)
+    applied = min(offered, balance)
+    payment_method = str(payment_data.get("payment_method") or "cash")[:50]
+
+    visit.amount_paid = money(visit.amount_paid) + applied
+    total = visit_total(visit)
+    visit.payment_status = "paid" if visit.amount_paid >= total else "partial"
+    if visit.status == "pending_payment":
+        visit.status = "waiting"  # into the doctor queue (part-paid too; doctors see a reminder)
+
+    patient_name = f"{visit.patient.first_name} {visit.patient.last_name}" if visit.patient else "Unknown"
+    from app.services.vat import vat_share
+    db.add(Revenue(
+        category="consultation",
+        description=f"Consultation fee - {patient_name}",
+        amount=applied,
+        vat_amount=vat_share(applied, visit.vat_amount, total),
+        payment_method=payment_method,
+        reference_type="visit",
+        reference_id=visit.id,
+        patient_id=visit.patient_id,
+        branch_id=visit.branch_id,
+        recorded_by_id=current_user.id,
+    ))
+    await db.commit()
+    return {
+        "message": "Payment recorded",
+        "visit_id": visit.id,
+        "applied": float(applied),
+        "change": float(offered - applied),
+        **visit_money(visit),
+        "total": float(total),
+        "balance": float(max(total - visit.amount_paid, 0)),
+        "payment_status": visit.payment_status,
+        "status": visit.status,
+    }
+
+
+async def _load_visit_with_patient(db, visit_id: int):
+    from sqlalchemy.orm import joinedload
+    result = await db.execute(select(Visit).options(joinedload(Visit.patient)).where(Visit.id == visit_id))
+    visit = result.unique().scalar_one_or_none()
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found")
+    return visit
+
+
+@router.post("/visits/{visit_id}/pay", dependencies=[Depends(require_permission("payments.create"))])
 async def pay_for_visit(
     visit_id: int,
     payment_data: dict,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    from decimal import Decimal
-    from sqlalchemy.orm import joinedload
-    from app.models.revenue import Revenue
-    
-    result = await db.execute(
-        select(Visit).options(joinedload(Visit.patient)).where(Visit.id == visit_id)
-    )
-    visit = result.unique().scalar_one_or_none()
-    if not visit:
-        raise HTTPException(status_code=404, detail="Visit not found")
-    
-    amount = Decimal(str(payment_data.get("amount", 0)))
-    payment_method = payment_data.get("payment_method", "cash")
-    if amount <= 0:
-        raise HTTPException(status_code=400, detail="Payment amount must be positive")
-    
-    current_paid = visit.amount_paid or Decimal("0")
-    fee = visit.consultation_fee or Decimal("0")
-    new_paid = current_paid + amount
-    
-    visit.amount_paid = new_paid
-    
-    if new_paid >= fee:
-        visit.payment_status = "paid"
-        visit.status = "waiting"  # Move to waiting queue after full payment
-    else:
-        visit.payment_status = "partial"
-        visit.status = "waiting"  # Also move to waiting queue for partial payments - doctors can see payment reminder
-    
-    # Record revenue
-    patient_name = f"{visit.patient.first_name} {visit.patient.last_name}" if visit.patient else "Unknown"
-    revenue = Revenue(
-        category="consultation",
-        description=f"Consultation fee - {patient_name}",
-        amount=amount,
-        payment_method=payment_method,
-        reference_type="visit",
-        reference_id=visit.id,
-        patient_id=visit.patient_id,
-        branch_id=visit.branch_id,
-        recorded_by_id=current_user.id
-    )
-    db.add(revenue)
-    
-    await db.commit()
-    
-    return {
-        "message": "Payment recorded",
-        "visit_id": visit.id,
-        "amount_paid": float(new_paid),
-        "consultation_fee": float(fee),
-        "balance": float(max(0, fee - new_paid)),
-        "payment_status": visit.payment_status,
-        "status": visit.status
-    }
+    visit = await _load_visit_with_patient(db, visit_id)
+    return await apply_visit_payment(db, visit, payment_data, current_user)
 
 
 @router.get("/visits/pending-payment")
@@ -883,9 +937,7 @@ async def get_pending_payment_visits(
             "patient_id": v.patient_id,
             "patient_name": f"{v.patient.first_name} {v.patient.last_name}" if v.patient else "Unknown",
             "patient_number": v.patient.patient_number if v.patient else "",
-            "consultation_fee": float(v.consultation_fee) if v.consultation_fee else 0,
-            "amount_paid": float(v.amount_paid) if v.amount_paid else 0,
-            "balance": float((v.consultation_fee or 0) - (v.amount_paid or 0)),
+            **visit_money(v),
             "payment_status": v.payment_status or "unpaid",
             "visit_date": v.visit_date.isoformat() if v.visit_date else "",
         }
@@ -920,78 +972,22 @@ async def get_visit(
         "status": visit.status,
         "payment_status": visit.payment_status,
         "payment_type": visit.payment_type,
-        "amount_paid": float(visit.amount_paid or 0),
-        "consultation_fee": float(visit.consultation_fee or 0),
+        **visit_money(visit),
         "insurance_provider": visit.insurance_provider,
         "notes": visit.notes,
     }
 
 
-@router.post("/visits/{visit_id}/payment")
+@router.post("/visits/{visit_id}/payment", dependencies=[Depends(require_permission("payments.create"))])
 async def record_visit_payment(
     visit_id: int,
     payment_data: dict,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Record a payment for a visit"""
-    from sqlalchemy.orm import joinedload
-    from app.models.revenue import Revenue
-
-    result = await db.execute(
-        select(Visit).options(joinedload(Visit.patient)).where(Visit.id == visit_id)
-    )
-    visit = result.unique().scalar_one_or_none()
-
-    if not visit:
-        raise HTTPException(status_code=404, detail="Visit not found")
-
-    amount = payment_data.get("amount", 0)
-    if amount <= 0:
-        raise HTTPException(status_code=400, detail="Payment amount must be greater than 0")
-
-    # Update amount paid
-    current_paid = float(visit.amount_paid or 0)
-    new_paid = current_paid + float(amount)
-    visit.amount_paid = new_paid
-
-    # Update payment status and visit status
-    consultation_fee = float(visit.consultation_fee or 0)
-    if new_paid >= consultation_fee:
-        visit.payment_status = "paid"
-        visit.status = "waiting"  # Move to doctor queue after full payment
-    elif new_paid > 0:
-        visit.payment_status = "partial"
-        visit.status = "waiting"  # Also move to queue for partial payments
-
-    # Record revenue
-    payment_method = payment_data.get("payment_method", "cash")
-    patient_name = (
-        f"{visit.patient.first_name} {visit.patient.last_name}" if visit.patient else "Unknown"
-    )
-    db.add(Revenue(
-        category="consultation",
-        description=f"Consultation fee - {patient_name}",
-        amount=float(amount),
-        payment_method=payment_method,
-        reference_type="visit",
-        reference_id=visit.id,
-        patient_id=visit.patient_id,
-        branch_id=visit.branch_id,
-        recorded_by_id=current_user.id,
-    ))
-
-    await db.commit()
-    
-    return {
-        "message": "Payment recorded successfully",
-        "visit_id": visit_id,
-        "amount_paid": new_paid,
-        "consultation_fee": consultation_fee,
-        "balance": consultation_fee - new_paid,
-        "payment_status": visit.payment_status,
-        "status": visit.status,
-    }
+    """Record a payment for a visit (same as /pay; kept for older screens)"""
+    visit = await _load_visit_with_patient(db, visit_id)
+    return await apply_visit_payment(db, visit, payment_data, current_user)
 
 
 @router.get("/visits/{visit_id}/insurance-balance")
@@ -1020,7 +1016,7 @@ async def get_visit_insurance_balance(
         "insurance_used": insurance_used,
         "insurance_remaining": insurance_remaining,
         "patient_topup": patient_topup,
-        "consultation_fee": float(visit.consultation_fee or 0),
+        **visit_money(visit),
         "is_insurance": visit.payment_type == "insurance",
     }
 
@@ -1072,7 +1068,11 @@ async def check_duplicate_patients(
     return sorted(candidates, key=lambda x: x["match_score"], reverse=True)
 
 
-@router.post("/self-register")
+# Public routes (no login) live on their own router so the staff permission gate doesn't apply
+public_router = APIRouter()
+
+
+@public_router.post("/self-register", dependencies=[Depends(rate_limit("self-register", 10, 600))])
 async def self_register_patient(
     patient_data: dict,
     db: AsyncSession = Depends(get_db)
@@ -1080,14 +1080,23 @@ async def self_register_patient(
     """Public endpoint for patients to self-register. Creates a pending registration."""
     from app.models.patient import PendingRegistration
     from datetime import datetime
+
+    # Only plain text fields, with sane lengths
+    patient_data = {
+        k: (str(v).strip()[:255] if v is not None else "")
+        for k, v in patient_data.items()
+        if isinstance(v, (str, int, float)) or v is None
+    }
+    if not patient_data.get("first_name") or not patient_data.get("last_name"):
+        raise HTTPException(status_code=400, detail="First and last name are required")
     
     # Check for duplicate phone number globally
     phone = patient_data.get("phone", "").strip()
     if phone:
         phone_check = await db.execute(
-            select(Patient).where(Patient.phone == phone)
+            select(Patient.id).where(Patient.phone == phone).limit(1)
         )
-        existing_by_phone = phone_check.scalar_one_or_none()
+        existing_by_phone = phone_check.first()
         if existing_by_phone:
             raise HTTPException(
                 status_code=400, 
@@ -1098,9 +1107,9 @@ async def self_register_patient(
     ghana_card = patient_data.get("ghana_card", "").strip()
     if ghana_card:
         ghana_card_check = await db.execute(
-            select(Patient).where(Patient.ghana_card == ghana_card)
+            select(Patient).where(Patient.ghana_card == ghana_card).limit(1)
         )
-        existing_by_ghana_card = ghana_card_check.scalar_one_or_none()
+        existing_by_ghana_card = ghana_card_check.scalars().first()
         if existing_by_ghana_card:
             raise HTTPException(
                 status_code=400, 
@@ -1248,13 +1257,15 @@ async def approve_pending_registration(
         sex=pending.sex,
         marital_status=pending.marital_status,
         phone=pending.phone,
-        email=pending.email,
+        email=(pending.email or "").strip() or None,
         address=pending.address,
         occupation=pending.occupation,
         emergency_contact_name=pending.emergency_contact_name,
         emergency_contact_phone=pending.emergency_contact_phone,
+        nationality=pending.nationality,
+        ghana_card=pending.ghana_card or None,
         branch_id=branch_id,
-        patient_number=generate_patient_number(branch_id, count)
+        patient_number=await next_patient_number(db, branch_id, count)
     )
     db.add(patient)
     

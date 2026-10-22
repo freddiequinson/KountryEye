@@ -35,6 +35,18 @@ _SIGNER = ParagraphStyle('ReceiptSigner', fontName='Helvetica-Oblique', fontSize
 _SIGN_LABEL = ParagraphStyle('ReceiptSignLabel', fontName='Helvetica-Bold', fontSize=7, leading=10, textColor=_DARK, alignment=TA_CENTER)
 
 
+def _esc_all(value):
+    """Escape every string in the data so names like 'Ama & Kofi' or '<b>' can't break the PDF markup."""
+    from xml.sax.saxutils import escape
+    if isinstance(value, str):
+        return escape(value)
+    if isinstance(value, dict):
+        return {k: _esc_all(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return type(value)(_esc_all(v) for v in value)
+    return value
+
+
 def _money(amount) -> str:
     return f"GHS {amount or 0:,.2f}"
 
@@ -245,6 +257,7 @@ def _printed_note() -> str:
 
 def generate_receipt_pdf(receipt_data: dict) -> BytesIO:
     """Payment receipt (visit, prescription or sale) in the A5 receipt design"""
+    receipt_data = _esc_all(receipt_data)
     patient_number = receipt_data.get("patient_number")
     details = _details_table([
         ("RECEIPT", _two_lines(f"N° {receipt_data.get('receipt_number', 'N/A')}", receipt_data.get("branch")),
@@ -262,15 +275,19 @@ def generate_receipt_pdf(receipt_data: dict) -> BytesIO:
         ))
     elements.append(Spacer(1, 6*mm))
 
-    subtotal = receipt_data.get("subtotal", 0)
-    discount = receipt_data.get("discount", 0)
-    total = receipt_data.get("total", subtotal - discount)
-    amount_paid = receipt_data.get("amount_paid", total)
-    balance_due = total - amount_paid
+    subtotal = float(receipt_data.get("subtotal", 0) or 0)
+    discount = float(receipt_data.get("discount", 0) or 0)
+    vat = float(receipt_data.get("vat_amount", 0) or 0)
+    total = float(receipt_data.get("total", subtotal - discount + vat) or 0)
+    amount_paid = float(receipt_data.get("amount_paid", total) or 0)
+    balance_due = round(total - amount_paid, 2)
 
     totals = [["SUB TOTAL", _money(subtotal)]]
     if discount > 0:
         totals.append(["DISCOUNT", f"-{_money(discount)}"])
+    if vat > 0:
+        rate = receipt_data.get("vat_rate")
+        totals.append([f"VAT ({float(rate):g}%)" if rate else "VAT", _money(vat)])
     totals.append(["TOTAL", _money(total)])
     final_color = _INK
     if balance_due > 0:
@@ -295,6 +312,7 @@ def generate_receipt_pdf(receipt_data: dict) -> BytesIO:
 
 
 def generate_prescription_pdf(prescription_data: dict) -> BytesIO:
+    prescription_data = _esc_all(prescription_data)
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20*mm, leftMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
     
@@ -365,6 +383,11 @@ def generate_prescription_pdf(prescription_data: dict) -> BytesIO:
 
 def generate_checkout_receipt_pdf(visit, patient, summary: dict, branch=None, issued_by=None) -> bytes:
     """Generate unified checkout receipt PDF with all visit charges (A5 receipt design)"""
+    from types import SimpleNamespace
+    summary = _esc_all(summary)
+    issued_by = _esc_all(issued_by)
+    patient = SimpleNamespace(**_esc_all({k: getattr(patient, k, None) for k in ("first_name", "last_name", "patient_number", "phone")}))
+    branch = SimpleNamespace(**_esc_all({k: getattr(branch, k, None) for k in ("name", "address")})) if branch else None
     branch_line = ", ".join(part for part in (getattr(branch, 'name', None), getattr(branch, 'address', None)) if part) if branch else ""
     patient_line = "  ·  ".join(part for part in (patient.patient_number, patient.phone) if part)
     details = _details_table([
@@ -373,43 +396,30 @@ def generate_checkout_receipt_pdf(visit, patient, summary: dict, branch=None, is
         ("PATIENT", _two_lines(f"{patient.first_name} {patient.last_name}", patient_line), None, None),
     ])
 
-    # Charges
-    charges = summary.get("charges", {})
-    rows = []
-
-    consultation = charges.get("consultation", {})
-    if consultation.get("fee", 0) > 0:
-        description = f"Consultation - {consultation.get('type')}" if consultation.get("type") else "Consultation Fee"
-        rows.append([description, consultation.get('fee', 0), consultation.get('paid', 0), consultation.get('balance', 0)])
-
-    for scan in charges.get("scans", {}).get("items", []):
-        rows.append([
-            f"Scan - {scan.get('scan_type', '').upper()} ({scan.get('scan_number', '')})",
-            scan.get('amount', 0), scan.get('paid', 0), scan.get('amount', 0) - scan.get('paid', 0),
-        ])
-
-    for product in charges.get("products", {}).get("items", []):
-        rows.append([f"{product.get('product_name', 'Product')} x{product.get('quantity', 1)}", product.get('total', 0), product.get('total', 0), 0])
-
-    col_widths = [_CONTENT_W - 3 * 24*mm, 24*mm, 24*mm, 24*mm]
-    elements = [details, Spacer(1, 4*mm), _PillHeader(("DESCRIPTION", "AMOUNT", "PAID", "BALANCE"), col_widths)]
-    if rows:
-        elements.append(_rows_table([[description, _money(amount), _money(paid), _money(balance)] for description, amount, paid, balance in rows], col_widths))
+    lines = summary.get("lines", [])
+    col_widths = [_CONTENT_W - 14*mm - 30*mm, 14*mm, 30*mm]
+    elements = [details, Spacer(1, 4*mm), _PillHeader(("DESCRIPTION", "QTY", "AMOUNT"), col_widths)]
+    if lines:
+        elements.append(_rows_table(
+            [[l.get("description", ""), str(l.get("quantity", 1)), _money(l.get("amount", 0))] for l in lines],
+            col_widths,
+        ))
     elements.append(Spacer(1, 6*mm))
 
     totals = summary.get("summary", {})
     balance_due = totals.get('balance_due', 0) or 0
-    elements.append(_closing_block(
-        _printed_note(),
-        [
-            # Product rows above are base prices; the VAT charged on them is part of the grand total
-            ["VAT", _money(totals.get('vat_total', 0))],
-            ["GRAND TOTAL", _money(totals.get('grand_total', 0))],
-            ["TOTAL PAID", _money(totals.get('total_paid', 0))],
-            ["BALANCE DUE", _money(balance_due)],
-        ],
-        _DUE if balance_due > 0 else _INK,
-    ))
+    rows = [["SUB TOTAL", _money(totals.get("subtotal", 0))]]
+    if (totals.get("discount") or 0) > 0:
+        rows.append(["DISCOUNT", f"-{_money(totals.get('discount'))}"])
+    if (totals.get("vat_total") or 0) > 0:
+        rate = totals.get("vat_rate")
+        rows.append([f"VAT ({float(rate):g}%)" if rate else "VAT", _money(totals.get("vat_total"))])
+    rows += [
+        ["GRAND TOTAL", _money(totals.get('grand_total', 0))],
+        ["TOTAL PAID", _money(totals.get('total_paid', 0))],
+        ["BALANCE DUE", _money(balance_due)],
+    ]
+    elements.append(_closing_block(_printed_note(), rows, _DUE if balance_due > 0 else _INK))
 
     # Signed with the account that issued the receipt
     if issued_by:
@@ -420,6 +430,7 @@ def generate_checkout_receipt_pdf(visit, patient, summary: dict, branch=None, is
 
 def generate_spectacles_prescription_pdf(prescription_data: dict) -> bytes:
     """Generate a spectacles prescription form PDF matching the template"""
+    prescription_data = _esc_all(prescription_data)
     import os
     
     buffer = BytesIO()

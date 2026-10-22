@@ -31,6 +31,8 @@ import {
 } from '@chakra-ui/react'
 import { MdAdd, MdCake, MdCheckCircle, MdContactEmergency, MdCreditCard, MdDescription, MdEdit, MdEmail, MdErrorOutline, MdEvent, MdHistory, MdLocationOn, MdPhone, MdVisibility } from 'react-icons/md'
 import api from '@/lib/api'
+import { ghs, visitBalance, visitTotal, withVat } from '@/lib/money'
+import { useVatRate } from '@/hooks/use-vat-rate'
 import type { Patient, Visit } from '@/types'
 import { useToast } from '@/hooks/use-toast'
 import Card from '@/components/card/Card'
@@ -152,6 +154,8 @@ export default function PatientDetailPage() {
     enabled: !!id,
   })
 
+  const vatRate = useVatRate()
+
   const getConsultationFee = () => {
     if (!visitForm.consultation_type_id) return 0
     const type = consultationTypes.find((t: any) => t.id.toString() === visitForm.consultation_type_id)
@@ -225,7 +229,7 @@ export default function PatientDetailPage() {
   })
 
   const openPaymentDialog = (visit: any) => {
-    const balance = (visit.consultation_fee || 0) - (visit.amount_paid || 0)
+    const balance = visitBalance(visit)
     setPaymentVisit(visit)
     setPaymentForm({ amount: balance.toFixed(2), payment_method: 'cash', notes: '' })
     setIsPaymentDialogOpen(true)
@@ -282,7 +286,9 @@ export default function PatientDetailPage() {
   }
 
   const hasBalance = patientBalance?.balance > 0
-  const fee = getConsultationFee()
+  // Fees are entered without VAT; what the patient pays (and what insurance covers) includes it
+  const netFee = getConsultationFee()
+  const fee = withVat(netFee, vatRate)
   const insuranceLimit = parseFloat(visitForm.insurance_limit)
 
   return (
@@ -383,12 +389,12 @@ export default function PatientDetailPage() {
                           <Td>
                             {visit.consultation_fee ? (
                               <Box fontSize="sm">
-                                <Text color={visit.amount_paid >= visit.consultation_fee ? 'green.500' : 'red.500'}>
-                                  GHS {visit.amount_paid?.toFixed(2) || '0.00'} / {visit.consultation_fee?.toFixed(2)}
+                                <Text color={visitBalance(visit) <= 0 ? 'green.500' : 'red.500'}>
+                                  {ghs(visit.amount_paid)} / {ghs(visitTotal(visit))}
                                 </Text>
-                                {visit.amount_paid < visit.consultation_fee && (
+                                {visitBalance(visit) > 0 && (
                                   <Text fontSize="xs" color="red.500">
-                                    Owes: GHS {(visit.consultation_fee - (visit.amount_paid || 0)).toFixed(2)}
+                                    Owes: {ghs(visitBalance(visit))}
                                   </Text>
                                 )}
                               </Box>
@@ -405,7 +411,7 @@ export default function PatientDetailPage() {
                                 icon={<MdVisibility />}
                                 onClick={() => navigate(`/patients/${id}/visits/${visit.id}`)}
                               />
-                              {visit.consultation_fee && visit.amount_paid < visit.consultation_fee && (
+                              {visit.consultation_fee > 0 && visitBalance(visit) > 0 && (
                                 <IconButton
                                   aria-label="Record payment"
                                   variant="ghost"
@@ -629,7 +635,7 @@ export default function PatientDetailPage() {
               >
                 {consultationTypes.map((type: any) => (
                   <option key={type.id} value={type.id.toString()}>
-                    {type.name} - GH₵{type.base_fee?.toLocaleString()}
+                    {type.name} - {ghs(withVat(type.base_fee || 0, vatRate))}
                   </option>
                 ))}
               </Select>
@@ -712,9 +718,16 @@ export default function PatientDetailPage() {
 
             {visitForm.consultation_type_id && (
               <Flex justify="space-between" align="center" p="16px" bg={mutedBg} borderRadius="12px">
-                <Text fontWeight="500">Consultation Fee</Text>
+                <Box>
+                  <Text fontWeight="500">Consultation Fee</Text>
+                  {vatRate > 0 && (
+                    <Text fontSize="xs" color="secondaryGray.600">
+                      {ghs(netFee)} + VAT {vatRate}% ({ghs(fee - netFee)})
+                    </Text>
+                  )}
+                </Box>
                 <Text fontSize="lg" fontWeight="bold">
-                  GH₵{fee.toLocaleString()}
+                  {ghs(fee)}
                 </Text>
               </Flex>
             )}
@@ -863,16 +876,22 @@ export default function PatientDetailPage() {
               </Flex>
               <Flex justify="space-between">
                 <Text>Consultation Fee:</Text>
-                <Text>GHS {paymentVisit.consultation_fee?.toFixed(2)}</Text>
+                <Text>{ghs(paymentVisit.consultation_fee)}</Text>
               </Flex>
+              {paymentVisit.vat_amount > 0 && (
+                <Flex justify="space-between">
+                  <Text>VAT{paymentVisit.vat_rate ? ` (${paymentVisit.vat_rate}%)` : ''}:</Text>
+                  <Text>{ghs(paymentVisit.vat_amount)}</Text>
+                </Flex>
+              )}
               <Flex justify="space-between">
                 <Text>Already Paid:</Text>
-                <Text>GHS {paymentVisit.amount_paid?.toFixed(2) || '0.00'}</Text>
+                <Text>{ghs(paymentVisit.amount_paid)}</Text>
               </Flex>
               <Divider my="8px" />
               <Flex justify="space-between" fontWeight="500" color="red.500">
                 <Text>Balance Due:</Text>
-                <Text>GHS {((paymentVisit.consultation_fee || 0) - (paymentVisit.amount_paid || 0)).toFixed(2)}</Text>
+                <Text>{ghs(visitBalance(paymentVisit))}</Text>
               </Flex>
             </Box>
             <Field label="Payment Amount (GHS)">

@@ -22,6 +22,7 @@ import {
 import { MdArrowBack, MdCreditCard, MdDescription, MdEvent, MdMedication } from 'react-icons/md'
 import { FaGlasses } from 'react-icons/fa'
 import api from '@/lib/api'
+import { ghs, visitBalance, visitTotal } from '@/lib/money'
 import PageHeader from '@/components/PageHeader'
 import Card from '@/components/card/Card'
 import SectionCard from '@/components/card/SectionCard'
@@ -130,7 +131,7 @@ export default function VisitDetailPage() {
     p.items.filter((i: any) => ['spectacle', 'lens', 'other'].includes(i.item_type)).map((item: any) => ({ ...item, prescription: p })),
   )
 
-  const balance = (visitDetail?.consultation_fee || 0) - (visitDetail?.amount_paid || 0)
+  const balance = visitDetail ? visitBalance(visitDetail) : 0
   const record = visitDetail?.clinical_record
 
   return (
@@ -168,7 +169,7 @@ export default function VisitDetailPage() {
         </SmallStat>
         <SmallStat label="Payment" icon={MdCreditCard} borderColor={balance > 0 ? 'red.200' : 'green.200'}>
           <Text fontSize="lg" fontWeight="600">
-            GHS {visitDetail?.amount_paid?.toFixed(2) || '0.00'} / {visitDetail?.consultation_fee?.toFixed(2) || '0.00'}
+            {ghs(visitDetail?.amount_paid)} / {ghs(visitDetail ? visitTotal(visitDetail) : 0)}
           </Text>
           {balance > 0 && (
             <Text fontSize="sm" color="red.500">

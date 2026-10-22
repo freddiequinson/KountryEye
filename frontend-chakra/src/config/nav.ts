@@ -66,7 +66,7 @@ const allNavItems: NavItem[] = [
   { title: 'Scans', url: '/technician/scans', icon: MdVisibility, permissions: ['technician.scans'], roles: ['technician'] },
   { title: 'Referral Payments', url: '/admin/referral-payments', icon: MdAttachMoney, permissions: ['referrals.payments'] },
   { title: 'Search', url: '/admin/search', icon: MdSearch, permissions: ['analytics.view'] },
-  { title: 'Audit Logs', url: '/admin/audit-logs', icon: MdAssignment, permissions: ['analytics.view'] },
+  { title: 'Audit Logs', url: '/admin/audit-logs', icon: MdAssignment, permissions: ['audit.view'], roles: ['admin'] },
   { title: 'Settings', url: '/admin/settings', icon: MdSettings, permissions: ['settings.manage'] },
 ]
 
@@ -80,6 +80,8 @@ export function getUserRole(user: User | null): string {
 export function getRoleDisplayName(user: User | null): string {
   if (user?.is_superuser) return 'System Administrator'
   const names: Record<string, string> = {
+    admin: 'Administrator',
+    lab_technician: 'Lab Technician',
     doctor: 'Doctor',
     optometrist: 'Optometrist',
     front_desk: 'Front Desk',

@@ -32,6 +32,7 @@ import {
 } from 'react-icons/md'
 import { FaStethoscope } from 'react-icons/fa'
 import api from '@/lib/api'
+import { ghs } from '@/lib/money'
 import PageHeader from '@/components/PageHeader'
 import { useToast } from '@/hooks/use-toast'
 import Card from '@/components/card/Card'
@@ -83,11 +84,13 @@ export default function CheckoutPage() {
   })
 
   // Fetch prescriptions for this visit
-  const { data: prescriptions = [] } = useQuery({
+  const { data: allPrescriptions = [] } = useQuery({
     queryKey: ['visit-prescriptions', visitId],
     queryFn: async () => (await api.get(`/clinical/visits/${visitId}/prescriptions`)).data,
     enabled: !!visitId,
   })
+  // Spectacle prescriptions (for the PDF download); medication prescriptions are billed above
+  const prescriptions = allPrescriptions.filter((p: any) => p.prescription_type === 'optical' || p.sphere_od || p.sphere_os)
 
   const paymentMutation = useMutation({
     mutationFn: (data: { amount: number; payment_method: string }) => api.post(`/checkout/visits/${visitId}/checkout`, data),
@@ -214,7 +217,7 @@ export default function CheckoutPage() {
             </Box>
             <Badge colorScheme={totals.is_fully_paid ? 'green' : 'red'} fontSize="md" px="16px" py="8px" borderRadius="12px">
               <Icon as={totals.is_fully_paid ? MdCheckCircle : MdErrorOutline} me="8px" verticalAlign="middle" />
-              {totals.is_fully_paid ? 'Fully Paid' : `Balance Due: GH₵${totals.balance_due.toLocaleString()}`}
+              {totals.is_fully_paid ? 'Fully Paid' : `Balance Due: ${ghs(totals.balance_due)}`}
             </Badge>
           </Flex>
         </Card>
@@ -230,15 +233,21 @@ export default function CheckoutPage() {
             )}
             <Flex justify="space-between">
               <Text color="secondaryGray.600">Fee</Text>
-              <Text fontWeight="500">GH₵{charges.consultation.fee.toLocaleString()}</Text>
+              <Text fontWeight="500">{ghs(charges.consultation.net ?? charges.consultation.fee)}</Text>
             </Flex>
+            {charges.consultation.vat > 0 && (
+              <Flex justify="space-between">
+                <Text color="secondaryGray.600">VAT</Text>
+                <Text fontWeight="500">{ghs(charges.consultation.vat)}</Text>
+              </Flex>
+            )}
             <Flex justify="space-between">
               <Text color="secondaryGray.600">Paid</Text>
-              <Text color="green.500">GH₵{charges.consultation.paid.toLocaleString()}</Text>
+              <Text color="green.500">{ghs(charges.consultation.paid)}</Text>
             </Flex>
             <TotalRow label="Balance">
               <Text fontWeight="bold" color={charges.consultation.balance > 0 ? 'red.500' : 'green.500'}>
-                GH₵{charges.consultation.balance.toLocaleString()}
+                {ghs(charges.consultation.balance)}
               </Text>
             </TotalRow>
             <Box>
@@ -260,7 +269,7 @@ export default function CheckoutPage() {
                   <Text>{scan.scan_type.toUpperCase()}</Text>
                   <Box textAlign="right">
                     <Text as="span" fontWeight="500">
-                      GH₵{scan.amount.toLocaleString()}
+                      {ghs(scan.amount)}
                     </Text>
                     <Badge colorScheme={statusScheme(scan.status === 'paid')} ms="8px">
                       {String(scan.status ?? '').replace(/_/g, ' ')}
@@ -269,11 +278,33 @@ export default function CheckoutPage() {
                 </Flex>
               ))}
               <TotalRow label="Total">
-                <Text fontWeight="bold">GH₵{charges.scans.total.toLocaleString()}</Text>
+                <Text fontWeight="bold">{ghs(charges.scans.total)}</Text>
               </TotalRow>
             </Stack>
           )}
         </SectionCard>
+
+        {/* Prescriptions (medication and other billed items) */}
+        {charges.prescriptions?.items?.length > 0 && (
+          <SectionCard title={<IconTitle icon={MdVisibility}>Prescriptions ({charges.prescriptions.items.length})</IconTitle>}>
+            <Stack spacing="12px">
+              {charges.prescriptions.items.map((rx: any) => (
+                <Flex key={rx.id} justify="space-between" align="center" fontSize="sm">
+                  <Text>{rx.label}</Text>
+                  <Box textAlign="right">
+                    <Text as="span" fontWeight="500">{ghs(rx.amount)}</Text>
+                    <Badge colorScheme={statusScheme(rx.balance <= 0)} ms="8px">
+                      {rx.balance <= 0 ? 'paid' : rx.paid > 0 ? 'partial' : 'unpaid'}
+                    </Badge>
+                  </Box>
+                </Flex>
+              ))}
+              <TotalRow label="Balance">
+                <Text fontWeight="bold" color={charges.prescriptions.balance > 0 ? 'red.500' : 'green.500'}>{ghs(charges.prescriptions.balance)}</Text>
+              </TotalRow>
+            </Stack>
+          </SectionCard>
+        )}
 
         {/* Products */}
         <SectionCard title={<IconTitle icon={MdInventory2}>Products ({charges.products.items.length})</IconTitle>}>
@@ -295,7 +326,7 @@ export default function CheckoutPage() {
                   </Box>
                   <Box textAlign="right">
                     <Text as="span" fontWeight="500">
-                      GH₵{item.total.toLocaleString()}
+                      {ghs(item.total)}
                     </Text>
                     <Badge colorScheme={statusScheme(item.status === 'completed')} ms="8px">
                       {String(item.status ?? '').replace(/_/g, ' ')}
@@ -305,11 +336,11 @@ export default function CheckoutPage() {
               ))}
               {charges.products.tax > 0 && (
                 <TotalRow label="VAT">
-                  <Text>GH₵{charges.products.tax.toLocaleString()}</Text>
+                  <Text>{ghs(charges.products.tax)}</Text>
                 </TotalRow>
               )}
               <TotalRow label="Total">
-                <Text fontWeight="bold">GH₵{charges.products.total.toLocaleString()}</Text>
+                <Text fontWeight="bold">{ghs(charges.products.total)}</Text>
               </TotalRow>
             </Stack>
           )}
@@ -351,29 +382,29 @@ export default function CheckoutPage() {
 
         {/* Summary */}
         <Card bg={mutedBg}>
-          <SimpleGrid columns={3} spacing="32px" textAlign="center">
+          <SimpleGrid columns={{ base: 1, md: 3 }} spacing={{ base: "16px", md: "32px" }} textAlign="center">
             <Box>
               <Text fontSize="sm" color="secondaryGray.600">
                 Grand Total
               </Text>
-              <Text fontSize="3xl" fontWeight="bold">
-                GH₵{totals.grand_total.toLocaleString()}
+              <Text fontSize={{ base: "2xl", md: "3xl" }} fontWeight="bold">
+                {ghs(totals.grand_total)}
               </Text>
             </Box>
             <Box>
               <Text fontSize="sm" color="secondaryGray.600">
                 Total Paid
               </Text>
-              <Text fontSize="3xl" fontWeight="bold" color="green.500">
-                GH₵{totals.total_paid.toLocaleString()}
+              <Text fontSize={{ base: "2xl", md: "3xl" }} fontWeight="bold" color="green.500">
+                {ghs(totals.total_paid)}
               </Text>
             </Box>
             <Box>
               <Text fontSize="sm" color="secondaryGray.600">
                 Balance Due
               </Text>
-              <Text fontSize="3xl" fontWeight="bold" color={balanceColor}>
-                GH₵{totals.balance_due.toLocaleString()}
+              <Text fontSize={{ base: "2xl", md: "3xl" }} fontWeight="bold" color={balanceColor}>
+                {ghs(totals.balance_due)}
               </Text>
             </Box>
           </SimpleGrid>
@@ -401,8 +432,8 @@ export default function CheckoutPage() {
             <Text fontSize="sm" color="secondaryGray.600">
               Balance Due
             </Text>
-            <Text fontSize="3xl" fontWeight="bold" color="red.500">
-              GH₵{totals.balance_due.toLocaleString()}
+            <Text fontSize={{ base: "2xl", md: "3xl" }} fontWeight="bold" color="red.500">
+              {ghs(totals.balance_due)}
             </Text>
           </Box>
           <Field label="Payment Amount">
@@ -446,7 +477,7 @@ export default function CheckoutPage() {
                 Total Charges
               </Text>
               <Text fontSize="xl" fontWeight="bold">
-                GH₵{totals.grand_total.toLocaleString()}
+                {ghs(totals.grand_total)}
               </Text>
             </Box>
             <Box p="12px" bg={mutedBg} borderRadius="12px">
@@ -454,7 +485,7 @@ export default function CheckoutPage() {
                 Balance
               </Text>
               <Text fontSize="xl" fontWeight="bold" color={balanceColor}>
-                GH₵{totals.balance_due.toLocaleString()}
+                {ghs(totals.balance_due)}
               </Text>
             </Box>
           </SimpleGrid>
@@ -494,7 +525,7 @@ export default function CheckoutPage() {
         <Stack spacing="16px" py="8px">
           <Box p="16px" bg="orange.50" border="1px solid" borderColor="orange.200" borderRadius="12px" textAlign="center">
             <Text color="orange.800" fontWeight="500" fontSize="lg">
-              GH₵{debtInfo?.total_debt?.toLocaleString() || 0}
+              {ghs(debtInfo?.total_debt)}
             </Text>
             <Text color="orange.700" fontSize="sm" mt="8px">
               Outstanding Debt

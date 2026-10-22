@@ -9,7 +9,7 @@ import csv
 import io
 
 from app.core.database import get_db
-from app.api.v1.deps import get_current_active_user
+from app.api.v1.deps import get_current_active_user, require_permission, has_permission, is_admin
 from app.models.user import User
 from app.models.sales import ProductCategory, Product, BranchStock, Sale, SaleItem, Payment, PriceHistory
 from app.models.revenue import Revenue
@@ -82,7 +82,7 @@ async def get_categories(
     return result.scalars().all()
 
 
-@router.post("/categories", response_model=ProductCategoryResponse)
+@router.post("/categories", response_model=ProductCategoryResponse, dependencies=[Depends(require_permission("inventory.manage"))])
 async def create_category(
     category_in: ProductCategoryCreate,
     db: AsyncSession = Depends(get_db),
@@ -95,7 +95,7 @@ async def create_category(
     return category
 
 
-@router.put("/categories/{category_id}", response_model=ProductCategoryResponse)
+@router.put("/categories/{category_id}", response_model=ProductCategoryResponse, dependencies=[Depends(require_permission("inventory.manage"))])
 async def update_category(
     category_id: int,
     category_in: ProductCategoryCreate,
@@ -115,7 +115,7 @@ async def update_category(
     return category
 
 
-@router.delete("/categories/{category_id}")
+@router.delete("/categories/{category_id}", dependencies=[Depends(require_permission("inventory.manage"))])
 async def delete_category(
     category_id: int,
     db: AsyncSession = Depends(get_db),
@@ -198,7 +198,7 @@ async def get_products(
     ]
 
 
-@router.get("/products/export")
+@router.get("/products/export", dependencies=[Depends(require_permission("inventory.view", "inventory.manage"))])
 async def export_products(
     format: str = "csv",
     db: AsyncSession = Depends(get_db),
@@ -304,7 +304,7 @@ async def get_product(
     return product
 
 
-@router.post("/products", response_model=ProductResponse)
+@router.post("/products", response_model=ProductResponse, dependencies=[Depends(require_permission("inventory.manage"))])
 async def create_product(
     product_in: ProductCreate,
     db: AsyncSession = Depends(get_db),
@@ -359,7 +359,7 @@ async def create_product(
     return product
 
 
-@router.put("/products/{product_id}", response_model=ProductResponse)
+@router.put("/products/{product_id}", response_model=ProductResponse, dependencies=[Depends(require_permission("inventory.manage"))])
 async def update_product(
     product_id: int,
     product_in: ProductUpdate,
@@ -393,7 +393,7 @@ async def update_product(
     return product
 
 
-@router.delete("/products/{product_id}")
+@router.delete("/products/{product_id}", dependencies=[Depends(require_permission("inventory.manage"))])
 async def delete_product(
     product_id: int,
     db: AsyncSession = Depends(get_db),
@@ -409,7 +409,7 @@ async def delete_product(
     return {"message": "Product deleted successfully"}
 
 
-@router.post("/products/{product_id}/image")
+@router.post("/products/{product_id}/image", dependencies=[Depends(require_permission("inventory.manage"))])
 async def upload_product_image(
     product_id: int,
     file: UploadFile = File(...),
@@ -417,43 +417,14 @@ async def upload_product_image(
     current_user: User = Depends(get_current_active_user)
 ):
     """Upload an image for a product"""
-    import os
-    import uuid
-    
-    print(f"Upload request: filename={file.filename}, content_type={file.content_type}, size={file.size}")
-    
+    from app.core.uploads import save_upload
+
     result = await db.execute(select(Product).where(Product.id == product_id))
     product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # Validate file - just check that we have a file with content
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No file provided")
-    
-    # Get extension from filename
-    file_ext = file.filename.split('.')[-1].lower() if '.' in file.filename else 'jpg'
-    allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif', 'svg']
-    
-    if file_ext not in allowed_extensions:
-        raise HTTPException(status_code=400, detail=f"Invalid file extension '.{file_ext}'. Allowed: {', '.join(allowed_extensions)}")
-    
-    # Create uploads directory if it doesn't exist
-    upload_dir = "uploads/products"
-    os.makedirs(upload_dir, exist_ok=True)
-    
-    # Generate unique filename
-    ext = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
-    filename = f"{product_id}_{uuid.uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(upload_dir, filename)
-    
-    # Save file
-    content = await file.read()
-    with open(filepath, 'wb') as f:
-        f.write(content)
-    
-    # Update product with image URL
-    product.image_url = f"/uploads/products/{filename}"
+    _, product.image_url = await save_upload(file, "products", kinds=("image",), prefix=str(product_id))
     await db.commit()
     
     return {"image_url": product.image_url, "message": "Image uploaded successfully"}
@@ -474,7 +445,7 @@ async def get_branch_stock(
     return result.scalars().all()
 
 
-@router.post("/products/import-csv")
+@router.post("/products/import-csv", dependencies=[Depends(require_permission("inventory.manage"))])
 async def import_products_csv(
     file: UploadFile = File(...),
     column_mapping: Optional[str] = None,
@@ -517,6 +488,8 @@ async def import_products_csv(
     updated = 0
     errors = []
     
+    from app.models.branch import Branch
+    valid_branch_ids = set((await db.execute(select(Branch.id))).scalars().all())
     for row_num, row in enumerate(reader, start=2):
         try:
             # Helper to get value using mapping or fallback names
@@ -541,7 +514,8 @@ async def import_products_csv(
             description = get_mapped_value('description', 'description', 'Description', ' Description', 'DESCRIPTION', 'desc', 'Desc', 'DESC')
             category_name = get_mapped_value('category', 'category', 'Category', ' Category', 'CATEGORY', 'category_name', 'CategoryName', 'CATEGORY NAME')
             stock_qty = get_mapped_value('stock_quantity', 'stock_quantity', 'stock', 'Stock', ' Stock', 'STOCK', 'quantity', 'Quantity', ' quantity', 'QUANTITY', 'qty', 'Qty', ' qty', 'QTY', 'branch_quantity', 'Branch Quantity')
-            branch_id_str = get_mapped_value('branch_id', 'branch_id', 'branch', 'Branch', ' Branch', 'BRANCH', 'Branch ID', 'BRANCH ID', 'qb', ' qb', 'QB')
+            # (A "QB" column is a quantity, not a branch; it used to be read as a branch number)
+            branch_id_str = get_mapped_value('branch_id', 'branch_id', 'branch', 'Branch', ' Branch', 'BRANCH', 'Branch ID', 'BRANCH ID')
             
             if not name:
                 errors.append(f"Row {row_num}: Missing product name")
@@ -604,7 +578,9 @@ async def import_products_csv(
             if stock_qty:
                 try:
                     qty = int(float(stock_qty))
-                    branch_id = int(branch_id_str) if branch_id_str else 1
+                    branch_id = int(branch_id_str) if branch_id_str else (current_user.branch_id or 1)
+                    if branch_id not in valid_branch_ids:
+                        raise ValueError(f"unknown branch {branch_id}")
                     
                     stock_result = await db.execute(
                         select(BranchStock).where(
@@ -648,31 +624,47 @@ async def import_products_csv(
 
 async def get_vat_rate(db: AsyncSession) -> float:
     """VAT percentage set by the admin (system setting 'vat_rate'); 0 when unset or invalid."""
-    from app.models.settings import SystemSetting
-
-    result = await db.execute(select(SystemSetting.value).where(SystemSetting.key == "vat_rate"))
-    try:
-        return max(float(result.scalar_one_or_none() or 0), 0.0)
-    except (TypeError, ValueError):
-        return 0.0
+    from app.services.vat import get_vat_rate as _rate
+    return float(await _rate(db))
 
 
-@router.post("/create", response_model=SaleResponse)
+def _can_use_branch(user: User, branch_id: int) -> bool:
+    if is_admin(user) or user.branch_id == branch_id:
+        return True
+    return any(b.id == branch_id for b in (user.additional_branches or []))
+
+
+@router.post("/create", response_model=SaleResponse, dependencies=[Depends(require_permission("sales.create", "pos.access"))])
 async def create_sale(
     sale_in: SaleCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    subtotal = 0
+    from decimal import Decimal
+    from app.services.billing import money
+    from app.services.vat import get_vat_rate as vat_rate_for, vat_on
+
+    if not sale_in.items:
+        raise HTTPException(status_code=400, detail="Add at least one product")
+    if not _can_use_branch(current_user, sale_in.branch_id):
+        raise HTTPException(status_code=403, detail="You can only sell from your own branch")
+    may_discount = has_permission(current_user, "sales.discount") or is_admin(current_user)
+    may_override_price = has_permission(current_user, "pos.price_override") or is_admin(current_user)
+    if not may_discount and (sale_in.discount_amount or sale_in.discount_percent or any(i.discount for i in sale_in.items)):
+        raise HTTPException(status_code=403, detail="You don't have permission to give discounts")
+    if not 0 <= (sale_in.discount_percent or 0) <= 100:
+        raise HTTPException(status_code=400, detail="Discount percent must be between 0 and 100")
+
+    subtotal = Decimal("0.00")
     sale_items = []
-    
+
     for item_in in sale_in.items:
-        product_result = await db.execute(select(Product).where(Product.id == item_in.product_id))
-        product = product_result.scalar_one_or_none()
-        if not product:
+        if item_in.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantity must be at least 1")
+        product = await db.get(Product, item_in.product_id)
+        if not product or product.is_active is False:
             raise HTTPException(status_code=404, detail=f"Product {item_in.product_id} not found")
-        
-        # Check stock availability
+
         stock_result = await db.execute(
             select(BranchStock).where(
                 BranchStock.branch_id == sale_in.branch_id,
@@ -683,29 +675,35 @@ async def create_sale(
         available_qty = stock.quantity if stock else 0
         if item_in.quantity > available_qty:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail=f"Insufficient stock for {product.name}. Available: {available_qty}, Requested: {item_in.quantity}"
             )
-        
-        unit_price = item_in.unit_price or float(product.unit_price)
-        item_total = (unit_price * item_in.quantity) - item_in.discount
+
+        # The shelf price, unless this user may change prices at the till
+        unit_price = money(product.unit_price)
+        if may_override_price and item_in.unit_price is not None and money(item_in.unit_price) != unit_price:
+            unit_price = money(item_in.unit_price)
+        line = unit_price * item_in.quantity
+        item_discount = min(money(item_in.discount), line)
+        item_total = line - item_discount
         subtotal += item_total
-        
+
         sale_items.append({
             "product_id": item_in.product_id,
             "quantity": item_in.quantity,
             "unit_price": unit_price,
-            "discount": item_in.discount,
+            "discount": item_discount,
             "total": item_total
         })
-    
-    discount_from_percent = subtotal * (sale_in.discount_percent / 100)
-    total_discount = sale_in.discount_amount + discount_from_percent
+
+    discount_from_percent = money(subtotal * Decimal(str(sale_in.discount_percent or 0)) / 100)
+    total_discount = min(money(sale_in.discount_amount) + discount_from_percent, subtotal)
     # Item prices and the subtotal are base prices; VAT is added on top of the discounted amount
     net_amount = subtotal - total_discount
-    tax_amount = round(net_amount * (await get_vat_rate(db)) / 100, 2)
+    vat_rate = await vat_rate_for(db)
+    tax_amount = vat_on(net_amount, vat_rate)
     total_amount = net_amount + tax_amount
-    
+
     sale = Sale(
         receipt_number=generate_receipt_number(sale_in.branch_id),
         branch_id=sale_in.branch_id,
@@ -718,10 +716,12 @@ async def create_sale(
         discount_percent=sale_in.discount_percent,
         discount_reason=sale_in.discount_reason,
         tax_amount=tax_amount,
+        vat_rate=vat_rate,
         total_amount=total_amount,
         payment_method=sale_in.payment_method,
         payment_status="completed",
         paid_amount=total_amount,
+        change_amount=max(money(sale_in.amount_tendered) - total_amount, Decimal("0")) if sale_in.amount_tendered else 0,
         notes=sale_in.notes
     )
     db.add(sale)
@@ -751,7 +751,8 @@ async def create_sale(
         reference_id=sale.id,
         patient_id=sale_in.patient_id,
         branch_id=sale_in.branch_id,
-        recorded_by_id=current_user.id
+        recorded_by_id=current_user.id,
+        vat_amount=tax_amount,
     )
     db.add(revenue)
     

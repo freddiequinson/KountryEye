@@ -46,7 +46,7 @@ export default function ChangePasswordPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    if (newPassword.length < 6) return setError('New password must be at least 6 characters')
+    if (newPassword.length < 8) return setError('New password must be at least 8 characters')
     if (newPassword !== confirmPassword) return setError('New passwords do not match')
     if (currentPassword === newPassword) return setError('New password must be different from current password')
     changePasswordMutation.mutate({ current_password: currentPassword, new_password: newPassword })
@@ -83,7 +83,7 @@ export default function ChangePasswordPage() {
             id="newPassword"
             isRequired
             mb="24px"
-            placeholder="Enter new password (min 6 characters)"
+            placeholder="Enter new password (min 8 characters)"
             autoComplete="new-password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}

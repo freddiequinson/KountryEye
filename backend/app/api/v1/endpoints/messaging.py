@@ -67,7 +67,7 @@ class ConnectionManager:
         if user_id in self.active_connections:
             try:
                 await self.active_connections[user_id].send_json(message)
-            except:
+            except Exception:
                 pass
     
     async def broadcast_to_conversation(self, conversation_id: int, message: dict, exclude_user: int = None):
@@ -141,7 +141,7 @@ async def can_message_user(db: AsyncSession, sender: User, recipient_id: int) ->
     if sender.role_id:
         role_result = await db.execute(select(Role).where(Role.id == sender.role_id))
         role = role_result.scalar_one_or_none()
-        if role and role.name == "Admin":
+        if role and (role.name or "").lower() == "admin":
             is_admin = True
     
     if is_admin:
@@ -160,7 +160,7 @@ async def can_message_user(db: AsyncSession, sender: User, recipient_id: int) ->
     if recipient.role_id:
         role_result = await db.execute(select(Role).where(Role.id == recipient.role_id))
         role = role_result.scalar_one_or_none()
-        if role and role.name == "Admin":
+        if role and (role.name or "").lower() == "admin":
             return True
     
     # Check if same branch
@@ -663,7 +663,7 @@ async def edit_message(
     if not is_admin and current_user.role_id:
         role_result = await db.execute(select(Role).where(Role.id == current_user.role_id))
         role = role_result.scalar_one_or_none()
-        if role and role.name.lower() == "admin":
+        if role and (role.name or "").lower() == "admin":
             is_admin = True
     
     # Only sender or admin can edit
@@ -712,7 +712,7 @@ async def delete_message(
     if not is_admin and current_user.role_id:
         role_result = await db.execute(select(Role).where(Role.id == current_user.role_id))
         role = role_result.scalar_one_or_none()
-        if role and role.name.lower() == "admin":
+        if role and (role.name or "").lower() == "admin":
             is_admin = True
     
     # Only sender or admin can delete
@@ -885,7 +885,7 @@ async def get_messageable_users(
     if current_user.role_id:
         role_result = await db.execute(select(Role).where(Role.id == current_user.role_id))
         role = role_result.scalar_one_or_none()
-        if role and role.name == "Admin":
+        if role and (role.name or "").lower() == "admin":
             is_admin = True
     
     if is_admin:
@@ -896,7 +896,7 @@ async def get_messageable_users(
         ))
     else:
         # Get admins and same-branch users
-        admin_role_result = await db.execute(select(Role).where(Role.name == "Admin"))
+        admin_role_result = await db.execute(select(Role).where(func.lower(Role.name) == "admin"))
         admin_role = admin_role_result.scalar_one_or_none()
         admin_role_id = admin_role.id if admin_role else -1
         
@@ -970,7 +970,7 @@ async def broadcast_message(
     if current_user.role_id:
         role_result = await db.execute(select(Role).where(Role.id == current_user.role_id))
         role = role_result.scalar_one_or_none()
-        if role and role.name == "Admin":
+        if role and (role.name or "").lower() == "admin":
             is_admin = True
     
     if not is_admin:
@@ -1043,15 +1043,48 @@ async def broadcast_message(
 
 # ============ WEBSOCKET ENDPOINT ============
 
+async def _participant_conversations(user_id: int) -> set:
+    async with async_session_maker() as db:
+        rows = await db.execute(
+            select(ConversationParticipant.conversation_id).where(ConversationParticipant.user_id == user_id)
+        )
+        return {r[0] for r in rows.all()}
+
+
 @router.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: int):
-    """WebSocket endpoint for real-time messaging"""
+    """WebSocket endpoint for real-time messaging. Needs ?token=<JWT> for the same user."""
+    from app.core.security import decode_token
+    from app.models.user import User as _User
+    token = websocket.query_params.get("token") or ""
+    subject = decode_token(token) if token else None
+    if subject is None or str(subject) != str(user_id):
+        await websocket.close(code=4401)
+        return
+    async with async_session_maker() as db:
+        ws_user = await db.get(_User, user_id)
+        if not ws_user or not ws_user.is_active:
+            await websocket.close(code=4401)
+            return
+
     await manager.connect(websocket, user_id)
-    
+    allowed = await _participant_conversations(user_id)
+
     try:
         while True:
             data = await websocket.receive_text()
-            message = json.loads(data)
+            try:
+                message = json.loads(data)
+            except ValueError:
+                continue
+            if not isinstance(message, dict):
+                continue
+            conv = message.get("conversation_id")
+            if conv is not None and conv not in allowed:
+                # A conversation may have started after we connected
+                allowed = await _participant_conversations(user_id)
+                if conv not in allowed:
+                    continue
             
             if message.get("type") == "join_conversation":
                 conversation_id = message.get("conversation_id")

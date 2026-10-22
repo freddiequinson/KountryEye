@@ -340,22 +340,8 @@ async def upload_asset_image(
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
     
-    # Create uploads directory if it doesn't exist
-    upload_dir = "uploads/assets"
-    os.makedirs(upload_dir, exist_ok=True)
-    
-    # Generate unique filename
-    ext = os.path.splitext(file.filename)[1] if file.filename else ".jpg"
-    filename = f"{uuid.uuid4()}{ext}"
-    filepath = os.path.join(upload_dir, filename)
-    
-    # Save file
-    content = await file.read()
-    with open(filepath, "wb") as f:
-        f.write(content)
-    
-    # Update asset with image URL
-    asset.image_url = f"/uploads/assets/{filename}"
+    from app.core.uploads import save_upload
+    _, asset.image_url = await save_upload(file, "assets", kinds=("image",))
     await db.commit()
     
     return {"image_url": asset.image_url}

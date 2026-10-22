@@ -62,7 +62,7 @@ import PageHeader from '@/components/PageHeader'
 import Card from '@/components/card/Card'
 import SectionCard from '@/components/card/SectionCard'
 import { TabbedSections } from '@/components/card/TabCard'
-import { AppModal, ConfirmDialog, Field, TableBox, TableMessageRow } from '@/components/ui'
+import { AppModal, ConfirmDialog, Field, TableBox, TableMessageRow, TempPasswordDialog } from '@/components/ui'
 
 interface User {
   id: number
@@ -420,23 +420,24 @@ export default function SettingsPage() {
     },
   })
 
+  const [resetAdminPassword, setResetAdminPassword] = useState<string | null>(null)
+
   const resetDatabaseMutation = useMutation({
     mutationFn: (data: { password: string; reseed: boolean }) => api.post('/system/hard-reset', data),
     onSuccess: (response) => {
       setIsResetDialogOpen(false)
       setResetPassword('')
       queryClient.invalidateQueries()
-      toast({
-        title: 'Database Reset Complete',
-        description: response.data.reseeded
-          ? `Login with: ${response.data.admin_credentials.email} / ${response.data.admin_credentials.password}`
-          : 'Database has been cleared. No seed data was added.',
-      })
-      // Force logout after reset
-      setTimeout(() => {
-        useAuthStore.getState().logout()
-        window.location.href = '/login'
-      }, 3000)
+      if (response.data.reseeded) {
+        // Show the new admin password; signing out happens when the dialog is closed
+        setResetAdminPassword(response.data.admin_credentials.password)
+      } else {
+        toast({ title: 'Database Reset Complete', description: 'Database has been cleared. No seed data was added.' })
+        setTimeout(() => {
+          useAuthStore.getState().logout()
+          window.location.href = '/login'
+        }, 3000)
+      }
     },
     onError: (error: any) => {
       toast({ title: 'Reset Failed', description: error.response?.data?.detail || 'Invalid password or server error', variant: 'destructive' })
@@ -588,6 +589,15 @@ export default function SettingsPage() {
 
   return (
     <>
+      <TempPasswordDialog
+        password={resetAdminPassword}
+        name="the admin account (admin@kountryeyecare.com)"
+        onClose={() => {
+          setResetAdminPassword(null)
+          useAuthStore.getState().logout()
+          window.location.href = '/login'
+        }}
+      />
       <PageHeader title="Admin Settings" description="Manage users, branches, consultation types, and system settings" />
 
       <Tabs variant="soft-rounded" isLazy>
@@ -1244,7 +1254,7 @@ export default function SettingsPage() {
               variant="brand"
               onClick={() => passwordUserId && resetPasswordMutation.mutate({ id: passwordUserId, password: newPassword })}
               isLoading={resetPasswordMutation.isPending}
-              isDisabled={newPassword.length < 6}
+              isDisabled={newPassword.length < 8}
             >
               Reset Password
             </Button>
@@ -1252,7 +1262,7 @@ export default function SettingsPage() {
         }
       >
         <Field label="New Password">
-          <Input variant="main" type="password" placeholder="Minimum 6 characters" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+          <Input variant="main" type="password" placeholder="Minimum 8 characters" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
         </Field>
       </AppModal>
 
@@ -1381,8 +1391,8 @@ export default function SettingsPage() {
           <Text fontSize="sm">
             This action <strong>CANNOT</strong> be undone. Enter the system password to confirm.
           </Text>
-          <Field label="System Reset Password">
-            <Input variant="main" type="password" placeholder="Enter reset password" value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} />
+          <Field label="Your account password">
+            <Input variant="main" type="password" placeholder="Type your password to confirm" value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} />
           </Field>
           <Checkbox colorScheme="brandScheme" isChecked={resetReseed} onChange={(e) => setResetReseed(e.target.checked)}>
             <Text fontSize="sm">Re-seed with initial data (admin user, roles, categories)</Text>

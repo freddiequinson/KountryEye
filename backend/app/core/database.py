@@ -19,6 +19,40 @@ async def get_db():
             await session.close()
 
 
+def _add_missing_columns(sync_conn):
+    """create_all() never alters existing tables, so add any model columns the
+    database doesn't have yet. Only ever ADDs nullable columns; never drops or changes."""
+    import logging
+    from sqlalchemy import inspect
+    log = logging.getLogger("app.migrate")
+    insp = inspect(sync_conn)
+    existing_tables = set(insp.get_table_names())
+    for table in Base.metadata.sorted_tables:
+        if table.name not in existing_tables:
+            continue
+        have = {c["name"] for c in insp.get_columns(table.name)}
+        for col in table.columns:
+            if col.name in have or col.primary_key:
+                continue
+            col_type = col.type.compile(dialect=sync_conn.dialect)
+            ddl = f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col_type}'
+            # Existing rows get `info={"backfill": value}` when set, else the column default
+            if "backfill" in col.info:
+                default = col.info["backfill"]
+            else:
+                default = getattr(col.default, "arg", None) if col.default is not None else None
+            if isinstance(default, bool):
+                ddl += f" DEFAULT {1 if default else 0}"
+            elif isinstance(default, (int, float)):
+                ddl += f" DEFAULT {default}"
+            elif isinstance(default, str):
+                ddl += " DEFAULT '" + default.replace("'", "''") + "'"
+            sync_conn.exec_driver_sql(ddl)
+            log.warning("Added column %s.%s", table.name, col.name)
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if engine.dialect.name == "sqlite":
+            await conn.run_sync(_add_missing_columns)

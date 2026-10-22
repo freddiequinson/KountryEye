@@ -28,6 +28,8 @@ import {
 } from '@chakra-ui/react'
 import { MdAdd, MdCreditCard, MdPersonAdd } from 'react-icons/md'
 import api from '@/lib/api'
+import { useVatRate } from '@/hooks/use-vat-rate'
+import { ghs, visitBalance, visitTotal, withVat } from '@/lib/money'
 import { useToast } from '@/hooks/use-toast'
 import { ReceiptModal } from '@/components/ReceiptModal'
 import PageHeader from '@/components/PageHeader'
@@ -55,10 +57,19 @@ interface PendingPrescription {
   patient_name: string
   patient_number: string
   items: { name: string; quantity: number; unit_price: number }[]
+  subtotal?: number
+  vat_rate?: number
+  vat_amount?: number
   total_amount: number
+  amount_paid?: number
+  balance?: number
   created_at: string
   status: string
 }
+
+// Bill lines for a payment pop-up: the charges at their entered price, then VAT on top
+const vatLine = (vat?: number | null, rate?: number | null) =>
+  vat ? [{ label: rate ? `VAT (${rate}%)` : 'VAT', amount: vat }] : []
 
 const TABS = ['visits', 'visit-payments', 'payments', 'registrations']
 
@@ -248,8 +259,11 @@ export default function FrontDeskPage() {
               visit_number: newVisit.visit_number,
               patient_name: selectedPatient?.first_name + ' ' + selectedPatient?.last_name,
               consultation_fee: newVisit.consultation_fee || 0,
-              amount_paid: 0,
-              balance: newVisit.consultation_fee || 0,
+              vat_rate: newVisit.vat_rate,
+              vat_amount: newVisit.vat_amount || 0,
+              total_amount: visitTotal(newVisit),
+              amount_paid: newVisit.amount_paid || 0,
+              balance: visitBalance(newVisit),
             })
             setIsVisitPaymentDialogOpen(true)
           }
@@ -272,7 +286,7 @@ export default function FrontDeskPage() {
           receiptNumber: `RX-${String(selectedPrescription.id).padStart(6, '0')}`,
           patientName: selectedPrescription.patient_name,
           totalAmount: variables.amount_paid,
-          amountDue: selectedPrescription.total_amount,
+          amountDue: selectedPrescription.balance ?? selectedPrescription.total_amount,
           paymentMethod: variables.payment_method,
         })
         setIsReceiptModalOpen(true)
@@ -301,7 +315,7 @@ export default function FrontDeskPage() {
           receiptNumber: `VIS-${String(visitId).padStart(6, '0')}`,
           patientName: visit.patient_name || 'Unknown',
           totalAmount: variables.amount,
-          amountDue: visit.balance || 0,
+          amountDue: visitBalance(visit),
           paymentMethod: variables.payment_method,
         })
         setIsReceiptModalOpen(true)
@@ -408,6 +422,8 @@ export default function FrontDeskPage() {
     setIsPaymentDialogOpen(true)
   }
 
+  const vatRate = useVatRate()
+
   const getConsultationFee = () => {
     if (!visitForm.consultation_type_id) return 0
     const type = consultationTypes.find((t: any) => t.id === parseInt(visitForm.consultation_type_id))
@@ -440,7 +456,9 @@ export default function FrontDeskPage() {
   const regPhone = (key: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setSelectedRegistration({ ...selectedRegistration, [key]: e.target.value.replace(/\D/g, '').slice(0, 10) })
 
-  const fee = getConsultationFee()
+  // Fees are entered without VAT; what the patient pays (and what insurance covers) includes it
+  const netFee = getConsultationFee()
+  const fee = withVat(netFee, vatRate)
   const insuranceLimit = parseFloat(visitForm.insurance_limit)
 
   return (
@@ -618,10 +636,10 @@ export default function FrontDeskPage() {
                               {visit.payment_status === 'partial' ? 'Partial Payment' : 'Unpaid'}
                             </Badge>
                           </Td>
-                          <Td fontWeight="500">GH₵{(visit.consultation_fee || 0).toLocaleString()}</Td>
-                          <Td>GH₵{(visit.amount_paid || 0).toLocaleString()}</Td>
+                          <Td fontWeight="500">{ghs(visitTotal(visit))}</Td>
+                          <Td>{ghs(visit.amount_paid)}</Td>
                           <Td fontWeight="500" color="red.500">
-                            GH₵{(visit.balance || 0).toLocaleString()}
+                            {ghs(visitBalance(visit))}
                           </Td>
                           <Td>
                             <Button
@@ -674,7 +692,12 @@ export default function FrontDeskPage() {
                               </Text>
                             ))}
                           </Td>
-                          <Td fontWeight="500">GH₵{prescription.total_amount.toLocaleString()}</Td>
+                          <Td fontWeight="500">
+                            {ghs(prescription.balance ?? prescription.total_amount)}
+                            {!!prescription.amount_paid && (
+                              <Text fontSize="xs" color="secondaryGray.600">of {ghs(prescription.total_amount)}</Text>
+                            )}
+                          </Td>
                           <Td>{new Date(prescription.created_at).toLocaleTimeString()}</Td>
                           <Td>
                             <Button size="sm" variant="brand" leftIcon={<MdCreditCard />} onClick={() => openPaymentDialog(prescription)}>
@@ -877,7 +900,7 @@ export default function FrontDeskPage() {
               >
                 {consultationTypes.map((type: any) => (
                   <option key={type.id} value={type.id.toString()}>
-                    {type.name} - GH₵{type.base_fee?.toLocaleString()}
+                    {type.name} - {ghs(withVat(type.base_fee || 0, vatRate))}
                   </option>
                 ))}
               </Select>
@@ -958,9 +981,16 @@ export default function FrontDeskPage() {
 
             {visitForm.consultation_type_id && (
               <Flex justify="space-between" align="center" p="16px" bg={mutedBg} borderRadius="12px">
-                <Text fontWeight="500">Consultation Fee</Text>
+                <Box>
+                  <Text fontWeight="500">Consultation Fee</Text>
+                  {vatRate > 0 && (
+                    <Text fontSize="xs" color="secondaryGray.600">
+                      {ghs(netFee)} + VAT {vatRate}% ({ghs(fee - netFee)})
+                    </Text>
+                  )}
+                </Box>
                 <Text fontSize="lg" fontWeight="bold">
-                  GH₵{fee.toLocaleString()}
+                  {ghs(fee)}
                 </Text>
               </Flex>
             )}
@@ -974,8 +1004,12 @@ export default function FrontDeskPage() {
           selectedPrescription && {
             patientName: selectedPrescription.patient_name,
             subtitle: `Prescription · ${selectedPrescription.patient_number}`,
-            lines: selectedPrescription.items.map((item) => ({ label: `${item.name} x${item.quantity}`, amount: item.quantity * item.unit_price })),
-            due: selectedPrescription.total_amount,
+            lines: [
+              ...selectedPrescription.items.map((item) => ({ label: `${item.name} x${item.quantity}`, amount: item.quantity * item.unit_price })),
+              ...vatLine(selectedPrescription.vat_amount, selectedPrescription.vat_rate),
+            ],
+            alreadyPaid: selectedPrescription.amount_paid || 0,
+            due: selectedPrescription.balance ?? selectedPrescription.total_amount,
           }
         }
         methods={PRESCRIPTION_PAYMENT_METHODS}
@@ -994,9 +1028,12 @@ export default function FrontDeskPage() {
           selectedVisitForPayment && {
             patientName: selectedVisitForPayment.patient_name || 'Unknown',
             subtitle: `Visit ${selectedVisitForPayment.visit_number || 'N/A'}`,
-            lines: [{ label: 'Consultation fee', amount: selectedVisitForPayment.consultation_fee || 0 }],
+            lines: [
+              { label: 'Consultation fee', amount: selectedVisitForPayment.consultation_fee || 0 },
+              ...vatLine(selectedVisitForPayment.vat_amount, selectedVisitForPayment.vat_rate),
+            ],
             alreadyPaid: selectedVisitForPayment.amount_paid || 0,
-            due: selectedVisitForPayment.balance || 0,
+            due: visitBalance(selectedVisitForPayment),
           }
         }
         isOpen={isVisitPaymentDialogOpen}

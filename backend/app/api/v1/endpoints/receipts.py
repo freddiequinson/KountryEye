@@ -12,6 +12,7 @@ from app.models.clinical import Prescription
 from app.models.sales import Sale
 from app.models.patient import Visit
 from app.utils.pdf_generator import generate_receipt_pdf, generate_prescription_pdf
+from app.services.receipts import visit_receipt_data, prescription_receipt_data, sale_receipt_data
 
 router = APIRouter()
 
@@ -22,44 +23,18 @@ async def get_prescription_receipt(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    result = await db.execute(
-        select(Prescription)
-        .options(joinedload(Prescription.patient), joinedload(Prescription.items))
-        .where(Prescription.id == prescription_id)
-    )
-    prescription = result.unique().scalar_one_or_none()
-    
-    if not prescription:
+    data = await prescription_receipt_data(db, prescription_id)
+    if not data:
         raise HTTPException(status_code=404, detail="Prescription not found")
-    
-    receipt_data = {
-        "receipt_number": f"RX-{prescription.id:06d}",
-        "date": prescription.created_at.strftime("%Y-%m-%d %H:%M") if prescription.created_at else datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "branch": "Main Branch",
-        "patient_name": f"{prescription.patient.first_name} {prescription.patient.last_name}" if prescription.patient else "N/A",
-        "patient_number": prescription.patient.patient_number if prescription.patient else "N/A",
-        "items": [
-            {
-                "name": item.name,
-                "quantity": item.quantity,
-                "unit_price": float(item.unit_price) if item.unit_price else 0,
-            }
-            for item in prescription.items
-        ],
-        "subtotal": float(prescription.total_amount) if prescription.total_amount else 0,
-        "discount": 0,
-        "total": float(prescription.total_amount) if prescription.total_amount else 0,
-        "payment_method": prescription.payment_method or "Cash",
-        "amount_paid": float(prescription.total_amount) if prescription.total_amount else 0,
-        "served_by": current_user.first_name + " " + current_user.last_name,
-    }
-    
-    pdf_buffer = generate_receipt_pdf(receipt_data)
-    
+    data["served_by"] = data["served_by"] or f"{current_user.first_name} {current_user.last_name}"
+    return _pdf(data, f"receipt-{prescription_id}.pdf")
+
+
+def _pdf(data: dict, filename: str):
     return StreamingResponse(
-        pdf_buffer,
+        generate_receipt_pdf(data),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=receipt-{prescription.id}.pdf"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
 
@@ -69,45 +44,10 @@ async def get_sale_receipt(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    result = await db.execute(
-        select(Sale)
-        .options(joinedload(Sale.items))
-        .where(Sale.id == sale_id)
-    )
-    sale = result.unique().scalar_one_or_none()
-    
-    if not sale:
+    data = await sale_receipt_data(db, sale_id)
+    if not data:
         raise HTTPException(status_code=404, detail="Sale not found")
-    
-    receipt_data = {
-        "receipt_number": f"SL-{sale.id:06d}",
-        "date": sale.created_at.strftime("%Y-%m-%d %H:%M") if sale.created_at else datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "branch": "Main Branch",
-        "patient_name": "Walk-in Customer",
-        "patient_number": "N/A",
-        "items": [
-            {
-                "name": item.product.name if item.product else f"Product #{item.product_id}",
-                "quantity": item.quantity,
-                "unit_price": float(item.unit_price) if item.unit_price else 0,
-            }
-            for item in sale.items
-        ],
-        "subtotal": float(sale.subtotal) if sale.subtotal else 0,
-        "discount": float(sale.discount_amount) if sale.discount_amount else 0,
-        "total": float(sale.total_amount) if sale.total_amount else 0,
-        "payment_method": sale.payment_method or "Cash",
-        "amount_paid": float(sale.total_amount) if sale.total_amount else 0,
-        "served_by": current_user.first_name + " " + current_user.last_name,
-    }
-    
-    pdf_buffer = generate_receipt_pdf(receipt_data)
-    
-    return StreamingResponse(
-        pdf_buffer,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=receipt-{sale.id}.pdf"}
-    )
+    return _pdf(data, f"receipt-{sale_id}.pdf")
 
 
 @router.get("/prescription-slip/{prescription_id}")
@@ -164,56 +104,11 @@ async def get_prescription_slip(
 @router.get("/visit/{visit_id}")
 async def get_visit_receipt(
     visit_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """Generate receipt for visit consultation payment"""
-    result = await db.execute(
-        select(Visit)
-        .options(joinedload(Visit.patient))
-        .where(Visit.id == visit_id)
-    )
-    visit = result.unique().scalar_one_or_none()
-    
-    if not visit:
+    data = await visit_receipt_data(db, visit_id)
+    if not data:
         raise HTTPException(status_code=404, detail="Visit not found")
-    
-    # The latest payment recorded against the visit says how it was paid and who took it
-    from app.models.revenue import Revenue
-    payment_result = await db.execute(
-        select(Revenue)
-        .options(joinedload(Revenue.recorded_by))
-        .where(Revenue.reference_type == "visit", Revenue.reference_id == visit.id)
-        .order_by(Revenue.id.desc())
-        .limit(1)
-    )
-    last_payment = payment_result.unique().scalar_one_or_none()
-    cashier = last_payment.recorded_by if last_payment else None
-    
-    receipt_data = {
-        "receipt_number": f"VIS-{visit.id:06d}",
-        "date": visit.visit_date.strftime("%Y-%m-%d %H:%M") if visit.visit_date else datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "branch": "Main Branch",
-        "patient_name": f"{visit.patient.first_name} {visit.patient.last_name}" if visit.patient else "N/A",
-        "patient_number": visit.patient.patient_number if visit.patient else "N/A",
-        "items": [
-            {
-                "name": "Consultation Fee",
-                "quantity": 1,
-                "unit_price": float(visit.consultation_fee) if visit.consultation_fee else 0,
-            }
-        ],
-        "subtotal": float(visit.consultation_fee) if visit.consultation_fee else 0,
-        "discount": 0,
-        "total": float(visit.consultation_fee) if visit.consultation_fee else 0,
-        "payment_method": (last_payment.payment_method if last_payment else None) or "Cash",
-        "amount_paid": float(visit.amount_paid) if visit.amount_paid else 0,
-        "served_by": f"{cashier.first_name} {cashier.last_name}".strip() if cashier else "Front Desk",
-    }
-    
-    pdf_buffer = generate_receipt_pdf(receipt_data)
-    
-    return StreamingResponse(
-        pdf_buffer,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=visit-receipt-{visit.id}.pdf"}
-    )
+    return _pdf(data, f"visit-receipt-{visit_id}.pdf")

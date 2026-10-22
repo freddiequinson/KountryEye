@@ -23,6 +23,7 @@ interface Sale {
   discount_amount: number
   discount_percent: number
   tax_amount?: number
+  vat_rate?: number | null
   total_amount: number
   payment_method: string
   status: string
@@ -139,7 +140,8 @@ export function SalesReceiptModal({ isOpen, onClose, sale }: { isOpen: boolean; 
   const discount = sale.discount_amount + (sale.subtotal * sale.discount_percent) / 100
   // Item prices and the subtotal are base prices; VAT was added on top of the discounted amount.
   const vat = sale.tax_amount || 0
-  const vatRate = sale.total_amount - vat > 0 ? Math.round((vat / (sale.total_amount - vat)) * 10000) / 100 : 0
+  // The rate is stored on each sale; very old sales only have the amount, so work it out for those
+  const vatRate = sale.vat_rate ?? (sale.total_amount - vat > 0 ? Math.round((vat / (sale.total_amount - vat)) * 1000) / 10 : 0)
   const soldAt = new Date(sale.created_at)
 
   return (
@@ -220,10 +222,12 @@ export function SalesReceiptModal({ isOpen, onClose, sale }: { isOpen: boolean; 
                     <span>-{formatCurrency(discount)}</span>
                   </div>
                 )}
-                <div style={s.sum}>
-                  <span style={{ ...s.label, fontSize: 12 }}>VAT ({vatRate}%)</span>
-                  <span>{formatCurrency(vat)}</span>
-                </div>
+                {vat > 0 && (
+                  <div style={s.sum}>
+                    <span style={{ ...s.label, fontSize: 12 }}>VAT ({vatRate}%)</span>
+                    <span>{formatCurrency(vat)}</span>
+                  </div>
+                )}
                 <div style={{ ...s.sum, borderTop: rule, marginTop: '3mm', paddingTop: '3mm' }}>
                   <span style={{ ...s.label, fontSize: 13 }}>Total</span>
                   <span style={{ fontWeight: 800, fontSize: 13 }}>{formatCurrency(sale.total_amount)}</span>

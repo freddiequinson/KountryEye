@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import secrets
 
-from jose import jwt
+import jwt  # PyJWT
 
 from app.core.config import settings
 
@@ -20,12 +20,14 @@ def create_access_token(subject: Union[str, Any], expires_delta: timedelta = Non
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if not plain_password or not hashed_password or len(hashed_password) <= 64:
+        return False
     salt = hashed_password[:64]
     stored_hash = hashed_password[64:]
     pwdhash = hashlib.pbkdf2_hmac(
         'sha256', plain_password.encode('utf-8'), salt.encode('utf-8'), 100000
     )
-    return pwdhash.hex() == stored_hash
+    return hmac.compare_digest(pwdhash.hex(), stored_hash)
 
 
 def get_password_hash(password: str) -> str:
@@ -43,7 +45,7 @@ def decode_token(token: str) -> Optional[str]:
         if payload.get("purpose"):
             return None
         return payload.get("sub")
-    except jwt.JWTError:
+    except jwt.PyJWTError:
         return None
 
 
@@ -71,7 +73,7 @@ def read_reset_token(token: str) -> Optional[tuple[str, str]]:
     """Returns (user_id, fingerprint) for a valid, unexpired reset token, else None."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    except jwt.JWTError:
+    except jwt.PyJWTError:
         return None
     if payload.get("purpose") != RESET_PURPOSE or not payload.get("sub") or not payload.get("fp"):
         return None

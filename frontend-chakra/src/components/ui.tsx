@@ -1,5 +1,5 @@
 // Small shared building blocks used across pages (replacements for the shadcn ui/ primitives).
-import { useRef, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import {
   AlertDialog,
   AlertDialogBody,
@@ -263,5 +263,38 @@ export function TableBox({ children, ...rest }: React.ComponentProps<typeof Box>
     <Box overflowX="auto" {...rest}>
       {children}
     </Box>
+  )
+}
+
+/** Shows a one-time temporary password so the admin can pass it to the staff member. */
+export function TempPasswordDialog({ password, name, onClose }: { password: string | null; name?: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    if (!password) return
+    try {
+      await navigator.clipboard.writeText(password)
+      setCopied(true)
+    } catch {
+      setCopied(false)
+    }
+  }
+  return (
+    <AppModal
+      isOpen={!!password}
+      onClose={() => { setCopied(false); onClose() }}
+      title="Temporary password"
+      description={name ? `Give this to ${name}. They will be asked to change it when they first sign in.` : 'They will be asked to change it when they first sign in.'}
+      footer={
+        <>
+          <Button variant="light" onClick={copy}>{copied ? 'Copied' : 'Copy'}</Button>
+          <Button variant="brand" onClick={() => { setCopied(false); onClose() }}>Done</Button>
+        </>
+      }
+    >
+      <Text fontFamily="mono" fontSize="2xl" fontWeight="700" letterSpacing="2px" textAlign="center" py="12px" userSelect="all">
+        {password}
+      </Text>
+      <Text fontSize="sm" color="secondaryGray.600" textAlign="center">It will not be shown again.</Text>
+    </AppModal>
   )
 }

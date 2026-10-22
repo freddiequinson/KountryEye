@@ -76,8 +76,8 @@ export default function ProfilePage() {
       toast({ title: 'Passwords do not match', variant: 'destructive' })
       return
     }
-    if (passwordForm.new_password.length < 6) {
-      toast({ title: 'Password must be at least 6 characters', variant: 'destructive' })
+    if (passwordForm.new_password.length < 8) {
+      toast({ title: 'Password must be at least 8 characters', variant: 'destructive' })
       return
     }
     changePasswordMutation.mutate({ current_password: passwordForm.current_password, new_password: passwordForm.new_password })

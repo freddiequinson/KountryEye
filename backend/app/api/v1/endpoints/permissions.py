@@ -6,10 +6,12 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.api.v1.deps import get_current_active_user
+from app.api.v1.deps import get_current_active_user, require_permission
 from app.models.user import User, Role, Permission, UserPermission, UserBranch
 
 router = APIRouter()
+
+PERM_READ = require_permission("permissions.manage", "employees.manage", "employees.view", "analytics.view")
 
 
 # Pydantic schemas
@@ -59,176 +61,11 @@ class UserPermissionUpdate(BaseModel):
     additional_branch_ids: List[int] = []
 
 
-# Default permissions for the system
-DEFAULT_PERMISSIONS = [
-    # Dashboard
-    {"name": "View Dashboard", "code": "dashboard.view", "module": "dashboard"},
-    {"name": "View Admin Dashboard", "code": "dashboard.admin", "module": "dashboard"},
-    {"name": "View Doctor Dashboard", "code": "dashboard.doctor", "module": "dashboard"},
-    {"name": "View Front Desk Dashboard", "code": "dashboard.frontdesk", "module": "dashboard"},
-    {"name": "View Marketing Dashboard", "code": "dashboard.marketing", "module": "dashboard"},
-    
-    # Patients
-    {"name": "View Patients", "code": "patients.view", "module": "patients"},
-    {"name": "Create Patients", "code": "patients.create", "module": "patients"},
-    {"name": "Edit Patients", "code": "patients.edit", "module": "patients"},
-    {"name": "Delete Patients", "code": "patients.delete", "module": "patients"},
-    
-    # Visits
-    {"name": "View Visits", "code": "visits.view", "module": "visits"},
-    {"name": "Create Visits", "code": "visits.create", "module": "visits"},
-    {"name": "Check-in Patients", "code": "visits.checkin", "module": "visits"},
-    
-    # Clinical
-    {"name": "View Consultations", "code": "clinical.view", "module": "clinical"},
-    {"name": "Create Consultations", "code": "clinical.create", "module": "clinical"},
-    {"name": "View Prescriptions", "code": "prescriptions.view", "module": "clinical"},
-    {"name": "Create Prescriptions", "code": "prescriptions.create", "module": "clinical"},
-    {"name": "Access Doctor Queue", "code": "clinical.queue", "module": "clinical"},
-    
-    # Sales & POS
-    {"name": "Access POS", "code": "pos.access", "module": "sales"},
-    {"name": "View Sales", "code": "sales.view", "module": "sales"},
-    {"name": "Create Sales", "code": "sales.create", "module": "sales"},
-    {"name": "Apply Discounts", "code": "sales.discount", "module": "sales"},
-    {"name": "Process Refunds", "code": "sales.refund", "module": "sales"},
-    
-    # Payments
-    {"name": "View Payments", "code": "payments.view", "module": "payments"},
-    {"name": "Process Payments", "code": "payments.create", "module": "payments"},
-    {"name": "Generate Receipts", "code": "receipts.generate", "module": "payments"},
-    
-    # Inventory
-    {"name": "View Inventory", "code": "inventory.view", "module": "inventory"},
-    {"name": "Manage Inventory", "code": "inventory.manage", "module": "inventory"},
-    {"name": "View Warehouse", "code": "warehouse.view", "module": "inventory"},
-    {"name": "Manage Warehouse", "code": "warehouse.manage", "module": "inventory"},
-    {"name": "Transfer Stock", "code": "inventory.transfer", "module": "inventory"},
-    
-    # Assets
-    {"name": "View Assets", "code": "assets.view", "module": "assets"},
-    {"name": "Manage Assets", "code": "assets.manage", "module": "assets"},
-    
-    # Marketing
-    {"name": "View Marketing", "code": "marketing.view", "module": "marketing"},
-    {"name": "Manage Events", "code": "marketing.events", "module": "marketing"},
-    {"name": "View Ratings", "code": "marketing.ratings", "module": "marketing"},
-    
-    # Employees
-    {"name": "View Employees", "code": "employees.view", "module": "employees"},
-    {"name": "Manage Employees", "code": "employees.manage", "module": "employees"},
-    {"name": "Assign Tasks", "code": "employees.tasks", "module": "employees"},
-    
-    # Branches
-    {"name": "View Branches", "code": "branches.view", "module": "branches"},
-    {"name": "Manage Branches", "code": "branches.manage", "module": "branches"},
-    
-    # Settings & Admin
-    {"name": "View Settings", "code": "settings.view", "module": "settings"},
-    {"name": "Manage Settings", "code": "settings.manage", "module": "settings"},
-    {"name": "Manage Roles", "code": "roles.manage", "module": "settings"},
-    {"name": "Manage Permissions", "code": "permissions.manage", "module": "settings"},
-    
-    # Revenue & Accounting
-    {"name": "View Revenue", "code": "revenue.view", "module": "accounting"},
-    {"name": "View Accounting", "code": "accounting.view", "module": "accounting"},
-    {"name": "Manage Accounting", "code": "accounting.manage", "module": "accounting"},
-    
-    # Attendance
-    {"name": "Clock In/Out", "code": "attendance.clock", "module": "attendance"},
-    {"name": "View Own Attendance", "code": "attendance.view_own", "module": "attendance"},
-    {"name": "View All Attendance", "code": "attendance.view_all", "module": "attendance"},
-    {"name": "Manage Attendance", "code": "attendance.manage", "module": "attendance"},
-    
-    # Analytics
-    {"name": "View Analytics", "code": "analytics.view", "module": "analytics"},
-    
-    # Fund Requests
-    {"name": "View Fund Requests", "code": "fund_requests.view", "module": "fund_requests"},
-    {"name": "Create Fund Requests", "code": "fund_requests.create", "module": "fund_requests"},
-    {"name": "Approve Fund Requests", "code": "fund_requests.approve", "module": "fund_requests"},
-    
-    # Messaging
-    {"name": "View Messages", "code": "messages.view", "module": "messaging"},
-    {"name": "Send Messages", "code": "messages.send", "module": "messaging"},
-    
-    # Technician
-    {"name": "View Technician Dashboard", "code": "technician.view", "module": "technician"},
-    {"name": "Manage Scans", "code": "technician.scans", "module": "technician"},
-    {"name": "Manage Referrals", "code": "technician.referrals", "module": "technician"},
-    
-    # Referrals
-    {"name": "View Referral Payments", "code": "referrals.payments", "module": "referrals"},
-]
-
-# Default roles with their permissions
-DEFAULT_ROLES = {
-    "Admin": {
-        "description": "Full system access",
-        "default_page": "/dashboard",
-        "permissions": ["*"],  # All permissions
-    },
-    "Doctor": {
-        "description": "Clinical staff with patient care access",
-        "default_page": "/dashboard/doctor",
-        "permissions": [
-            "dashboard.view", "dashboard.doctor",
-            "patients.view", "patients.edit",
-            "visits.view",
-            "clinical.view", "clinical.create", "clinical.queue",
-            "prescriptions.view", "prescriptions.create",
-            "pos.access", "sales.view", "sales.create",
-            "payments.view", "receipts.generate",
-            "attendance.clock", "attendance.view_own",
-            "fund_requests.view", "fund_requests.create",
-            "messages.view", "messages.send",
-        ],
-    },
-    "Front Desk": {
-        "description": "Reception and patient check-in",
-        "default_page": "/frontdesk",
-        "permissions": [
-            "dashboard.view", "dashboard.frontdesk",
-            "patients.view", "patients.create", "patients.edit",
-            "visits.view", "visits.create", "visits.checkin",
-            "pos.access", "sales.view", "sales.create",
-            "payments.view", "payments.create", "receipts.generate",
-            "attendance.clock", "attendance.view_own",
-            "fund_requests.view", "fund_requests.create",
-            "messages.view", "messages.send",
-        ],
-    },
-    "Marketing": {
-        "description": "Marketing and outreach management",
-        "default_page": "/dashboard/marketing",
-        "permissions": [
-            "dashboard.view", "dashboard.marketing",
-            "marketing.view", "marketing.events", "marketing.ratings",
-            "patients.view",
-            "attendance.clock", "attendance.view_own",
-            "fund_requests.view", "fund_requests.create",
-            "messages.view", "messages.send",
-        ],
-    },
-    "Technician": {
-        "description": "Technician for scans and referrals",
-        "default_page": "/technician",
-        "permissions": [
-            "dashboard.view",
-            "technician.view", "technician.scans", "technician.referrals",
-            "patients.view",
-            "attendance.clock", "attendance.view_own",
-            "fund_requests.view", "fund_requests.create",
-            "messages.view", "messages.send",
-        ],
-    },
-}
-
 
 @router.get("/permissions", response_model=List[PermissionResponse])
 async def get_permissions(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(PERM_READ)
 ):
     """Get all permissions"""
     result = await db.execute(select(Permission).order_by(Permission.module, Permission.name))
@@ -238,7 +75,7 @@ async def get_permissions(
 @router.get("/roles", response_model=List[RoleResponse])
 async def get_roles(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(PERM_READ)
 ):
     """Get all roles with their permissions"""
     result = await db.execute(
@@ -251,7 +88,7 @@ async def get_roles(
 async def get_role(
     role_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(PERM_READ)
 ):
     """Get a specific role"""
     result = await db.execute(
@@ -401,7 +238,7 @@ async def update_user_permissions(
 async def get_user_effective_permissions(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(PERM_READ)
 ):
     """Get all effective permissions for a user (role + extra permissions)"""
     result = await db.execute(
@@ -459,55 +296,13 @@ async def seed_default_permissions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Seed default permissions and roles"""
+    """Add any missing default permissions and roles"""
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
-    created_permissions = 0
-    created_roles = 0
-    
-    # Create permissions
-    for perm_data in DEFAULT_PERMISSIONS:
-        existing = await db.execute(
-            select(Permission).where(Permission.code == perm_data["code"])
-        )
-        if not existing.scalar_one_or_none():
-            perm = Permission(**perm_data)
-            db.add(perm)
-            created_permissions += 1
-    
-    await db.commit()
-    
-    # Get all permissions for role assignment
-    all_perms_result = await db.execute(select(Permission))
-    all_permissions = {p.code: p for p in all_perms_result.scalars().all()}
-    
-    # Create roles
-    for role_name, role_data in DEFAULT_ROLES.items():
-        existing = await db.execute(select(Role).where(Role.name == role_name))
-        if not existing.scalar_one_or_none():
-            permissions = []
-            if role_data["permissions"] == ["*"]:
-                permissions = list(all_permissions.values())
-            else:
-                for perm_code in role_data["permissions"]:
-                    if perm_code in all_permissions:
-                        permissions.append(all_permissions[perm_code])
-            
-            role = Role(
-                name=role_name,
-                description=role_data["description"],
-                default_page=role_data["default_page"],
-                is_system=True,
-                permissions=permissions
-            )
-            db.add(role)
-            created_roles += 1
-    
-    await db.commit()
-    
+    from app.core.rbac import ensure_rbac
+    report = await ensure_rbac(db)
     return {
         "message": "Default permissions and roles seeded",
-        "permissions_created": created_permissions,
-        "roles_created": created_roles
+        "permissions_created": len(report["permissions_added"]),
+        "roles_created": len(report["roles_added"]),
     }

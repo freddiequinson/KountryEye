@@ -27,6 +27,13 @@ class UserUpdate(BaseModel):
     branch_id: Optional[int] = None
 
 
+class UserSelfUpdate(BaseModel):
+    """Fields a user may change on their own account."""
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+
+
 class PermissionInfo(BaseModel):
     id: int
     code: str
@@ -55,7 +62,9 @@ class BranchInfo(BaseModel):
 
 
 class UserResponse(UserBase):
+    email: str  # validated on the way in only; never fail to show a stored account
     id: int
+    avatar_url: Optional[str] = None
     role_id: Optional[int]
     branch_id: Optional[int]
     is_superuser: bool

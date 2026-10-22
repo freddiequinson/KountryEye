@@ -7,9 +7,9 @@ from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.security import get_password_hash, verify_password
-from app.api.v1.deps import get_current_active_user, get_current_superuser
+from app.api.v1.deps import get_current_active_user, get_current_superuser, effective_permissions
 from app.models.user import User, Role
-from app.schemas.user import UserResponse, UserUpdate, UserCreate
+from app.schemas.user import UserResponse, UserUpdate, UserCreate, UserSelfUpdate
 
 
 class PasswordChange(BaseModel):
@@ -23,13 +23,8 @@ router = APIRouter()
 async def get_current_user_info(
     current_user: User = Depends(get_current_active_user)
 ):
-    # Compute permissions list from role and extra permissions
-    permissions = []
-    if current_user.role and current_user.role.permissions:
-        permissions.extend([p.code for p in current_user.role.permissions])
-    if current_user.extra_permissions:
-        permissions.extend([p.code for p in current_user.extra_permissions])
-    
+    permissions = sorted(effective_permissions(current_user))
+
     # Convert to UserResponse with permissions
     user_dict = {
         "id": current_user.id,
@@ -37,6 +32,7 @@ async def get_current_user_info(
         "first_name": current_user.first_name,
         "last_name": current_user.last_name,
         "phone": current_user.phone,
+        "avatar_url": current_user.avatar_url,
         "is_active": current_user.is_active,
         "role_id": current_user.role_id,
         "branch_id": current_user.branch_id,
@@ -44,7 +40,7 @@ async def get_current_user_info(
         "created_at": current_user.created_at,
         "role": current_user.role,
         "branch": current_user.branch,
-        "permissions": list(set(permissions)),  # Remove duplicates
+        "permissions": permissions,
         "must_change_password": current_user.must_change_password if current_user.must_change_password is not None else False
     }
     return user_dict
@@ -52,7 +48,7 @@ async def get_current_user_info(
 
 @router.put("/me", response_model=UserResponse)
 async def update_current_user(
-    user_update: UserUpdate,
+    user_update: UserSelfUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -86,8 +82,8 @@ async def change_password(
     if not verify_password(password_data.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     
-    if len(password_data.new_password) < 6:
-        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    if len(password_data.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
     
     current_user.hashed_password = get_password_hash(password_data.new_password)
     await db.commit()
@@ -237,8 +233,8 @@ async def reset_user_password(
         raise HTTPException(status_code=404, detail="User not found")
     
     new_password = password_data.get("password")
-    if not new_password or len(new_password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if not new_password or len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     
     user.hashed_password = get_password_hash(new_password)
     await db.commit()
@@ -281,7 +277,10 @@ async def get_user_branches(
                 "name": primary_branch.name,
                 "is_primary": True
             })
-    
+    for b in current_user.additional_branches:
+        if b.is_active and all(x["id"] != b.id for x in branches):
+            branches.append({"id": b.id, "name": b.name, "is_primary": False})
+
     return branches
 
 
@@ -306,7 +305,7 @@ async def switch_user_branch(
         has_access = True
     elif current_user.branch_id == branch_id:
         has_access = True
-    elif hasattr(current_user, 'additional_branches') and current_user.additional_branches:
+    elif current_user.additional_branches:
         has_access = any(b.id == branch_id for b in current_user.additional_branches)
     
     if not has_access:
@@ -315,15 +314,9 @@ async def switch_user_branch(
     # Update user's current branch
     current_user.branch_id = branch_id
     await db.commit()
-    await db.refresh(current_user)
     
-    # Return updated user info
-    permissions = []
-    if current_user.role and current_user.role.permissions:
-        permissions.extend([p.code for p in current_user.role.permissions])
-    if current_user.extra_permissions:
-        permissions.extend([p.code for p in current_user.extra_permissions])
-    
+    permissions = sorted(effective_permissions(current_user))
+
     return {
         "message": "Branch switched successfully",
         "user": {
@@ -339,6 +332,6 @@ async def switch_user_branch(
             "created_at": current_user.created_at,
             "role": {"id": current_user.role.id, "name": current_user.role.name} if current_user.role else None,
             "branch": {"id": branch.id, "name": branch.name},
-            "permissions": list(set(permissions))
+            "permissions": permissions
         }
     }

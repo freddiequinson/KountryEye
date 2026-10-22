@@ -86,6 +86,7 @@ class Sale(Base):
     discount_percent = Column(Numeric(5, 2), default=0)
     discount_reason = Column(Text)
     tax_amount = Column(Numeric(10, 2), default=0)
+    vat_rate = Column(Numeric(5, 2), nullable=True)  # rate used for this sale (null on older sales)
     total_amount = Column(Numeric(10, 2), nullable=False)
     
     payment_method = Column(String(50))

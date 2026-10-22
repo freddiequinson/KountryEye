@@ -96,7 +96,8 @@ async def create_glasses_order(
         created_by_id=current_user.id
     )
     db.add(order)
-    
+    await db.flush()  # gives the order its id for the history row
+
     # Add initial status history
     history = OrderStatusHistory(
         order_id=order.id,

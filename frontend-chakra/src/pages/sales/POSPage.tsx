@@ -23,6 +23,8 @@ import { MdAdd, MdCreditCard, MdDelete, MdPerson, MdRemove, MdSearch, MdShopping
 import { SalesReceiptModal } from '@/components/SalesReceiptModal'
 import api from '@/lib/api'
 import { useVatRate } from '@/hooks/use-vat-rate'
+import { ghs, round2, vatOn, withVat } from '@/lib/money'
+import { getUserRole, hasPermission } from '@/config/nav'
 import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/card/Card'
@@ -48,8 +50,18 @@ export default function POSPage() {
   const imageBg = useColorModeValue('secondaryGray.300', 'whiteAlpha.100')
   const visitBg = useColorModeValue('blue.50', 'whiteAlpha.100')
 
-  const roleName = typeof user?.role === 'string' ? user.role : user?.role?.name
-  const isFrontdesk = roleName?.toLowerCase() === 'frontdesk' || roleName?.toLowerCase() === 'front desk'
+  const canDiscount = hasPermission(user, ['sales.discount']) || getUserRole(user) === 'admin'
+  const isAdmin = getUserRole(user) === 'admin'
+  const userBranchId = user?.branch_id ?? user?.branch?.id ?? null
+  const [pickedBranchId, setPickedBranchId] = useState<number | null>(null)
+  const { data: branches = [] } = useQuery({
+    queryKey: ['branches-list'],
+    queryFn: async () => (await api.get('/branches')).data,
+    enabled: isAdmin || !userBranchId,
+  })
+  // Staff sell from their own branch; admins (and anyone without one) pick, defaulting to the main branch
+  const fallbackBranchId = (branches.find((b: any) => b.is_main) ?? branches[0])?.id ?? null
+  const branchId: number | null = pickedBranchId ?? userBranchId ?? fallbackBranchId
 
   const [search, setSearch] = useState('')
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
@@ -80,10 +92,11 @@ export default function POSPage() {
     queryFn: async () => (await api.get('/sales/categories')).data,
   })
 
-  // Fetch stock for branch 1 (TODO: use user's current branch)
+  // Stock at the branch the user is signed in to
   const { data: branchStock = [] } = useQuery({
-    queryKey: ['pos-branch-stock'],
-    queryFn: async () => (await api.get('/sales/stock/1')).data,
+    queryKey: ['pos-branch-stock', branchId],
+    queryFn: async () => (await api.get(`/sales/stock/${branchId}`)).data,
+    enabled: !!branchId,
   })
 
   const getProductStock = (productId: number) => branchStock.find((s: any) => s.product_id === productId)?.quantity || 0
@@ -122,8 +135,8 @@ export default function POSPage() {
           product_id: item.product_id,
           quantity: item.quantity,
           unit_price: item.unit_price,
-          discount: item.unit_price * item.quantity * (item.discount_percent / 100),
-          total: item.quantity * item.unit_price * (1 - item.discount_percent / 100),
+          discount: lineDiscount(item),
+          total: round2(item.quantity * item.unit_price - lineDiscount(item)),
           product: { name: item.product_name, sku: item.sku },
         })),
         patient: selectedCustomer,
@@ -175,21 +188,24 @@ export default function POSPage() {
     )
   }
 
-  const subtotal = cart.reduce((sum, item) => {
-    const itemTotal = item.quantity * item.unit_price
-    return sum + (itemTotal - itemTotal * (item.discount_percent / 100))
-  }, 0)
-  const discountAmount = subtotal * (discountPercent / 100)
-  // Cart prices are base prices; everything on screen is shown with VAT added, matching what the backend charges.
-  const withVat = (amount: number) => amount * (1 + vatRate / 100)
-  const money = (amount: number) => `GH₵${withVat(amount).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+  // Same arithmetic as the server: line discounts, then the sale discount, then VAT on what is left
+  const lineDiscount = (item: CartItem) => round2(item.unit_price * item.quantity * (item.discount_percent / 100))
+  const subtotal = round2(cart.reduce((sum, item) => sum + item.quantity * item.unit_price - lineDiscount(item), 0))
+  const discountAmount = round2(subtotal * (discountPercent / 100))
   const netAmount = subtotal - discountAmount
-  const total = netAmount + Math.round(netAmount * vatRate) / 100
+  const vatAmount = vatOn(netAmount, vatRate)
+  const total = round2(netAmount + vatAmount)
   const change = parseFloat(amountPaid || '0') - total
+  // Product tiles and cart lines show the price the customer pays, VAT included
+  const money = (amount: number) => ghs(withVat(amount, vatRate))
 
   const handleCompleteSale = () => {
     if (cart.length === 0) {
       toast({ title: 'Cart is empty', variant: 'destructive' })
+      return
+    }
+    if (!branchId) {
+      toast({ title: 'No branch selected', description: 'Ask an administrator to assign you to a branch.', variant: 'destructive' })
       return
     }
     if (parseFloat(amountPaid || '0') < total && paymentMethod === 'cash') {
@@ -197,18 +213,19 @@ export default function POSPage() {
       return
     }
     createSaleMutation.mutate({
-      branch_id: 1, // TODO: Get from user's current branch
+      branch_id: branchId,
       patient_id: selectedCustomer?.id || null,
       visit_id: selectedVisit?.id || null,
       items: cart.map((item) => ({
         product_id: item.product_id,
         quantity: item.quantity,
         unit_price: item.unit_price,
-        discount: item.unit_price * item.quantity * (item.discount_percent / 100),
+        discount: lineDiscount(item),
       })),
       discount_percent: discountPercent,
       discount_amount: 0,
       payment_method: paymentMethod,
+      amount_tendered: parseFloat(amountPaid || '0') || null,
     })
   }
 
@@ -252,6 +269,17 @@ export default function POSPage() {
             </InputGroup>
           </Box>
         </Box>
+
+        {(isAdmin || !userBranchId) && branches.length > 1 && (
+          <Flex mt="20px" align="center" gap="10px">
+            <Text fontSize="sm" color="secondaryGray.600">Selling from</Text>
+            <Select variant="main" size="sm" maxW="240px" value={branchId ?? ''} onChange={(e) => setPickedBranchId(Number(e.target.value))}>
+              {branches.map((b: any) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </Select>
+          </Flex>
+        )}
 
         <Flex mt="34px" mb="20px" justify="space-between" direction={{ base: 'column', md: 'row' }} align={{ base: 'start', md: 'center' }} gap="12px">
           <Text fontSize="2xl" fontWeight="700" ms={{ md: '8px' }} flexShrink={0}>
@@ -396,9 +424,9 @@ export default function POSPage() {
         <Stack spacing="12px" p="20px" borderTop="1px solid" borderColor={borderColor} data-tour="payment">
           <Flex justify="space-between" fontSize="sm">
             <Text>Subtotal</Text>
-            <Text>{money(subtotal)}</Text>
+            <Text>{ghs(subtotal)}</Text>
           </Flex>
-          {!isFrontdesk && (
+          {canDiscount && (
             <Flex align="center" gap="8px">
               <Text fontSize="sm">Discount</Text>
               <Input
@@ -414,14 +442,20 @@ export default function POSPage() {
               />
               <Text fontSize="sm">%</Text>
               <Text ms="auto" fontSize="sm">
-                -{money(discountAmount)}
+                -{ghs(discountAmount)}
               </Text>
+            </Flex>
+          )}
+          {vatRate > 0 && (
+            <Flex justify="space-between" fontSize="sm">
+              <Text>VAT ({vatRate}%)</Text>
+              <Text>{ghs(vatAmount)}</Text>
             </Flex>
           )}
           <Divider />
           <Flex justify="space-between" align="center" fontWeight="bold">
             <Text fontSize="lg">Total</Text>
-            <Text fontSize="2xl" color="brand.600" _dark={{ color: "white" }}>GH₵{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</Text>
+            <Text fontSize="2xl" color="brand.600" _dark={{ color: "white" }}>{ghs(total)}</Text>
           </Flex>
           <Button variant="brand" size="lg" leftIcon={<MdCreditCard />} isDisabled={cart.length === 0} onClick={() => setIsPaymentDialogOpen(true)}>
             Checkout
@@ -500,7 +534,7 @@ export default function POSPage() {
               Total Amount
             </Text>
             <Text fontSize="4xl" fontWeight="bold" color="brand.500">
-              GH₵{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              {ghs(total)}
             </Text>
           </Box>
           <Field label="Payment Method">
@@ -517,7 +551,7 @@ export default function POSPage() {
                     Change
                   </Text>
                   <Text fontSize="2xl" fontWeight="bold" color="green.700">
-                    GH₵{change.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    {ghs(change)}
                   </Text>
                 </Box>
               )}
