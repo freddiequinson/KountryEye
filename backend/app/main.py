@@ -19,6 +19,7 @@ def get_base_path():
 
 from app.core.database import init_db, async_session_maker
 from app.api.v1.router import api_router
+from app.services import change_history  # register transaction-level audit hooks
 
 
 async def seed_permissions_on_startup():

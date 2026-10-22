@@ -59,7 +59,7 @@ async def assign_branch_to_user(
     This creates a history record and sets verification required.
     """
     # Check if current user has admin permissions
-    if not (is_admin(current_user) or has_permission(current_user, "employees.manage")):
+    if not has_permission(current_user, "employees.manage"):
         raise HTTPException(status_code=403, detail="You don't have permission to assign branches")
     
     # Get the target user
@@ -70,6 +70,8 @@ async def assign_branch_to_user(
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    if target_user.is_superuser and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only a superadmin can change this account")
     # Get the branch
     result = await db.execute(select(Branch).where(Branch.id == assignment.branch_id))
     branch = result.scalar_one_or_none()

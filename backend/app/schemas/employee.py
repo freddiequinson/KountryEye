@@ -133,6 +133,7 @@ class EmployeeStatsResponse(BaseModel):
 # Employee Create (extends User creation)
 class EmployeeCreate(BaseModel):
     email: str
+    username: Optional[str] = None
     first_name: str
     last_name: str
     phone: Optional[str] = None
@@ -142,6 +143,7 @@ class EmployeeCreate(BaseModel):
 
 class EmployeeUpdate(BaseModel):
     email: Optional[str] = None
+    username: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone: Optional[str] = None
@@ -169,6 +171,7 @@ class BranchInfo(BaseModel):
 class EmployeeResponse(BaseModel):
     id: int
     email: str
+    username: Optional[str] = None
     first_name: str
     last_name: str
     phone: Optional[str] = None

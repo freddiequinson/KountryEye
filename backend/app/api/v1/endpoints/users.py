@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.security import get_password_hash, verify_password
+from app.core.usernames import normalize_username, ensure_username_free
 from app.api.v1.deps import get_current_active_user, get_current_superuser, effective_permissions
 from app.models.user import User, Role
 from app.schemas.user import UserResponse, UserUpdate, UserCreate, UserSelfUpdate
@@ -29,6 +30,7 @@ async def get_current_user_info(
     user_dict = {
         "id": current_user.id,
         "email": current_user.email,
+        "username": current_user.username,
         "first_name": current_user.first_name,
         "last_name": current_user.last_name,
         "phone": current_user.phone,
@@ -122,6 +124,8 @@ async def create_user(
         raise HTTPException(status_code=400, detail="Email already registered")
     
     user_data = user_in.model_dump(exclude={"password"})
+    user_data["username"] = normalize_username(user_data.get("username"))
+    await ensure_username_free(db, user_data["username"])
     user = User(
         **user_data,
         hashed_password=get_password_hash(user_in.password)
@@ -179,7 +183,13 @@ async def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    for field, value in user_update.model_dump(exclude_unset=True).items():
+    updates = user_update.model_dump(exclude_unset=True)
+    if "username" in updates:
+        updates["username"] = normalize_username(updates["username"])
+        await ensure_username_free(db, updates["username"], exclude_user_id=user_id)
+    if user_id == current_user.id and updates.get("is_active") is False:
+        raise HTTPException(status_code=400, detail="You cannot deactivate your own account")
+    for field, value in updates.items():
         setattr(user, field, value)
     
     await db.commit()

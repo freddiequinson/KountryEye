@@ -1,3 +1,4 @@
+from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
@@ -11,8 +12,9 @@ class Base(DeclarativeBase):
     pass
 
 
-async def get_db():
+async def get_db(request: Request):
     async with async_session_maker() as session:
+        session.info.update(ip=request.client.host if request.client else None, user_agent=request.headers.get("user-agent", "")[:255])
         try:
             yield session
         finally:
@@ -49,6 +51,17 @@ def _add_missing_columns(sync_conn):
                 ddl += " DEFAULT '" + default.replace("'", "''") + "'"
             sync_conn.exec_driver_sql(ddl)
             log.warning("Added column %s.%s", table.name, col.name)
+        # Indexes (incl. unique ones) on columns added after the table was created
+        have_idx = {i["name"] for i in insp.get_indexes(table.name)}
+        for idx in table.indexes:
+            if idx.name not in have_idx:
+                # A unique index fails if old data has duplicates: log it and carry on
+                try:
+                    with sync_conn.begin_nested():
+                        idx.create(sync_conn, checkfirst=True)
+                    log.warning("Added index %s", idx.name)
+                except Exception as exc:  # noqa: BLE001
+                    log.error("Could not add index %s (existing duplicate data?): %s", idx.name, exc)
 
 
 async def init_db():

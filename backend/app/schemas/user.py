@@ -13,12 +13,14 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    username: Optional[str] = None
     role_id: Optional[int] = None
     branch_id: Optional[int] = None
 
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
+    username: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone: Optional[str] = None
@@ -64,6 +66,7 @@ class BranchInfo(BaseModel):
 class UserResponse(UserBase):
     email: str  # validated on the way in only; never fail to show a stored account
     id: int
+    username: Optional[str] = None
     avatar_url: Optional[str] = None
     role_id: Optional[int]
     branch_id: Optional[int]

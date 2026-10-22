@@ -2,9 +2,9 @@
 
 `ensure_rbac()` runs at startup. It only ever ADDS: missing permission rows, missing
 roles that are marked `create`, and default grants for brand-new permission codes.
-It never removes a permission from a role, so admin customisations survive restarts.
+After the one-time Phase 3 platform/clinic role split, customisations survive restarts.
 """
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 # (code, name, module)
@@ -98,7 +98,7 @@ ROLES: dict[str, dict] = {
         "aliases": ["administrator"],
         "description": "Clinic administrator",
         "default_page": "/",
-        "permissions": ["*"],
+        "permissions": sorted(ALL_CODES - {"permissions.manage", "roles.manage", "branches.manage"}),
     },
     "frontdesk": {
         "aliases": ["front desk", "front_desk", "receptionist"],
@@ -168,6 +168,8 @@ def match_role_key(role_name: str) -> str | None:
 async def ensure_rbac(db) -> dict:
     """Add missing permissions/roles. Safe to run on every startup."""
     from app.models.user import Permission, Role
+    from app.models.settings import SystemSetting
+    marker = (await db.execute(select(SystemSetting).where(SystemSetting.key == "phase3_role_defaults"))).scalar_one_or_none()
 
     report = {"permissions_added": [], "roles_added": [], "grants_added": 0}
 
@@ -200,14 +202,14 @@ async def ensure_rbac(db) -> dict:
         if not matches and spec.get("create"):
             role = Role(
                 name=key, description=spec["description"], default_page=spec["default_page"],
-                is_system=True, permissions=[existing[c] for c in sorted(wanted) if c in existing],
+                is_system=True, admin_may_assign=key != "admin", permissions=[existing[c] for c in sorted(wanted) if c in existing],
             )
             db.add(role)
             report["roles_added"].append(key)
             continue
         for role in matches:
             have = {p.code for p in role.permissions}
-            if not have:
+            if not have and marker is None:
                 grant = wanted  # empty role: give it the defaults
             else:
                 grant = wanted & set(new_codes)  # only codes introduced just now
@@ -216,5 +218,13 @@ async def ensure_rbac(db) -> dict:
                     role.permissions.append(existing[code])
                     report["grants_added"] += 1
 
+    # One-time Phase 3 defaults. Existing accounts are never promoted or demoted.
+    if marker is None:
+        for role in roles:
+            key = match_role_key(role.name)
+            if key == "admin":
+                role.permissions = [p for p in role.permissions if p.code not in {"permissions.manage", "roles.manage", "branches.manage"}]
+            role.admin_may_assign = key in {"frontdesk", "doctor", "marketing", "technician", "lab_technician"}
+        db.add(SystemSetting(key="phase3_role_defaults", value="1"))
     await db.commit()
     return report

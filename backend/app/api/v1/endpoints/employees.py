@@ -7,6 +7,7 @@ from datetime import datetime, date, timedelta
 from app.core.database import get_db
 from app.core.security import get_password_hash
 from app.core.ratelimit import client_ip
+from app.core.usernames import normalize_username, ensure_username_free
 from app.api.v1.deps import get_current_active_user, require_permission, has_permission
 from app.models.user import User, Role
 from app.models.branch import Branch
@@ -53,8 +54,8 @@ async def _check_role_assignable(db: AsyncSession, role_id: Optional[int], user:
     role = await db.get(Role, role_id)
     if not role:
         raise HTTPException(status_code=400, detail=f"Role with id {role_id} not found")
-    if (role.name or "").strip().lower() == "admin":
-        raise HTTPException(status_code=403, detail="Only the system administrator can assign the admin role")
+    if not role.admin_may_assign or (role.name or "").strip().lower() in ("admin", "administrator"):
+        raise HTTPException(status_code=403, detail="This role is not available for clinic administrators to assign")
 
 
 # Employee CRUD
@@ -94,6 +95,8 @@ async def create_employee(
     try:
         # Check if email exists
         await _check_role_assignable(db, employee_in.role_id, current_user)
+        username = normalize_username(employee_in.username)
+        await ensure_username_free(db, username)
         existing = await db.execute(select(User).where(func.lower(User.email) == employee_in.email.strip().lower()))
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Email already registered")
@@ -114,6 +117,7 @@ async def create_employee(
         
         employee = User(
             email=employee_in.email.strip(),
+            username=username,
             hashed_password=hashed_password,
             first_name=employee_in.first_name,
             last_name=employee_in.last_name,
@@ -165,7 +169,7 @@ async def get_roles(
     """Get all roles"""
     result = await db.execute(select(Role).order_by(Role.name))
     roles = result.scalars().all()
-    return [{"id": r.id, "name": r.name} for r in roles]
+    return [{"id": r.id, "name": r.name, "admin_may_assign": r.admin_may_assign} for r in roles]
 
 
 # Attendance endpoints
@@ -520,18 +524,23 @@ async def update_employee(
         raise HTTPException(status_code=404, detail="Employee not found")
     if employee.is_superuser and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="This account can only be changed by the system administrator")
+    if not current_user.is_superuser:
+        await _check_role_assignable(db, employee.role_id, current_user)
     updates = employee_in.model_dump(exclude_unset=True)
     if "role_id" in updates and updates["role_id"] != employee.role_id:
         await _check_role_assignable(db, updates["role_id"], current_user)
     if updates.get("is_active") is False and employee.id == current_user.id:
         raise HTTPException(status_code=400, detail="You cannot deactivate your own account")
+    if "username" in updates:
+        updates["username"] = normalize_username(updates["username"])
+        await ensure_username_free(db, updates["username"], exclude_user_id=employee_id)
     if "email" in updates and updates["email"]:
         updates["email"] = updates["email"].strip()
         clash = await db.execute(select(User.id).where(func.lower(User.email) == updates["email"].lower(), User.id != employee_id))
         if clash.first():
             raise HTTPException(status_code=400, detail="Email already registered")
     for field, value in updates.items():
-        if value is not None or field == "phone":
+        if value is not None or field in ("phone", "username"):
             setattr(employee, field, value)
 
     await db.commit()
@@ -556,6 +565,8 @@ async def delete_employee(
         raise HTTPException(status_code=400, detail="You cannot delete your own account")
     if employee.is_superuser and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="This account can only be changed by the system administrator")
+    if not current_user.is_superuser:
+        await _check_role_assignable(db, employee.role_id, current_user)
     
     # Check if employee has any related records
     has_attendance = await db.execute(
@@ -615,6 +626,8 @@ async def reset_employee_password(
         raise HTTPException(status_code=404, detail="Employee not found")
     if employee.is_superuser and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="This account can only be changed by the system administrator")
+    if not current_user.is_superuser:
+        await _check_role_assignable(db, employee.role_id, current_user)
 
     password = generate_password()
     employee.hashed_password = get_password_hash(password)

@@ -160,3 +160,41 @@ async def test_patient_list_survives_bad_stored_email(client, auth):
         await db.commit()
     r = await client.get("/api/v1/patients", headers=auth("frontdesk"))
     assert r.status_code == 200, r.text
+
+
+async def test_login_with_username(client, auth, seeded):
+    h = auth("admin")
+    r = await client.put(f"/api/v1/employees/{seeded['doctor']}", json={"username": "Dr.Kofi"}, headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json()["username"] == "dr.kofi"
+    ok = await client.post("/api/v1/auth/login", data={"username": "DR.KOFI", "password": PASSWORD})
+    assert ok.status_code == 200
+    # once a username is set, the first name no longer logs in
+    bad = await client.post("/api/v1/auth/login", data={"username": "Doctor", "password": PASSWORD})
+    assert bad.status_code == 401
+    # usernames are unique and validated
+    dup = await client.put(f"/api/v1/employees/{seeded['marketing']}", json={"username": "dr.kofi"}, headers=h)
+    assert dup.status_code == 400
+    invalid = await client.put(f"/api/v1/employees/{seeded['marketing']}", json={"username": "a b"}, headers=h)
+    assert invalid.status_code == 400
+
+
+async def test_first_name_login_still_works_without_username(client):
+    r = await client.post("/api/v1/auth/login", data={"username": "Technician", "password": PASSWORD})
+    assert r.status_code == 200
+
+
+def test_index_migration_survives_duplicate_data(tmp_path):
+    """Old databases may hold duplicates in a column that is now unique; startup must not crash."""
+    import sqlite3
+    from sqlalchemy import create_engine
+    from app.core.database import Base, _add_missing_columns
+    db = tmp_path / "old.db"
+    engine = create_engine(f"sqlite:///{db}")
+    Base.metadata.create_all(engine)
+    con = sqlite3.connect(db)
+    con.execute("DROP INDEX IF EXISTS ix_users_username")
+    con.execute("INSERT INTO users (email, hashed_password, first_name, last_name, username) VALUES ('a@x.com','h','A','A','dup'), ('b@x.com','h','B','B','dup')")
+    con.commit(); con.close()
+    with engine.begin() as conn:
+        _add_missing_columns(conn)  # must not raise

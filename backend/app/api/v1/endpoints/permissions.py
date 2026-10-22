@@ -6,12 +6,12 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.api.v1.deps import get_current_active_user, require_permission
-from app.models.user import User, Role, Permission, UserPermission, UserBranch
+from app.api.v1.deps import get_current_active_user, get_current_superuser
+from app.models.user import User, Role, Permission
 
 router = APIRouter()
 
-PERM_READ = require_permission("permissions.manage", "employees.manage", "employees.view", "analytics.view")
+PERM_READ = get_current_superuser
 
 
 # Pydantic schemas
@@ -33,6 +33,7 @@ class RoleBase(BaseModel):
     name: str
     description: Optional[str] = None
     default_page: Optional[str] = "/dashboard"
+    admin_may_assign: bool = False
 
 
 class RoleCreate(RoleBase):
@@ -40,6 +41,7 @@ class RoleCreate(RoleBase):
 
 
 class RoleUpdate(BaseModel):
+    admin_may_assign: Optional[bool] = None
     name: Optional[str] = None
     description: Optional[str] = None
     default_page: Optional[str] = None
@@ -127,11 +129,12 @@ async def create_role(
         name=role_data.name,
         description=role_data.description,
         default_page=role_data.default_page,
+        admin_may_assign=role_data.admin_may_assign,
         permissions=permissions
     )
     db.add(role)
     await db.commit()
-    await db.refresh(role)
+    await db.refresh(role, attribute_names=["permissions"])
     
     return role
 
@@ -154,8 +157,12 @@ async def update_role(
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
     
-    if role.is_system:
-        raise HTTPException(status_code=400, detail="Cannot modify system role")
+    if role.is_system and role_data.name and role_data.name != role.name:
+        raise HTTPException(status_code=400, detail="Cannot rename system role")
+    if role_data.admin_may_assign and (role.name or "").strip().lower() in ("admin", "administrator"):
+        raise HTTPException(status_code=400, detail="Clinic admin roles must be assigned by a superadmin")
+    if role_data.admin_may_assign is not None:
+        role.admin_may_assign = role_data.admin_may_assign
     
     if role_data.name:
         role.name = role_data.name
@@ -171,7 +178,7 @@ async def update_role(
         role.permissions = perm_result.scalars().all()
     
     await db.commit()
-    await db.refresh(role)
+    await db.refresh(role, attribute_names=["permissions"])
     return role
 
 
@@ -267,7 +274,8 @@ async def get_user_effective_permissions(
                 permissions.add(perm.code)
     
     for perm in user.extra_permissions:
-        permissions.add(perm.code)
+        if perm.id not in denied_ids:
+            permissions.add(perm.code)
     
     # Get accessible branches
     branches = []

@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/stores/auth'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -81,7 +82,7 @@ interface Attendance {
 const TABS = ['employees', 'attendance', 'tasks']
 const today = () => new Date().toISOString().split('T')[0]
 
-const emptyEmployee = { email: '', first_name: '', last_name: '', phone: '', role_id: '', branch_id: '' }
+const emptyEmployee = { email: '', username: '', first_name: '', last_name: '', phone: '', role_id: '', branch_id: '' }
 const emptyTask = { title: '', description: '', assigned_to_id: '', priority: 'medium', due_date: '' }
 const emptyBranchAssign = () => ({ branch_id: '', effective_from: today(), notes: '' })
 
@@ -114,7 +115,7 @@ export default function EmployeesPage() {
   })
 
   const { data: roles = [] } = useQuery({
-    queryKey: ['roles'],
+    queryKey: ['employee-roles'],
     queryFn: async () => (await api.get('/employees/roles/list')).data,
   })
 
@@ -455,6 +456,7 @@ export default function EmployeesPage() {
               onClick={() =>
                 createEmployeeMutation.mutate({
                   email: employeeForm.email,
+                  username: employeeForm.username.trim() || null,
                   first_name: employeeForm.first_name,
                   last_name: employeeForm.last_name,
                   phone: employeeForm.phone || null,
@@ -477,16 +479,21 @@ export default function EmployeesPage() {
               <Input variant="main" placeholder="Doe" value={employeeForm.last_name} onChange={ef('last_name')} />
             </Field>
           </SimpleGrid>
-          <Field label="Email" isRequired>
-            <Input variant="main" type="email" placeholder="john@example.com" value={employeeForm.email} onChange={ef('email')} />
-          </Field>
+          <SimpleGrid columns={{ base: 1, md: 2 }} spacing="16px">
+            <Field label="Email" isRequired>
+              <Input variant="main" type="email" placeholder="john@example.com" value={employeeForm.email} onChange={ef('email')} />
+            </Field>
+            <Field label="Username" helper="Optional. They can sign in with this instead of their email.">
+              <Input variant="main" placeholder="john.doe" autoCapitalize="none" value={employeeForm.username} onChange={ef('username')} />
+            </Field>
+          </SimpleGrid>
           <Field label="Phone">
             <Input variant="main" placeholder="+233..." value={employeeForm.phone} onChange={ef('phone')} />
           </Field>
           <SimpleGrid columns={2} spacing="16px">
             <Field label="Role" isRequired>
               <Select variant="main" placeholder="Select role" value={employeeForm.role_id} onChange={ef('role_id')}>
-                {optionList(roles)}
+                {optionList(roles.filter((r: { admin_may_assign: boolean }) => useAuthStore.getState().user?.is_superuser || r.admin_may_assign))}
               </Select>
             </Field>
             <Field label="Branch" isRequired>

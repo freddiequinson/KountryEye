@@ -89,7 +89,7 @@ export default function LoginPage() {
             isRequired
             variant="auth"
             fontSize="sm"
-            placeholder="you@kountryeyecare.com"
+            placeholder="Username or email"
             mb="24px"
             fontWeight="500"
             size="lg"

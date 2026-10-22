@@ -51,14 +51,18 @@ async def login(
     check_rate(ip_key, 20, 300, record=False)
     check_rate(user_key, 10, 900, record=False)
 
-    # Email (case-insensitive) or first name used as a username. Exact match, no wildcards.
+    # Username or email (case-insensitive, exact). Accounts without a username can still
+    # use their first name, as before. No wildcards.
+    name = username.lower()
     result = await db.execute(
-        select(User).where(
-            (func.lower(User.email) == username.lower()) |
-            (func.lower(User.first_name) == username.lower())
-        )
+        select(User).where((func.lower(User.username) == name) | (func.lower(User.email) == name))
     )
     candidates = result.scalars().all()
+    if not candidates:
+        result = await db.execute(
+            select(User).where(User.username.is_(None), func.lower(User.first_name) == name)
+        )
+        candidates = result.scalars().all()
     # Several staff can share a first name: accept whichever account the password matches
     user = next((u for u in candidates if verify_password(form_data.password, u.hashed_password)), None)
     if not user:
@@ -192,8 +196,12 @@ async def register(
             detail="A user with this email already exists"
         )
     
+    from app.core.usernames import normalize_username, ensure_username_free
+    username = normalize_username(user_in.username)
+    await ensure_username_free(db, username)
     user = User(
         email=user_in.email,
+        username=username,
         hashed_password=get_password_hash(user_in.password),
         first_name=user_in.first_name,
         last_name=user_in.last_name,

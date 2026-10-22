@@ -43,6 +43,7 @@ interface Role {
   description?: string
   default_page?: string
   is_system: boolean
+  admin_may_assign: boolean
   permissions: Permission[]
 }
 
@@ -110,7 +111,7 @@ function SelectList<T extends { id: number }>({
   )
 }
 
-export default function PermissionManagerPage() {
+export default function PermissionManagerPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const borderColor = useColorModeValue('secondaryGray.100', 'whiteAlpha.100')
@@ -129,7 +130,7 @@ export default function PermissionManagerPage() {
   })
 
   const { data: roles = [] } = useQuery({
-    queryKey: ['roles'],
+    queryKey: ['permission-roles'],
     queryFn: async () => (await api.get('/permissions/roles')).data as Role[],
   })
 
@@ -157,10 +158,11 @@ export default function PermissionManagerPage() {
   const updateRoleMutation = useMutation({
     mutationFn: ({ roleId, data }: { roleId: number; data: any }) => api.put(`/permissions/roles/${roleId}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['roles'] })
+      queryClient.invalidateQueries({ queryKey: ['permission-roles'] })
       toast({ title: 'Role updated successfully' })
     },
     onError: () => {
+      setSelectedRole(null)
       toast({ title: 'Failed to update role', variant: 'destructive' })
     },
   })
@@ -205,7 +207,7 @@ export default function PermissionManagerPage() {
 
   return (
     <>
-      <PageHeader title="Permission Manager" description="Manage roles, permissions, and branch access for employees" />
+      {!embedded && <PageHeader title="Permission Manager" description="Manage roles, permissions, and branch access for employees" />}
 
       <Tabs variant="soft-rounded">
         <TabList gap="8px" mb="16px">
@@ -471,6 +473,14 @@ export default function PermissionManagerPage() {
                           Save Role Permissions
                         </Button>
                       </Flex>
+                      <Checkbox mt="12px" isDisabled={['admin', 'administrator'].includes(selectedRole.name.toLowerCase()) || updateRoleMutation.isPending} isChecked={selectedRole.admin_may_assign}
+                        onChange={(e) => {
+                          const admin_may_assign = e.target.checked
+                          setSelectedRole({ ...selectedRole, admin_may_assign })
+                          updateRoleMutation.mutate({ roleId: selectedRole.id, data: { admin_may_assign } })
+                        }}>
+                        Clinic admins may assign this role
+                      </Checkbox>
                       {selectedRole.is_system && (
                         <Alert status="warning" mt="8px" borderRadius="8px" fontSize="xs" py="8px">
                           <AlertIcon />

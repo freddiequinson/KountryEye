@@ -98,8 +98,7 @@ export function AdminDashboard({ user }: { user: any }) {
             columns={{ base: 1, md: 2, xl: 4 }}
             actions={[
               { label: 'Employees', hint: 'Staff, roles and attendance', icon: MdHowToReg, onClick: () => navigate('/admin/employees') },
-              // Branches are managed from Settings (the standalone branches page was removed)
-              { label: 'Branches', hint: 'Locations and work hours', icon: MdBusiness, color: 'secondary.500', onClick: () => navigate('/admin/settings') },
+              { label: user?.is_superuser ? 'Superadmin' : 'Clinic Settings', hint: user?.is_superuser ? 'System, roles and branches' : 'Consultation fees and VAT', icon: MdBusiness, color: 'secondary.500', onClick: () => navigate(user?.is_superuser ? '/superadmin' : '/admin/settings') },
               { label: 'Inventory', hint: 'Stock, imports and transfers', icon: MdInventory2, color: 'orange.500', onClick: () => navigate('/inventory') },
               { label: 'Accounting', hint: 'Income and expenses', icon: MdReceiptLong, color: 'blue.500', onClick: () => navigate('/accounting') },
             ]}

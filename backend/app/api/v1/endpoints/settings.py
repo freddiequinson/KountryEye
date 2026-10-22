@@ -25,6 +25,22 @@ def is_secret_key(key: str) -> bool:
 
 
 def validate_setting(key: str, value):
+    if key.startswith("sms."):
+        from decimal import Decimal, InvalidOperation
+        if key in ("sms.cost_per_segment", "sms.shop_rate", "sms.automation.debt_minimum"):
+            try:
+                number = Decimal(str(value))
+                valid = number.is_finite() and 0 <= number <= 1000000
+            except InvalidOperation:
+                valid = False
+            if not valid:
+                raise HTTPException(400, "Enter a non-negative amount below 1,000,000")
+        if key.endswith("_time") and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", str(value)):
+            raise HTTPException(400, "Time must be HH:MM in Ghana time")
+        if key == "sms.automation.debt_frequency" and value not in ("off", "weekly", "fortnightly", "monthly"):
+            raise HTTPException(400, "Choose off, weekly, fortnightly, or monthly")
+        if key.endswith("_enabled") and value not in ("true", "false"):
+            raise HTTPException(400, "Choose true or false")
     if key == "vat_rate":
         try:
             rate = float(value)
@@ -318,7 +334,7 @@ async def get_all_settings(
 ):
     """Get all non-secret system settings"""
     result = await db.execute(select(SystemSetting))
-    return {s.key: s.value for s in result.scalars().all() if not is_secret_key(s.key)}
+    return {s.key: s.value for s in result.scalars().all() if not is_secret_key(s.key) and (current_user.is_superuser or not s.key.startswith(("sms.", "phase3_")))}
 
 
 @router.get("/{key}")
@@ -328,7 +344,7 @@ async def get_setting(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get a specific setting by key"""
-    if is_secret_key(key):
+    if is_secret_key(key) or (not current_user.is_superuser and key.startswith(("sms.", "phase3_"))):
         raise HTTPException(status_code=404, detail="Setting not found")
     result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
     setting = result.scalar_one_or_none()
@@ -347,7 +363,7 @@ async def update_setting(
     """Update or create a system setting"""
     if not KEY_RE.match(key):
         raise HTTPException(status_code=400, detail="Invalid setting name")
-    if is_secret_key(key) and not current_user.is_superuser:
+    if key != "vat_rate" and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Only the system administrator can change this")
     value = validate_setting(key, data.get("value"))
 

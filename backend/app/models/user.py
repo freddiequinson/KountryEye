@@ -53,6 +53,7 @@ class Role(Base):
     name = Column(String(50), unique=True, nullable=False)
     description = Column(String(255))
     is_system = Column(Boolean, default=False)
+    admin_may_assign = Column(Boolean, default=False, nullable=False)
     default_page = Column(String(100), default="/dashboard")  # Default landing page for role
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -65,6 +66,8 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
+    # Optional login name, stored lower-case; unique when set
+    username = Column(String(50), unique=True, index=True, nullable=True)
     hashed_password = Column(String(255), nullable=False)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)

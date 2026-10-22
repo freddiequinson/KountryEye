@@ -109,7 +109,7 @@ interface Role {
   description?: string
 }
 
-const emptyUser = { email: '', first_name: '', last_name: '', phone: '', password: '', role_id: '', branch_id: '', is_active: true }
+const emptyUser = { email: '', username: '', first_name: '', last_name: '', phone: '', password: '', role_id: '', branch_id: '', is_active: true }
 const emptyBranch = {
   name: '',
   address: '',
@@ -143,7 +143,9 @@ function StatRow({ label, children }: { label: string; children: React.ReactNode
 
 const statusBadge = (active: boolean, inactiveScheme = 'red') => <Badge colorScheme={active ? 'green' : inactiveScheme}>{active ? 'Active' : 'Inactive'}</Badge>
 
-export default function SettingsPage() {
+export default function SettingsPage({ consoleSection }: { consoleSection?: 'Users' | 'Branches' | 'System' } = {}) {
+  const isSuperadmin = !!useAuthStore((state) => state.user?.is_superuser)
+  const showSection = (name: string) => consoleSection ? name === consoleSection : isSuperadmin || !['Users', 'Branches'].includes(name)
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const csvInputRef = useRef<HTMLInputElement>(null)
@@ -177,6 +179,7 @@ export default function SettingsPage() {
   // Queries
   const { data: users = [], isLoading: usersLoading } = useQuery({
     queryKey: ['admin-users'],
+    enabled: isSuperadmin,
     queryFn: async () => (await api.get('/users')).data,
   })
 
@@ -191,7 +194,8 @@ export default function SettingsPage() {
   })
 
   const { data: roles = [] } = useQuery({
-    queryKey: ['roles'],
+    queryKey: ['settings-roles'],
+    enabled: isSuperadmin,
     queryFn: async () => (await api.get('/users/roles/list')).data,
   })
 
@@ -448,6 +452,7 @@ export default function SettingsPage() {
     setEditingUser(user)
     setUserForm({
       email: user.email,
+      username: (user as any).username || '',
       first_name: user.first_name,
       last_name: user.last_name,
       phone: user.phone || '',
@@ -493,6 +498,7 @@ export default function SettingsPage() {
   const handleUserSubmit = () => {
     const data: any = {
       email: userForm.email,
+      username: userForm.username.trim() || null,
       first_name: userForm.first_name,
       last_name: userForm.last_name,
       phone: userForm.phone || null,
@@ -598,27 +604,27 @@ export default function SettingsPage() {
           window.location.href = '/login'
         }}
       />
-      <PageHeader title="Admin Settings" description="Manage users, branches, consultation types, and system settings" />
+      {!consoleSection && <PageHeader title="Clinic Settings" description="Manage consultation fees, VisionCare membership, and VAT" />}
 
       <Tabs variant="soft-rounded" isLazy>
-        <TabList gap="8px" mb="16px" flexWrap="wrap">
+        <TabList gap="8px" mb="16px" flexWrap="wrap" display={consoleSection ? 'none' : undefined}>
           {[
             { icon: MdPeople, label: 'Users' },
             { icon: MdApartment, label: 'Branches' },
             { icon: MdLocalHospital, label: 'Consultation Types' },
             { icon: MdPersonAdd, label: 'VisionCare' },
             { icon: MdSettings, label: 'System' },
-          ].map((t) => (
+          ].filter((t) => showSection(t.label)).map((t) => (
             <Tab key={t.label}>
               <Icon as={t.icon} me="8px" />
-              {t.label}
+              {t.label === 'System' && !isSuperadmin ? 'VAT' : t.label}
             </Tab>
           ))}
         </TabList>
 
         <TabPanels>
           {/* Users */}
-          <TabPanel p="0">
+          {showSection('Users') && <TabPanel p="0">
             <SectionCard
               title="User Management"
               description="Create and manage employee accounts"
@@ -666,7 +672,7 @@ export default function SettingsPage() {
                       visibleUsers.map((user: User) => (
                         <Tr key={user.id}>
                           <Td>
-                            <PersonCell name={`${user.first_name} ${user.last_name}`} sub={user.is_superuser ? 'Administrator' : undefined} />
+                            <PersonCell name={`${user.first_name} ${user.last_name}`} sub={user.is_superuser ? 'Superadmin' : undefined} />
                           </Td>
                           <Td>{user.email}</Td>
                           <Td>{getRoleName(user.role_id)}</Td>
@@ -721,10 +727,10 @@ export default function SettingsPage() {
                 </Table>
               </TableBox>
             </SectionCard>
-          </TabPanel>
+          </TabPanel>}
 
           {/* Branches */}
-          <TabPanel p="0">
+          {showSection('Branches') && <TabPanel p="0">
             <SectionCard
               title="Branch Management"
               description="Manage clinic branches and locations"
@@ -785,10 +791,10 @@ export default function SettingsPage() {
                 </Table>
               </TableBox>
             </SectionCard>
-          </TabPanel>
+          </TabPanel>}
 
           {/* Consultation Types */}
-          <TabPanel p="0">
+          {showSection('Consultation Types') && <TabPanel p="0">
             <SectionCard
               title="Consultation Types"
               description="Manage consultation types and fees"
@@ -876,10 +882,10 @@ export default function SettingsPage() {
                 </Table>
               </TableBox>
             </SectionCard>
-          </TabPanel>
+          </TabPanel>}
 
           {/* VisionCare */}
-          <TabPanel p="0">
+          {showSection('VisionCare') && <TabPanel p="0">
             <SectionCard
               title="VisionCare Membership"
               description="Manage VisionCare plan members"
@@ -928,12 +934,12 @@ export default function SettingsPage() {
                 </Table>
               </TableBox>
             </SectionCard>
-          </TabPanel>
+          </TabPanel>}
 
           {/* System */}
-          <TabPanel p="0">
+          {showSection('System') && <TabPanel p="0">
             <TabbedSections mb="20px">
-              <SectionCard title="AI Features" description="Configure AI-powered clinical analysis">
+              {isSuperadmin && <SectionCard title="AI Features" description="Configure AI-powered clinical analysis">
                 <Stack spacing="16px">
                   <Flex justify="space-between" align="center" gap="12px">
                     <Box>
@@ -954,7 +960,7 @@ export default function SettingsPage() {
                     <Badge colorScheme={aiStatus?.configured ? 'green' : 'red'}>{aiStatus?.configured ? 'Yes' : 'No'}</Badge>
                   </StatRow>
                 </Stack>
-              </SectionCard>
+              </SectionCard>}
 
               <SectionCard title="VAT" description="Added on top of each product's base price. The POS shows prices with VAT included and receipts show the breakdown.">
                 <Flex gap="12px" align="end" wrap="wrap">
@@ -972,16 +978,16 @@ export default function SettingsPage() {
                 </Flex>
               </SectionCard>
 
-              <SectionCard title="System Information">
+              {isSuperadmin && <SectionCard title="System Information">
                 <Stack spacing="16px">
                   <StatRow label="Version">1.0.0</StatRow>
                   <StatRow label="Total Users">{users.length}</StatRow>
                   <StatRow label="Total Branches">{branches.length}</StatRow>
                   <StatRow label="Consultation Types">{consultationTypes.filter((t: ConsultationType) => t.is_active).length}</StatRow>
                 </Stack>
-              </SectionCard>
+              </SectionCard>}
 
-              <SectionCard title="Quick Stats">
+              {isSuperadmin && <SectionCard title="Quick Stats">
                 <Stack spacing="16px">
                   <StatRow label="Active Users">{users.filter((u: User) => u.is_active).length}</StatRow>
                   <StatRow label="Active Branches">{branches.filter((b: Branch) => b.is_active).length}</StatRow>
@@ -990,10 +996,10 @@ export default function SettingsPage() {
                     <Badge colorScheme="green">Online</Badge>
                   </StatRow>
                 </Stack>
-              </SectionCard>
+              </SectionCard>}
             </TabbedSections>
 
-              <Card border="1px solid" borderColor="red.300">
+              {isSuperadmin && <Card border="1px solid" borderColor="red.300">
                 <Flex align="center" gap="8px" color="red.500" mb="4px">
                   <Icon as={MdWarning} w="20px" h="20px" />
                   <Heading size="md">Danger Zone</Heading>
@@ -1012,8 +1018,8 @@ export default function SettingsPage() {
                     Reset Database
                   </Button>
                 </Flex>
-              </Card>
-          </TabPanel>
+              </Card>}
+          </TabPanel>}
         </TabPanels>
       </Tabs>
 
@@ -1045,6 +1051,9 @@ export default function SettingsPage() {
           </SimpleGrid>
           <Field label="Email">
             <Input variant="main" type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} />
+          </Field>
+          <Field label="Username" helper="Optional sign-in name, instead of the email.">
+            <Input variant="main" autoCapitalize="none" value={userForm.username} onChange={(e) => setUserForm({ ...userForm, username: e.target.value })} />
           </Field>
           <Field label="Phone">
             <Input variant="main" value={userForm.phone} onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })} />

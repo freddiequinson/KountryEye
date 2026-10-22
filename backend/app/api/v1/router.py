@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.api.v1.deps import module_gate
+from app.api.v1.endpoints import superadmin
 
 from app.api.v1.endpoints import (
     auth, users, branches, patients, clinical,
@@ -44,3 +45,5 @@ api_router.include_router(audit.router, prefix="/audit", tags=["Audit"], depende
 api_router.include_router(checkout.router, prefix="/checkout", tags=["Checkout"], dependencies=[Depends(module_gate(("payments.view", "visits.view", "pos.access"), ("payments.create", "visits.checkin", "pos.access")))])
 api_router.include_router(branch_assignments.router, prefix="/branch-assignments", tags=["Branch Assignments"])
 api_router.include_router(insurance.router, prefix="/insurance", tags=["Insurance"], dependencies=[Depends(module_gate((), ("settings.manage",)))])
+
+api_router.include_router(superadmin.router, prefix="/superadmin", tags=["Superadmin"])

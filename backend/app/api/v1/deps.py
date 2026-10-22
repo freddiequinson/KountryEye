@@ -46,6 +46,7 @@ async def get_current_user(
         raise credentials_exception
     if user is None:
         raise credentials_exception
+    db.info["actor_id"] = user.id
     return user
 
 
@@ -93,7 +94,7 @@ def is_admin(user: User) -> bool:
 def require_permission(*codes: str):
     """Dependency: user must hold at least one of the given permission codes."""
     async def checker(current_user: User = Depends(get_current_active_user)) -> User:
-        if not (is_admin(current_user) or has_permission(current_user, *codes)):
+        if not has_permission(current_user, *codes):
             raise HTTPException(status_code=403, detail="You don't have permission to do this")
         return current_user
     checker.required_permissions = codes  # used by the route-auth test
@@ -108,12 +109,12 @@ async def require_admin(current_user: User = Depends(get_current_active_user)) -
 
 def module_gate(read: tuple[str, ...], write: tuple[str, ...] | None = None):
     """Router-level dependency. GET/HEAD need one of `read`; other methods need one of `write`.
-    The clinic admin role and superadmin always pass. Finer checks live on individual routes."""
+    Superadmins always pass. Finer checks live on individual routes."""
     from fastapi import Request
     write = write if write is not None else read
 
     async def gate(request: Request, current_user: User = Depends(get_current_active_user)) -> User:
-        if is_admin(current_user):
+        if current_user.is_superuser:
             return current_user
         codes = read if request.method in ("GET", "HEAD", "OPTIONS") else write
         if codes and not has_permission(current_user, *codes):

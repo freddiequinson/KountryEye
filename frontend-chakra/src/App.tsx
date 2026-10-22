@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth'
-import { getUserRole, hasPermission } from '@/config/nav'
+import { hasPermission } from '@/config/nav'
 import { EmptyState } from '@/components/ui'
 import { MdLock } from 'react-icons/md'
 import { OnboardingProvider } from '@/contexts/OnboardingContext'
@@ -67,6 +67,7 @@ import ReferralPaymentsPage from '@/pages/admin/ReferralPaymentsPage'
 
 import AnalyticsPage from '@/pages/admin/AnalyticsPage'
 import SettingsPage from '@/pages/admin/SettingsPage'
+import SuperadminPage from '@/pages/admin/SuperadminPage'
 
 import ProfilePage from '@/pages/ProfilePage'
 import AttendancePage from '@/pages/AttendancePage'
@@ -108,7 +109,7 @@ function Guard({ perms, children }: { perms: string[]; children: React.ReactNode
   const { user } = useAuthStore()
   const allowed = perms.includes('__superadmin__')
     ? !!user?.is_superuser
-    : getUserRole(user) === 'admin' || hasPermission(user, perms)
+    : hasPermission(user, perms)
   if (allowed) return <>{children}</>
   return (
     <EmptyState icon={MdLock} title="You don't have access to this page">
@@ -166,6 +167,7 @@ function App() {
                   <Route path="/dashboard/frontdesk" element={<FrontDeskDashboard />} />
                   <Route path="/dashboard/doctor" element={<DoctorDashboard />} />
                   <Route path="/dashboard/marketing" element={<MarketingDashboard />} />
+                  <Route path="/superadmin" element={<Guard perms={['__superadmin__']}><SuperadminPage /></Guard>} />
                   <Route path="/admin/settings" element={<Guard perms={['settings.manage']}><SettingsPage /></Guard>} />
                   <Route path="/admin/users" element={<Guard perms={['settings.manage']}><SettingsPage /></Guard>} />
                   <Route path="/admin/terminal" element={<Guard perms={['__superadmin__']}><TerminalPage /></Guard>} />
@@ -174,7 +176,7 @@ function App() {
                   <Route path="/admin/employees/:employeeId" element={<EmployeeDetailPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/attendance" element={<AttendancePage />} />
-                  <Route path="/admin/permissions" element={<Guard perms={['permissions.manage']}><PermissionManagerPage /></Guard>} />
+                  <Route path="/admin/permissions" element={<Guard perms={['__superadmin__']}><PermissionManagerPage /></Guard>} />
                   <Route path="/admin/analytics" element={<Guard perms={['analytics.view']}><AnalyticsPage /></Guard>} />
                   <Route path="/fund-requests" element={<FundRequestsPage />} />
                   <Route path="/fund-requests/:requestId" element={<FundRequestsPage />} />

@@ -38,6 +38,7 @@ import {
   MdChecklist,
   MdChevronLeft,
   MdChevronRight,
+  MdEdit,
   MdEmail,
   MdEvent,
   MdPhone,
@@ -46,6 +47,7 @@ import {
   MdVpnKey,
 } from 'react-icons/md'
 import api from '@/lib/api'
+import { apiErrorMessage } from '@/lib/errors'
 import { EntityHeader } from '@/components/Person'
 import { useToast } from '@/hooks/use-toast'
 import Card from '@/components/card/Card'
@@ -162,6 +164,17 @@ export default function EmployeeDetailPage() {
   })
 
   const [tempPassword, setTempPassword] = useState<string | null>(null)
+  const [details, setDetails] = useState<{ first_name: string; last_name: string; email: string; username: string; phone: string } | null>(null)
+  const saveDetailsMutation = useMutation({
+    mutationFn: (data: any) => api.put(`/employees/${employeeId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employee', employeeId] })
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      setDetails(null)
+      toast({ title: 'Details saved' })
+    },
+    onError: (error) => toast({ title: 'Could not save', description: apiErrorMessage(error), variant: 'destructive' }),
+  })
 
   const resetPasswordMutation = useMutation({
     mutationFn: () => api.post(`/employees/${employeeId}/reset-password`),
@@ -233,6 +246,44 @@ export default function EmployeeDetailPage() {
   return (
     <>
       <TempPasswordDialog password={tempPassword} name={employee.first_name} onClose={() => setTempPassword(null)} />
+      <AppModal
+        isOpen={!!details}
+        onClose={() => setDetails(null)}
+        title="Edit details"
+        footer={
+          <>
+            <Button variant="light" onClick={() => setDetails(null)}>Cancel</Button>
+            <Button
+              variant="brand"
+              isLoading={saveDetailsMutation.isPending}
+              isDisabled={!details?.first_name || !details?.last_name || !details?.email}
+              onClick={() => details && saveDetailsMutation.mutate({ ...details, username: details.username.trim() || null, phone: details.phone || null })}
+            >
+              Save
+            </Button>
+          </>
+        }
+      >
+        {details && (
+          <SimpleGrid columns={{ base: 1, md: 2 }} spacing="16px">
+            <Field label="First name" isRequired>
+              <Input variant="main" value={details.first_name} onChange={(e) => setDetails({ ...details, first_name: e.target.value })} />
+            </Field>
+            <Field label="Last name" isRequired>
+              <Input variant="main" value={details.last_name} onChange={(e) => setDetails({ ...details, last_name: e.target.value })} />
+            </Field>
+            <Field label="Email" isRequired>
+              <Input variant="main" type="email" value={details.email} onChange={(e) => setDetails({ ...details, email: e.target.value })} />
+            </Field>
+            <Field label="Username" helper="Optional. Letters, numbers, dots or dashes.">
+              <Input variant="main" autoCapitalize="none" value={details.username} onChange={(e) => setDetails({ ...details, username: e.target.value })} />
+            </Field>
+            <Field label="Phone">
+              <Input variant="main" value={details.phone} onChange={(e) => setDetails({ ...details, phone: e.target.value })} />
+            </Field>
+          </SimpleGrid>
+        )}
+      </AppModal>
       <EntityHeader
         name={`${employee.first_name} ${employee.last_name}`}
         subtitle={`${employee.role?.name || 'No role'} · ${employee.branch?.name || 'No branch'}`}
@@ -241,6 +292,13 @@ export default function EmployeeDetailPage() {
         onBack={() => navigate('/admin/employees')}
         actions={
           <>
+            <Button
+              variant="light"
+              leftIcon={<MdEdit />}
+              onClick={() => setDetails({ first_name: employee.first_name, last_name: employee.last_name, email: employee.email, username: employee.username || '', phone: employee.phone || '' })}
+            >
+              Edit details
+            </Button>
             <Button variant="light" leftIcon={<MdVpnKey />} onClick={() => resetPasswordMutation.mutate()} isLoading={resetPasswordMutation.isPending}>
               Reset Password
             </Button>
@@ -251,6 +309,7 @@ export default function EmployeeDetailPage() {
         }
         facts={[
           { icon: MdEmail, label: 'Email', value: employee.email },
+          { icon: MdVpnKey, label: 'Username', value: employee.username || '-' },
           { icon: MdPhone, label: 'Phone', value: employee.phone || '-' },
           { icon: MdShield, label: 'Role', value: employee.role?.name || '-' },
           { icon: MdBusiness, label: 'Branch', value: employee.branch?.name || '-' },

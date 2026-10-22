@@ -32,6 +32,7 @@ export type NavItem = {
   title: string
   url: string
   icon: IconType
+  superadminOnly?: boolean
   roles?: string[]
   permissions?: string[] // Permission codes required
 }
@@ -55,7 +56,7 @@ const allNavItems: NavItem[] = [
   { title: 'Revenue', url: '/admin/revenue', icon: MdAttachMoney, permissions: ['revenue.view'] },
   { title: 'Insurance', url: '/admin/insurance', icon: MdShield, permissions: ['settings.manage'], roles: ['admin'] },
   { title: 'Employees', url: '/admin/employees', icon: MdBadge, permissions: ['employees.view'] },
-  { title: 'Permissions', url: '/admin/permissions', icon: MdVpnKey, permissions: ['permissions.manage'] },
+  { title: 'Superadmin', url: '/superadmin', icon: MdVpnKey, superadminOnly: true },
   { title: 'Analytics', url: '/admin/analytics', icon: MdTrendingUp, permissions: ['analytics.view'] },
   { title: 'Memos', url: '/fund-requests', icon: MdDescription, permissions: ['fund_requests.view'] },
   { title: 'Messages', url: '/messages', icon: MdMessage, permissions: ['messages.view'] },
@@ -78,7 +79,7 @@ export function getUserRole(user: User | null): string {
 }
 
 export function getRoleDisplayName(user: User | null): string {
-  if (user?.is_superuser) return 'System Administrator'
+  if (user?.is_superuser) return 'Superadmin'
   const names: Record<string, string> = {
     admin: 'Administrator',
     lab_technician: 'Lab Technician',
@@ -114,6 +115,7 @@ export function getNavSections(user: User | null): NavSection[] {
   const isTechnician = userRole === 'technician'
 
   const visible = (item: NavItem) => {
+    if (item.superadminOnly) return !!user?.is_superuser
     if (item.permissions) return hasPermission(user, item.permissions)
     // Fallback to role-based filtering
     if (!item.roles || userRole === 'admin') return true
@@ -155,7 +157,8 @@ export function getNavSections(user: User | null): NavSection[] {
         '/admin/revenue',
         '/admin/insurance',
         '/admin/employees',
-        '/admin/permissions',
+        '/admin/settings',
+        '/superadmin',
         '/admin/analytics',
         '/admin/referral-payments',
         '/admin/search',
