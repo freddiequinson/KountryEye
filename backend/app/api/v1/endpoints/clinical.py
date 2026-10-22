@@ -821,10 +821,13 @@ async def create_optical_prescription(
             pass
     
     db.add(prescription)
+    await db.flush()
+    # Straight into the lab's queue for glasses
+    from app.services.lab import create_job_for_prescription
+    job = await create_job_for_prescription(db, prescription, visit)
     await db.commit()
-    await db.refresh(prescription)
-    
-    return {"message": "Optical prescription saved", "prescription_id": prescription.id}
+
+    return {"message": "Optical prescription saved", "prescription_id": prescription.id, "lab_job_id": job.id}
 
 
 @router.get("/patients/{patient_id}/history")

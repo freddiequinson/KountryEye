@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.api.v1.deps import module_gate
-from app.api.v1.endpoints import superadmin, public, sms
+from app.api.v1.endpoints import superadmin, public, sms, lab
 
 from app.api.v1.endpoints import (
     auth, users, branches, patients, clinical,
@@ -49,3 +49,4 @@ api_router.include_router(insurance.router, prefix="/insurance", tags=["Insuranc
 api_router.include_router(superadmin.router, prefix="/superadmin", tags=["Superadmin"])
 api_router.include_router(public.router, prefix="/public", tags=["Public"])
 api_router.include_router(sms.router, prefix="/sms", tags=["SMS"])
+api_router.include_router(lab.router, prefix="/lab", tags=["Lab"])

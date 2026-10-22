@@ -28,6 +28,7 @@ import {
 } from '@chakra-ui/react'
 import { MdAdd, MdCreditCard, MdPersonAdd } from 'react-icons/md'
 import api from '@/lib/api'
+import { LabJobsTable } from '@/pages/lab/LabPage'
 import { useVatRate } from '@/hooks/use-vat-rate'
 import { ghs, visitBalance, visitTotal, withVat } from '@/lib/money'
 import { useToast } from '@/hooks/use-toast'
@@ -71,7 +72,7 @@ interface PendingPrescription {
 const vatLine = (vat?: number | null, rate?: number | null) =>
   vat ? [{ label: rate ? `VAT (${rate}%)` : 'VAT', amount: vat }] : []
 
-const TABS = ['visits', 'visit-payments', 'payments', 'registrations']
+const TABS = ['visits', 'visit-payments', 'payments', 'registrations', 'pickup']
 
 const PRESCRIPTION_PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
@@ -542,6 +543,7 @@ export default function FrontDeskPage() {
               </Badge>
             )}
           </Tab>
+          <Tab>Glasses pickup</Tab>
         </TabList>
 
         <TabPanels>
@@ -774,6 +776,11 @@ export default function FrontDeskPage() {
                   </Tbody>
                 </Table>
               </Box>
+            </Card>
+          </TabPanel>
+          <TabPanel p="0">
+            <Card>
+              <LabJobsTable status="ready" compact />
             </Card>
           </TabPanel>
         </TabPanels>
