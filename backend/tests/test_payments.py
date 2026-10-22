@@ -76,3 +76,12 @@ async def test_insurance_override_fee_used(client, auth):
     assert v.json()["consultation_fee"] == 80
     overrides = await client.get(f"/api/v1/insurance/{ins.json()['id']}/fee-overrides", headers=auth("frontdesk"))
     assert overrides.status_code == 200 and overrides.json()[0]["override_fee"] == 80
+
+
+async def test_bulk_balances_match_per_patient(client, auth):
+    from app.core.database import async_session_maker
+    from app.services.balances import all_patient_balances, patient_balance
+    async with async_session_maker() as db:
+        bulk = await all_patient_balances(db)
+        for pid, amount in bulk.items():
+            assert amount == await patient_balance(db, pid)

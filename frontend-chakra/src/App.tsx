@@ -68,6 +68,7 @@ import ReferralPaymentsPage from '@/pages/admin/ReferralPaymentsPage'
 import AnalyticsPage from '@/pages/admin/AnalyticsPage'
 import SettingsPage from '@/pages/admin/SettingsPage'
 import SuperadminPage from '@/pages/admin/SuperadminPage'
+import SmsPage from '@/pages/sms/SmsPage'
 
 import ProfilePage from '@/pages/ProfilePage'
 import AttendancePage from '@/pages/AttendancePage'
@@ -167,6 +168,7 @@ function App() {
                   <Route path="/dashboard/frontdesk" element={<FrontDeskDashboard />} />
                   <Route path="/dashboard/doctor" element={<DoctorDashboard />} />
                   <Route path="/dashboard/marketing" element={<MarketingDashboard />} />
+                  <Route path="/sms" element={<Guard perms={['sms.view', 'sms.send', 'sms.bulk_send', 'debtors.view']}><SmsPage /></Guard>} />
                   <Route path="/superadmin" element={<Guard perms={['__superadmin__']}><SuperadminPage /></Guard>} />
                   <Route path="/admin/settings" element={<Guard perms={['settings.manage']}><SettingsPage /></Guard>} />
                   <Route path="/admin/users" element={<Guard perms={['settings.manage']}><SettingsPage /></Guard>} />

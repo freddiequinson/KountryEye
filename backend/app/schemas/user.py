@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, date
 
 
 class UserBase(BaseModel):
@@ -34,6 +34,7 @@ class UserSelfUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone: Optional[str] = None
+    date_of_birth: Optional[date] = None
 
 
 class PermissionInfo(BaseModel):
@@ -68,6 +69,7 @@ class UserResponse(UserBase):
     id: int
     username: Optional[str] = None
     avatar_url: Optional[str] = None
+    date_of_birth: Optional[date] = None
     role_id: Optional[int]
     branch_id: Optional[int]
     is_superuser: bool

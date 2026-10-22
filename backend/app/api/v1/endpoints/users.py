@@ -35,6 +35,7 @@ async def get_current_user_info(
         "last_name": current_user.last_name,
         "phone": current_user.phone,
         "avatar_url": current_user.avatar_url,
+        "date_of_birth": current_user.date_of_birth,
         "is_active": current_user.is_active,
         "role_id": current_user.role_id,
         "branch_id": current_user.branch_id,

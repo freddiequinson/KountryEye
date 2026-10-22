@@ -56,6 +56,8 @@ class Settings(BaseSettings):
 
     # SMS (Arkesel). The API key itself is stored in the database by the superadmin.
     SMS_DRY_RUN: bool = False  # log messages instead of sending (staging/dev)
+    # Public address of the site, used in links sent by SMS (e.g. http://1.2.3.4)
+    PUBLIC_BASE_URL: str = ""
     SCHEDULER_ENABLED: bool = False  # run birthday/reminder jobs in this process
 
     class Config:

@@ -20,6 +20,7 @@ import {
   MdSettings,
   MdShield,
   MdShoppingBag,
+  MdSms,
   MdTrendingUp,
   MdVisibility,
   MdVpnKey,
@@ -60,6 +61,7 @@ const allNavItems: NavItem[] = [
   { title: 'Analytics', url: '/admin/analytics', icon: MdTrendingUp, permissions: ['analytics.view'] },
   { title: 'Memos', url: '/fund-requests', icon: MdDescription, permissions: ['fund_requests.view'] },
   { title: 'Messages', url: '/messages', icon: MdMessage, permissions: ['messages.view'] },
+  { title: 'SMS', url: '/sms', icon: MdSms, permissions: ['sms.view', 'sms.send', 'sms.bulk_send', 'debtors.view'] },
   // Technician items
   { title: 'Technician', url: '/technician', icon: MdVisibility, permissions: ['technician.view'], roles: ['technician'] },
   { title: 'Scan Requests', url: '/technician/scan-requests', icon: MdAssignment, permissions: ['technician.scans'], roles: ['technician'] },
@@ -132,7 +134,7 @@ export function getNavSections(user: User | null): NavSection[] {
       items: pick(
         isTechnician
           ? ['/technician', '/attendance', '/fund-requests', '/messages']
-          : ['/', '/attendance', '/frontdesk', '/sales/pos', '/doctor/queue', '/patients', '/fund-requests', '/messages'],
+          : ['/', '/attendance', '/frontdesk', '/sales/pos', '/doctor/queue', '/patients', '/fund-requests', '/messages', '/sms'],
       ),
     },
     {

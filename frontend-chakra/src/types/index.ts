@@ -43,6 +43,9 @@ export interface Patient {
   occupation?: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
+  nationality?: string;
+  ghana_card?: string;
+  promo_opt_out?: boolean;
   branch_id: number;
   created_at: string;
 }

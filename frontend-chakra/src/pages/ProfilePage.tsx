@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { Badge, Box, Button, Flex, Input, Stack, Text } from '@chakra-ui/react'
 import { MdApartment, MdCameraAlt, MdEmail, MdKey, MdPerson, MdSave, MdShield } from 'react-icons/md'
 import api from '@/lib/api'
+import { DateField } from '@/components/DateField'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/hooks/use-toast'
 import TabCard from '@/components/card/TabCard'
@@ -19,6 +20,7 @@ export default function ProfilePage() {
     first_name: user?.first_name || '',
     last_name: user?.last_name || '',
     phone: user?.phone || '',
+    date_of_birth: user?.date_of_birth || '',
   })
   const [passwordForm, setPasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
 
@@ -67,7 +69,7 @@ export default function ProfilePage() {
 
   const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    updateProfileMutation.mutate(profileForm)
+    updateProfileMutation.mutate({ ...profileForm, date_of_birth: profileForm.date_of_birth || null })
   }
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
@@ -130,6 +132,9 @@ export default function ProfilePage() {
                   </Field>
                   <Field label="Phone Number">
                     <Input variant="main" placeholder="+233 XX XXX XXXX" value={profileForm.phone} onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })} />
+                  </Field>
+                  <Field label="Date of birth" helper="So the team can wish you a happy birthday.">
+                    <DateField value={profileForm.date_of_birth} onChange={(v) => setProfileForm({ ...profileForm, date_of_birth: v })} />
                   </Field>
                 </FormSection>
                 <Flex justify="end" pt="8px">

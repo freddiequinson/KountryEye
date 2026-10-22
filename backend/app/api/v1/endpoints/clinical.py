@@ -580,6 +580,10 @@ async def save_clinical_record_for_visit(
         )
         db.add(history_entry)
     
+    # The follow-up date the doctor sets drives the "review due" SMS reminders
+    if 'follow_up_date' in processed_data:
+        fu = processed_data['follow_up_date']
+        visit.next_review_date = fu.date() if isinstance(fu, datetime) else fu
     await db.commit()
     return {"message": "Clinical record saved"}
 
@@ -976,7 +980,14 @@ async def process_prescription_payment(
             recorded_by_id=current_user.id
         ))
 
+    from app.services.sms.receipts import queue_receipt_sms
+    from app.services.sms.service import kick
+    from app.services.vat import vat_share as _vs
+    await queue_receipt_sms(db, kind="prescription", ref_id=prescription.id, patient=prescription.patient, amount=applied,
+                            vat=_vs(applied, prescription.vat_amount, total), balance=total - prescription.amount_paid,
+                            sent_by_id=current_user.id)
     await db.commit()
+    kick()
     return {
         "message": "Payment processed",
         "receipt_id": prescription.id,

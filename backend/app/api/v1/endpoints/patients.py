@@ -874,7 +874,13 @@ async def apply_visit_payment(db, visit, payment_data: dict, current_user) -> di
         branch_id=visit.branch_id,
         recorded_by_id=current_user.id,
     ))
+    from app.services.sms.receipts import queue_receipt_sms
+    from app.services.sms.service import kick
+    await queue_receipt_sms(db, kind="visit", ref_id=visit.id, patient=visit.patient, amount=applied,
+                            vat=vat_share(applied, visit.vat_amount, total), balance=max(total - visit.amount_paid, 0),
+                            sent_by_id=current_user.id)
     await db.commit()
+    kick()
     return {
         "message": "Payment recorded",
         "visit_id": visit.id,

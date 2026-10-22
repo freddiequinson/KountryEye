@@ -20,6 +20,7 @@ class PatientBase(BaseModel):
     emergency_contact_phone: Optional[str] = None
     nationality: Optional[str] = None
     ghana_card: Optional[str] = None
+    promo_opt_out: Optional[bool] = False
 
 
 class PatientCreate(PatientBase):
@@ -41,6 +42,7 @@ class PatientUpdate(BaseModel):
     emergency_contact_phone: Optional[str] = None
     nationality: Optional[str] = None
     ghana_card: Optional[str] = None
+    promo_opt_out: Optional[bool] = False
 
 
 class PatientResponse(PatientBase):

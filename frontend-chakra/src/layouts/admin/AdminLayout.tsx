@@ -1,3 +1,4 @@
+import { BirthdayPrompt } from '@/components/BirthdayPrompt'
 import { useState, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
@@ -37,6 +38,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </Box>
       </Box>
       <DailyGreetingToast />
+      <BirthdayPrompt />
       <BranchVerificationModal />
     </Box>
   )

@@ -23,6 +23,7 @@ interface User {
   id: number
   email: string
   username?: string | null
+  date_of_birth?: string | null
   first_name: string
   last_name: string
   phone?: string

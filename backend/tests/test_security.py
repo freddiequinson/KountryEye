@@ -13,6 +13,7 @@ PUBLIC = {
     ("GET", "/api/v1/system/health"),
     ("GET", "/health"),
     ("GET", "/{full_path:path}"),
+    ("GET", "/r/{token}"),
 }
 AUTH_DEPS = {"get_current_user", "get_current_active_user", "get_current_superuser", "require_admin", "checker", "gate"}
 

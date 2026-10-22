@@ -769,7 +769,14 @@ async def create_sale(
     )
     db.add(income)
     
+    if sale_in.patient_id:
+        from app.models.patient import Patient
+        from app.services.sms.receipts import queue_receipt_sms
+        await queue_receipt_sms(db, kind="sale", ref_id=sale.id, patient=await db.get(Patient, sale_in.patient_id),
+                                amount=total_amount, vat=tax_amount, balance=0, sent_by_id=current_user.id)
     await db.commit()
+    from app.services.sms.service import kick
+    kick()
     
     # Eagerly load the sale with items to avoid MissingGreenlet error
     result = await db.execute(

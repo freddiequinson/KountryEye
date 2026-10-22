@@ -178,6 +178,7 @@ async def process_visit_checkout(
     """Take a payment at checkout and spread it over what is still owed on the visit:
     consultation first, then prescriptions, scans and products."""
     from app.services.balances import visit_charges, apply_payment_to_charge, PAY_ORDER, REVENUE_CATEGORY, REFERENCE_TYPE
+    from app.services.vat import vat_share
     from app.services.billing import parse_amount
 
     visit = (await db.execute(
@@ -200,11 +201,14 @@ async def process_visit_checkout(
         if remaining <= 0:
             break
         take = min(remaining, c.balance)
+        charge_vat = getattr(c.obj, "tax_amount", None) if c.kind == "sale" else getattr(c.obj, "vat_amount", None)
+        take_vat = vat_share(take, charge_vat or 0, c.total)
         apply_payment_to_charge(c, take, payment_method)
         db.add(Revenue(
             category=REVENUE_CATEGORY[c.kind],
             description=f"Checkout: {c.label}{patient_name}",
             amount=take,
+            vat_amount=take_vat,
             payment_method=payment_method,
             reference_type=REFERENCE_TYPE[c.kind],
             reference_id=c.meta["scan_id"] if c.kind == "scan" else c.id,
@@ -212,11 +216,17 @@ async def process_visit_checkout(
             branch_id=visit.branch_id,
             recorded_by_id=current_user.id
         ))
-        applied_lines.append({"kind": c.kind, "label": c.label, "amount": float(take)})
+        applied_lines.append({"kind": c.kind, "label": c.label, "amount": float(take), "vat": take_vat})
         remaining -= take
 
-    await db.commit()
     applied = offered - remaining
+    from app.services.sms.receipts import queue_receipt_sms
+    from app.services.sms.service import kick
+    vat_part = sum((l.pop("vat") for l in applied_lines), Decimal("0"))
+    await queue_receipt_sms(db, kind="checkout", ref_id=visit.id, patient=visit.patient, amount=applied, vat=vat_part,
+                            balance=owed - applied, sent_by_id=current_user.id)
+    await db.commit()
+    kick()
     return {
         "message": "Checkout payment recorded",
         "amount": float(applied),

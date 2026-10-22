@@ -27,7 +27,11 @@ def is_secret_key(key: str) -> bool:
 def validate_setting(key: str, value):
     if key.startswith("sms."):
         from decimal import Decimal, InvalidOperation
-        if key in ("sms.cost_per_segment", "sms.shop_rate", "sms.automation.debt_minimum"):
+        if key == "sms.sender_id" and not re.fullmatch(r"[A-Za-z0-9 ]{1,11}", str(value or "")):
+            raise HTTPException(400, "Sender ID must be 1-11 letters or numbers")
+        if key.startswith("sms.template.") and len(str(value or "")) > 459:
+            raise HTTPException(400, "Keep templates under 459 characters (3 SMS)")
+        if key in ("sms.cost_per_segment", "sms.shop_rate", "sms.automation.debt_minimum", "sms.credit_overdraft", "sms.credit_low_warning"):
             try:
                 number = Decimal(str(value))
                 valid = number.is_finite() and 0 <= number <= 1000000

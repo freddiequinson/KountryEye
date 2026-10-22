@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Table, Text
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Table, Text, Date
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
@@ -73,6 +73,7 @@ class User(Base):
     last_name = Column(String(100), nullable=False)
     phone = Column(String(20))
     avatar_url = Column(String(500))  # Profile picture URL
+    date_of_birth = Column(Date)  # for staff birthday wishes
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
     must_change_password = Column(Boolean, default=True, info={"backfill": False})  # Force password change on first login

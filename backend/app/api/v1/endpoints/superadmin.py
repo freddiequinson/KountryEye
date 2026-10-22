@@ -1,6 +1,6 @@
 """Superadmin-only console APIs. No credentials or payment records can be reverted."""
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, text
@@ -160,3 +160,100 @@ async def revert(change_id: int, db: AsyncSession = Depends(get_db), current_use
     finally:
         db.info.pop("reverting_change_id", None)
     return {"message": "Change reverted"}
+
+
+# ---------- SMS wallet and billing ----------
+
+from pydantic import BaseModel, Field  # noqa: E402
+
+
+class TopUpIn(BaseModel):
+    amount: Decimal = Field(gt=0, le=100000)
+    note: str | None = Field(default=None, max_length=255)
+
+
+class TestSmsIn(BaseModel):
+    phone: str = Field(min_length=9, max_length=20)
+
+
+@router.get("/sms/summary")
+async def sms_summary(month: str | None = None, db: AsyncSession = Depends(get_db)):
+    """Credit, Arkesel balance and this month's bill: what Arkesel cost vs what the shop was charged."""
+    from app.models.sms import SmsMessage
+    from app.services.sms.service import credit_status, get_setting
+    from app.services.sms import arkesel
+    from app.core.config import settings as app_settings
+    now = datetime.utcnow()
+    try:
+        start = datetime.strptime(month, "%Y-%m") if month else now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    except ValueError:
+        raise HTTPException(400, "Month must look like 2026-10")
+    end = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    billed = SmsMessage.status.in_(["sent", "delivered"])
+    rows = (await db.execute(
+        select(SmsMessage.category, func.count(), func.coalesce(func.sum(SmsMessage.segments), 0),
+               func.coalesce(func.sum(SmsMessage.provider_cost), 0), func.coalesce(func.sum(SmsMessage.shop_cost), 0))
+        .where(billed, SmsMessage.created_at >= start, SmsMessage.created_at < end).group_by(SmsMessage.category)
+    )).all()
+    by_category = [{"category": c, "messages": n, "segments": int(seg), "provider_cost": float(pc), "shop_cost": float(sc)} for c, n, seg, pc, sc in rows]
+    status_counts = dict((await db.execute(
+        select(SmsMessage.status, func.count()).where(SmsMessage.created_at >= start, SmsMessage.created_at < end).group_by(SmsMessage.status)
+    )).all())
+    provider = sum(r["provider_cost"] for r in by_category)
+    shop = sum(r["shop_cost"] for r in by_category)
+    api_key = await get_setting(db, "sms.api_key")
+    arkesel_balance, arkesel_error = None, None
+    if api_key and not app_settings.SMS_DRY_RUN:
+        try:
+            arkesel_balance = await arkesel.balance(api_key)
+        except arkesel.ArkeselError as exc:
+            arkesel_error = str(exc)
+    return {
+        "month": start.strftime("%Y-%m"), "credit": await credit_status(db),
+        "dry_run": bool(app_settings.SMS_DRY_RUN or not api_key), "api_key_set": bool(api_key),
+        "arkesel_balance": arkesel_balance, "arkesel_error": arkesel_error,
+        "messages": sum(r["messages"] for r in by_category), "provider_cost": round(provider, 2),
+        "shop_billed": round(shop, 2), "margin": round(shop - provider, 2),
+        "by_category": by_category, "by_status": status_counts,
+    }
+
+
+@router.get("/sms/ledger")
+async def sms_ledger(page: int = Query(1, ge=1), db: AsyncSession = Depends(get_db)):
+    from app.models.sms import SmsCreditEntry
+    q = select(SmsCreditEntry).where(SmsCreditEntry.kind != "send")
+    total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar_one()
+    rows = (await db.execute(q.order_by(SmsCreditEntry.id.desc()).offset((page - 1) * 25).limit(25))).scalars().all()
+    names = {u.id: f"{u.first_name} {u.last_name}" for u in (await db.execute(select(User).where(User.id.in_({r.created_by_id for r in rows if r.created_by_id})))).scalars()}
+    return {"total": total, "items": [{"id": r.id, "kind": r.kind, "amount": float(r.amount), "note": r.note,
+                                       "by": names.get(r.created_by_id), "created_at": r.created_at} for r in rows]}
+
+
+@router.post("/sms/topup")
+async def sms_topup(data: TopUpIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_superuser)):
+    from app.models.sms import SmsCreditEntry
+    from app.services.sms.service import credit_status
+    db.add(SmsCreditEntry(kind="topup", amount=data.amount.quantize(Decimal("0.01")), note=(data.note or "Top-up")[:255],
+                          created_by_id=current_user.id))
+    # Messages held back for lack of credit can go now
+    from app.models.sms import SmsMessage
+    from sqlalchemy import update
+    await db.execute(update(SmsMessage).where(SmsMessage.status == "blocked", SmsMessage.created_at >= datetime.utcnow() - timedelta(days=2)).values(status="queued", error=None))
+    await db.commit()
+    from app.services.sms.service import kick
+    kick()
+    return {"message": "Credit added", "credit": await credit_status(db)}
+
+
+@router.post("/sms/test")
+async def sms_test(data: TestSmsIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_superuser)):
+    from app.services.sms.service import queue_sms, kick
+    from app.services.sms.text import normalize_phone
+    if not normalize_phone(data.phone):
+        raise HTTPException(400, "Enter a valid Ghana phone number")
+    msg = await queue_sms(db, data.phone, "Kountry Eyecare: test message. SMS is working.", "manual", sent_by_id=current_user.id)
+    await db.commit()
+    from app.services.sms.service import dispatch_queued
+    await dispatch_queued()
+    await db.refresh(msg)
+    return {"status": msg.status, "error": msg.error}

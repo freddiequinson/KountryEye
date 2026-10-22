@@ -14,3 +14,4 @@ from app.models.technician_referral import ReferralDoctor, ExternalReferral, Tec
 from app.models.insurance import InsuranceCompany, InsuranceFeeOverride
 
 from app.models.change_log import ChangeLog
+from app.models.sms import SmsMessage, SmsCampaign, ContactGroup, ContactGroupMember, SmsCreditEntry, ReceiptLink

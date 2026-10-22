@@ -28,6 +28,13 @@ async def seed_permissions_on_startup():
     from app.core.rbac import ensure_rbac
     async with async_session_maker() as db:
         report = await ensure_rbac(db)
+        # Secret the SMS provider must send back with delivery reports
+        import secrets
+        from sqlalchemy import select
+        from app.models.settings import SystemSetting
+        if not (await db.execute(select(SystemSetting).where(SystemSetting.key == "sms.webhook_token"))).scalar_one_or_none():
+            db.add(SystemSetting(key="sms.webhook_token", value=secrets.token_urlsafe(24)))
+            await db.commit()
     if report["permissions_added"] or report["roles_added"]:
         logging.getLogger("app.rbac").warning("RBAC sync: %s", report)
 
@@ -36,7 +43,17 @@ async def seed_permissions_on_startup():
 async def lifespan(app: FastAPI):
     await init_db()
     await seed_permissions_on_startup()
+    if settings.SCHEDULER_ENABLED:
+        from app.services import scheduler
+        scheduler.start()
+    else:
+        # Still send anything left in the queue (e.g. after a restart)
+        from app.services.sms.service import kick
+        kick()
     yield
+    if settings.SCHEDULER_ENABLED:
+        from app.services import scheduler
+        scheduler.stop()
 
 
 app = FastAPI(
@@ -73,6 +90,10 @@ class PublicUploads(StaticFiles):
 app.mount("/uploads", PublicUploads(directory=uploads_dir), name="uploads")
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# Short receipt links sent by SMS (/r/{token}); nginx forwards /r/ to the backend
+from app.api.v1.endpoints.public import receipt_router  # noqa: E402
+app.include_router(receipt_router, tags=["Public"])
 
 # Serve frontend static files in production
 frontend_dir = os.path.join(base_path, "frontend")

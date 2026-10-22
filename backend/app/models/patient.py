@@ -48,6 +48,7 @@ class Patient(Base):
     emergency_contact_phone = Column(String(20))
     nationality = Column(String(100))
     ghana_card = Column(String(50))
+    promo_opt_out = Column(Boolean, default=False)  # no promotions or birthday SMS
 
     branch_id = Column(Integer, ForeignKey("branches.id"))
     
@@ -69,6 +70,7 @@ class Visit(Base):
     notes = Column(Text)
     status = Column(String(20), default="pending_payment")  # pending_payment -> waiting -> in_consultation -> completed
     payment_status = Column(String(20), default="unpaid")  # unpaid, partial, paid
+    next_review_date = Column(Date)  # set by the doctor; drives review reminders
     consultation_fee = Column(Numeric(10, 2), default=0)  # VAT-exclusive
     vat_rate = Column(Numeric(5, 2), nullable=True)
     vat_amount = Column(Numeric(10, 2), default=0)

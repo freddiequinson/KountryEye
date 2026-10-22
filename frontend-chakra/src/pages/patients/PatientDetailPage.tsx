@@ -13,6 +13,7 @@ import {
   Select,
   SimpleGrid,
   Spinner,
+  Switch,
   Stack,
   Tab,
   Table,
@@ -29,8 +30,12 @@ import {
   Tr,
   useColorModeValue,
 } from '@chakra-ui/react'
-import { MdAdd, MdCake, MdCheckCircle, MdContactEmergency, MdCreditCard, MdDescription, MdEdit, MdEmail, MdErrorOutline, MdEvent, MdHistory, MdLocationOn, MdPhone, MdVisibility } from 'react-icons/md'
+import { MdAdd, MdCake, MdCheckCircle, MdContactEmergency, MdCreditCard, MdDescription, MdEdit, MdEmail, MdErrorOutline, MdEvent, MdHistory, MdLocationOn, MdPhone, MdSms, MdVisibility } from 'react-icons/md'
 import api from '@/lib/api'
+import { useAuthStore } from '@/stores/auth'
+import { apiErrorMessage } from '@/lib/errors'
+import { smsInfo } from '@/lib/sms'
+import { hasPermission } from '@/config/nav'
 import { ghs, visitBalance, visitTotal, withVat } from '@/lib/money'
 import { useVatRate } from '@/hooks/use-vat-rate'
 import type { Patient, Visit } from '@/types'
@@ -61,6 +66,7 @@ export default function PatientDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { toast } = useToast()
+  const { user } = useAuthStore()
   const mutedBg = useColorModeValue('secondaryGray.300', 'whiteAlpha.100')
   const infoBg = useColorModeValue('blue.50', 'whiteAlpha.100')
 
@@ -110,6 +116,22 @@ export default function PatientDetailPage() {
   const { data: clinicalRecords = [] } = useQuery({
     queryKey: ['patient-clinical-records', id],
     queryFn: async () => (await api.get(`/clinical/patients/${id}/records`)).data,
+  })
+
+  const [smsOpen, setSmsOpen] = useState(false)
+  const [smsText, setSmsText] = useState('')
+  const optOutMutation = useMutation({
+    mutationFn: (optOut: boolean) => api.put(`/patients/${id}`, { promo_opt_out: optOut }),
+    onSuccess: (_r, optOut) => {
+      queryClient.invalidateQueries({ queryKey: ['patient', id] })
+      toast({ title: optOut ? 'No promotions or birthday texts' : 'Promotions and birthday texts on' })
+    },
+    onError: (e) => toast({ title: 'Could not save', description: apiErrorMessage(e), variant: 'destructive' }),
+  })
+  const smsMutation = useMutation({
+    mutationFn: () => api.post('/sms/send', { patient_id: Number(id), message: smsText }),
+    onSuccess: () => { setSmsOpen(false); setSmsText(''); toast({ title: 'SMS sent' }) },
+    onError: (e) => toast({ title: 'Could not send', description: apiErrorMessage(e), variant: 'destructive' }),
   })
 
   const { data: patientBalance } = useQuery({
@@ -293,11 +315,45 @@ export default function PatientDetailPage() {
 
   return (
     <>
+      <AppModal
+        isOpen={smsOpen}
+        onClose={() => setSmsOpen(false)}
+        title={`Text ${patient.first_name}`}
+        description={patient.phone}
+        footer={
+          <>
+            <Button variant="light" onClick={() => setSmsOpen(false)}>Cancel</Button>
+            <Button variant="brand" leftIcon={<MdSms />} isDisabled={!smsText.trim()} isLoading={smsMutation.isPending} onClick={() => smsMutation.mutate()}>Send</Button>
+          </>
+        }
+      >
+        <Textarea variant="main" rows={4} maxLength={918} value={smsText} onChange={(e) => setSmsText(e.target.value)} placeholder="Kountry Eyecare: ..." />
+        <Text fontSize="sm" color="secondaryGray.600" mt="6px">{smsInfo(smsText).characters} characters · {smsInfo(smsText).segments} SMS</Text>
+      </AppModal>
       <EntityHeader
         name={`${patient.first_name} ${patient.last_name}`}
         subtitle={[patient.sex, patient.date_of_birth && ageOf(patient.date_of_birth), patient.occupation].filter(Boolean).join(' · ') || 'Patient'}
         badges={<Badge variant="outline">{patient.patient_number}</Badge>}
         onBack={() => navigate('/patients')}
+        actions={
+          <>
+            <Flex align="center" gap="8px" px="12px" py="8px" borderRadius="12px" bg="whiteAlpha.200">
+              <Switch
+                size="sm"
+                colorScheme="green"
+                isChecked={!patient.promo_opt_out}
+                isDisabled={!hasPermission(user, ['patients.edit'])}
+                onChange={(e) => optOutMutation.mutate(!e.target.checked)}
+              />
+              <Text fontSize="sm" fontWeight="600">Promotions &amp; birthday texts</Text>
+            </Flex>
+            {hasPermission(user, ['sms.send']) && (
+              <Button variant="light" leftIcon={<MdSms />} isDisabled={!patient.phone} onClick={() => setSmsOpen(true)}>
+                Send SMS
+              </Button>
+            )}
+          </>
+        }
         facts={[
           { icon: MdPhone, label: 'Phone', value: patient.phone || '-' },
           { icon: MdEmail, label: 'Email', value: patient.email || '-' },

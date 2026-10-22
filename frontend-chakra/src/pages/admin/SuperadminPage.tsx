@@ -280,10 +280,10 @@ function SmsSetup() {
                 {margin === null ? 'Set both prices to see your margin.' : `Margin: GH₵${margin.toFixed(4)} per SMS`}
               </Text>
             </FormSection>
-            <FormSection icon={MdStore} title="Shop credit" description="Top-ups, the monthly bill and the overdraft limit arrive with the SMS release.">
-              <Alert status="info" borderRadius="12px" gridColumn={{ md: 'span 2' }}>
-                <AlertIcon />Nothing is sent yet. Sending, delivery reports and the credit wallet come in the next phase.
-              </Alert>
+            <FormSection icon={MdStore} title="Shop credit" description="The shop's prepaid SMS wallet. Sending stops once it goes past the overdraft limit.">
+              <SettingEditor settingKey="sms.credit_overdraft" label="Overdraft limit" kind="money" placeholder="20.00" settings={settings} help="How far below zero the shop can go before all SMS stop." />
+              <SettingEditor settingKey="sms.credit_low_warning" label="Warn the clinic below" kind="money" placeholder="10.00" settings={settings} />
+              <Box gridColumn={{ md: 'span 2' }}><ShopWallet /></Box>
             </FormSection>
           </Stack>
         )
@@ -336,6 +336,118 @@ function TemplatesAndAutomation() {
   )
 }
 
+// ---------- SMS wallet and bill ----------
+
+type SmsSummary = {
+  month: string
+  credit: { balance: number; overdraft_limit: number; can_send: boolean; low: boolean; messages_left: number | null }
+  dry_run: boolean
+  api_key_set: boolean
+  arkesel_balance: Record<string, unknown> | null
+  arkesel_error: string | null
+  messages: number
+  provider_cost: number
+  shop_billed: number
+  margin: number
+  by_status: Record<string, number>
+}
+
+function useSmsSummary(month?: string) {
+  return useQuery({
+    queryKey: ['superadmin-sms-summary', month],
+    queryFn: async () => (await api.get('/superadmin/sms/summary', { params: { month } })).data as SmsSummary,
+  })
+}
+
+const arkeselBalanceText = (b: SmsSummary['arkesel_balance']) => {
+  if (!b) return '—'
+  const sms = b['sms_balance'] ?? b['balance'] ?? b['main_balance']
+  return sms !== undefined ? String(sms) : JSON.stringify(b)
+}
+
+function ShopWallet() {
+  const { toast } = useToast()
+  const client = useQueryClient()
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+  const [testPhone, setTestPhone] = useState('')
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
+  const summary = useSmsSummary(month).data
+  const ledger = useQuery({ queryKey: ['superadmin-sms-ledger'], queryFn: async () => (await api.get('/superadmin/sms/ledger')).data })
+  const topup = useMutation({
+    mutationFn: () => api.post('/superadmin/sms/topup', { amount: parseFloat(amount), note: note || null }),
+    onSuccess: () => {
+      toast({ title: 'Credit added' })
+      setAmount('')
+      setNote('')
+      client.invalidateQueries({ queryKey: ['superadmin-sms-summary'] })
+      client.invalidateQueries({ queryKey: ['superadmin-sms-ledger'] })
+      client.invalidateQueries({ queryKey: ['sms-credit'] })
+    },
+    onError: (e) => toast({ title: 'Could not add credit', description: apiErrorMessage(e), variant: 'destructive' }),
+  })
+  const test = useMutation({
+    mutationFn: () => api.post('/superadmin/sms/test', { phone: testPhone }),
+    onSuccess: (r) => toast({
+      title: r.data.status === 'sent' ? 'Test SMS sent' : r.data.status === 'dry_run' ? 'Test mode: logged, not sent' : `Not sent: ${r.data.status}`,
+      description: r.data.error || undefined,
+      variant: r.data.status === 'failed' || r.data.status === 'blocked' ? 'destructive' : undefined,
+    }),
+    onError: (e) => toast({ title: 'Could not send test', description: apiErrorMessage(e), variant: 'destructive' }),
+  })
+  const c = summary?.credit
+
+  return (
+    <Stack spacing="20px">
+      {summary?.dry_run && (
+        <Alert status="warning" borderRadius="12px">
+          <AlertIcon />
+          {summary.api_key_set ? 'This server is in test mode: messages are logged but not sent.' : 'No API key yet: messages are logged but not sent.'}
+        </Alert>
+      )}
+      <SimpleGrid columns={{ base: 1, md: 2 }} spacing="16px">
+        <StatCard name="Shop credit" value={c ? `GH₵${c.balance.toFixed(2)}` : '…'} icon={MdStore} valueColor={c && !c.can_send ? 'red.500' : c?.low ? 'orange.500' : undefined} helpText={c?.messages_left != null ? `about ${Math.max(c.messages_left, 0)} SMS left` : undefined} />
+        <StatCard name="Arkesel balance" value={summary ? arkeselBalanceText(summary.arkesel_balance) : '…'} icon={MdSms} helpText={summary?.arkesel_error ?? undefined} />
+        <StatCard name={`Shop billed (${month})`} value={summary ? `GH₵${summary.shop_billed.toFixed(2)}` : '…'} icon={MdPayments} helpText={summary ? `${summary.messages} SMS` : undefined} />
+        <StatCard name="Your margin" value={summary ? `GH₵${summary.margin.toFixed(2)}` : '…'} icon={MdPayments} helpText={summary ? `Arkesel cost GH₵${summary.provider_cost.toFixed(2)}` : undefined} />
+      </SimpleGrid>
+      <Flex gap="12px" align="end" wrap="wrap">
+        <Field label="Add credit" w={{ base: '100%', md: '200px' }}>
+          <InputGroup><InputLeftAddon>GH₵</InputLeftAddon><Input variant="main" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></InputGroup>
+        </Field>
+        <Field label="Note" w={{ base: '100%', md: '260px' }}>
+          <Input variant="main" placeholder="MoMo ref 12345" value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+        <Button variant="brand" isDisabled={!(parseFloat(amount) > 0)} isLoading={topup.isPending} onClick={() => topup.mutate()}>Top up</Button>
+        <Field label="Bill for" w="170px" ms={{ md: 'auto' }}>
+          <Input variant="main" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+        </Field>
+      </Flex>
+      {ledger.data?.items?.length > 0 && (
+        <TableBox>
+          <Table size="sm">
+            <Thead><Tr><Th>Top-up</Th><Th>By</Th><Th>Note</Th><Th isNumeric>Amount</Th></Tr></Thead>
+            <Tbody>
+              {ledger.data.items.slice(0, 8).map((r: any) => (
+                <Tr key={r.id}>
+                  <Td whiteSpace="nowrap">{new Date(`${r.created_at}Z`).toLocaleString()}</Td>
+                  <Td>{r.by ?? '—'}</Td>
+                  <Td>{r.note}</Td>
+                  <Td isNumeric fontWeight="700">GH₵{r.amount.toFixed(2)}</Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        </TableBox>
+      )}
+      <Flex gap="8px" align="end" maxW="460px">
+        <Field label="Send a test SMS to"><Input variant="main" placeholder="024 123 4567" value={testPhone} onChange={(e) => setTestPhone(e.target.value)} /></Field>
+        <Button variant="light" isDisabled={testPhone.length < 9} isLoading={test.isPending} onClick={() => test.mutate()}>Send test</Button>
+      </Flex>
+    </Stack>
+  )
+}
+
 // ---------- Overview ----------
 
 function Overview() {
@@ -352,10 +464,22 @@ function Overview() {
         <StatCard name="Active branches" value={d?.branches ?? '…'} icon={MdStore} />
         <StatCard name="Changes today" value={d?.changes_today ?? '…'} icon={MdHistory} />
       </SimpleGrid>
-      <Alert status="info" borderRadius="12px">
-        <AlertIcon />SMS credit, Arkesel balance and delivery numbers will show here once SMS is switched on.
-      </Alert>
+      <SmsOverview />
     </Stack>
+  )
+}
+
+function SmsOverview() {
+  const s = useSmsSummary().data
+  if (!s) return null
+  const failed = (s.by_status['failed'] ?? 0) + (s.by_status['blocked'] ?? 0)
+  return (
+    <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing="16px">
+      <StatCard name="Shop SMS credit" value={`GH₵${s.credit.balance.toFixed(2)}`} icon={MdSms} valueColor={!s.credit.can_send ? 'red.500' : s.credit.low ? 'orange.500' : undefined} />
+      <StatCard name="SMS this month" value={s.messages} icon={MdChat} helpText={s.dry_run ? 'test mode' : undefined} />
+      <StatCard name="Failed or held" value={failed} icon={MdChat} valueColor={failed ? 'red.500' : undefined} />
+      <StatCard name="SMS margin this month" value={`GH₵${s.margin.toFixed(2)}`} icon={MdPayments} />
+    </SimpleGrid>
   )
 }
 

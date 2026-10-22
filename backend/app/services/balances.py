@@ -141,3 +141,43 @@ def apply_payment_to_charge(charge: Charge, amount: Decimal, payment_method: str
         o.paid_amount = new_paid
         o.payment_status = "completed" if new_paid >= charge.total else "partial"
     charge.paid = new_paid
+
+
+async def all_patient_balances(db) -> dict[int, Decimal]:
+    """Outstanding balance per patient, reading each table once (for the debtors list and reminders).
+    Same rules as patient_charges()."""
+    from app.models.patient import Visit
+    from app.models.clinical import Prescription, PrescriptionItem
+    from app.models.sales import Sale
+    from app.models.technician_referral import TechnicianScan, ScanPayment
+
+    owed: dict[int, Decimal] = {}
+
+    def add(pid, amount):
+        if pid and amount > 0:
+            owed[pid] = owed.get(pid, Decimal("0")) + amount
+
+    visit_patient = {}
+    for v in (await db.execute(select(Visit))).scalars().all():
+        visit_patient[v.id] = v.patient_id
+        add(v.patient_id, visit_total(v) - money(v.amount_paid))
+
+    items: dict[int, Decimal] = {}
+    for it in (await db.execute(select(PrescriptionItem))).scalars().all():
+        items[it.prescription_id] = items.get(it.prescription_id, Decimal("0")) + money(it.unit_price) * (it.quantity or 1)
+    for p in (await db.execute(select(Prescription).where(Prescription.status.in_(["pending", "partial", "paid"])))).scalars().all():
+        total = money(items.get(p.id, 0)) + money(p.vat_amount)
+        if total <= 0:
+            continue
+        paid = money(p.amount_paid) if p.amount_paid is not None else (total if p.status == "paid" else Decimal("0"))
+        add(p.patient_id or visit_patient.get(p.visit_id), total - paid)
+
+    for scan, pay in (await db.execute(select(TechnicianScan, ScanPayment).join(ScanPayment, ScanPayment.scan_id == TechnicianScan.id))).all():
+        add(scan.patient_id or visit_patient.get(scan.visit_id), scan_total(pay) - _scan_paid(pay))
+
+    for s in (await db.execute(select(Sale))).scalars().all():
+        if (s.payment_status or "") in ("refunded", "cancelled", "void"):
+            continue
+        add(s.patient_id or visit_patient.get(s.visit_id), money(s.total_amount) - money(s.paid_amount))
+
+    return {pid: amt.quantize(Decimal("0.01")) for pid, amt in owed.items() if amt > Decimal("0.004")}
