@@ -93,17 +93,34 @@ async def queue_sms(db, phone, body: str, category: str, *, name: str | None = N
 
 _lock = asyncio.Lock()
 _pending_task: asyncio.Task | None = None
+_kicked_again = False
 
 
 def kick() -> None:
     """Start sending queued messages soon, without waiting (safe to call often)."""
-    global _pending_task
+    global _pending_task, _kicked_again
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return
     if _pending_task is None or _pending_task.done():
-        _pending_task = loop.create_task(dispatch_queued())
+        _pending_task = loop.create_task(_drain())
+    else:
+        # A run is going; make it go round once more for messages queued meanwhile
+        _kicked_again = True
+
+
+async def _drain() -> None:
+    global _kicked_again
+    while True:
+        _kicked_again = False
+        try:
+            await dispatch_queued()
+        except Exception:
+            log.exception("SMS dispatch failed")
+            return
+        if not _kicked_again:
+            return
 
 
 def _callback_url(token: str | None) -> str | None:
@@ -114,16 +131,28 @@ def _callback_url(token: str | None) -> str | None:
 
 
 async def dispatch_queued(limit: int = 100) -> int:
-    """Send queued messages one by one. Returns how many were processed."""
+    """Send queued messages in batches until none are left. Returns how many were processed."""
+    total, tried = 0, set()
+    while True:
+        done, ids = await _dispatch_batch(limit, tried)
+        total += done
+        if not ids:
+            return total
+        # Each batch skips ids already tried, so a message stuck as queued can't loop forever
+        tried.update(ids)
+
+
+async def _dispatch_batch(limit: int, skip: set) -> tuple[int, list[int]]:
     from app.core.database import async_session_maker
     processed = 0
     async with _lock:
         async with async_session_maker() as db:
-            ids = (await db.execute(
-                select(SmsMessage.id).where(SmsMessage.status == "queued").order_by(SmsMessage.id).limit(limit)
-            )).scalars().all()
+            q = select(SmsMessage.id).where(SmsMessage.status == "queued")
+            if skip:
+                q = q.where(SmsMessage.id.notin_(skip))
+            ids = (await db.execute(q.order_by(SmsMessage.id).limit(limit))).scalars().all()
             if not ids:
-                return 0
+                return 0, []
             api_key = await get_setting(db, "sms.api_key")
             sender = await get_setting(db, "sms.sender_id", "KountryEye")
             rate = await get_decimal(db, "sms.shop_rate", "0")
@@ -153,4 +182,4 @@ async def dispatch_queued(limit: int = 100) -> int:
                         msg.status, msg.error = "failed", str(exc)[:500]
                 await db.commit()
                 processed += 1
-    return processed
+    return processed, list(ids)

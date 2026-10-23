@@ -263,8 +263,8 @@ function PreviewPanel({ preview }: { preview: any }) {
         )}
       </Box>
       <Box>
-        <Text fontSize="sm" color="secondaryGray.600">SMS each</Text>
-        <Text fontSize="xl" fontWeight="700">{preview.segments}</Text>
+        <Text fontSize="sm" color="secondaryGray.600">{preview.total_segments != null ? 'SMS in total' : 'SMS each'}</Text>
+        <Text fontSize="xl" fontWeight="700">{(preview.total_segments ?? preview.segments).toLocaleString()}</Text>
       </Box>
       <Box>
         <Text fontSize="sm" color="secondaryGray.600">Cost</Text>

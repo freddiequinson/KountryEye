@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, update, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import require_permission, has_permission, is_admin
@@ -18,7 +18,8 @@ router = APIRouter()
 
 VIEW = require_permission("lab.view", "lab.manage")
 MANAGE = require_permission("lab.manage")
-COLLECT = require_permission("payments.create", "visits.checkin", "lab.manage")
+# Handing glasses over is a front desk job: they can take the payment first
+COLLECT = require_permission("payments.create")
 DELIVER = require_permission("lab.deliveries")
 DELIVERY_VIEW = require_permission("lab.deliveries", "inventory.receive", "inventory.manage")
 
@@ -47,6 +48,11 @@ class DeliveryIn(BaseModel):
     notes: Optional[str] = Field(default=None, max_length=1000)
 
 
+class CollectIn(BaseModel):
+    # Admin only: hand over with money still owing, with a reason for the audit log
+    override_reason: Optional[str] = Field(default=None, max_length=255)
+
+
 class RejectIn(BaseModel):
     reason: str = Field(min_length=1, max_length=255)
 
@@ -71,6 +77,7 @@ async def _job_rows(db, jobs):
     branches = {b.id: b.name for b in (await db.execute(select(Branch))).scalars()}
     users = {u.id: f"{u.first_name} {u.last_name}" for u in (await db.execute(select(User).where(User.id.in_({j.technician_id for j in jobs if j.technician_id})))).scalars()}
     today = date.today()
+    owing = {j.id: await _glasses_balance(db, j) for j in jobs if j.status == "ready"}
     out = []
     for j in jobs:
         p, rx = patients.get(j.patient_id), rxs.get(j.prescription_id)
@@ -82,7 +89,7 @@ async def _job_rows(db, jobs):
             "estimated_ready_date": j.estimated_ready_date, "technician": users.get(j.technician_id),
             "overdue": j.status in ("received", "in_progress") and j.estimated_ready_date is not None and j.estimated_ready_date < today,
             "created_at": j.created_at, "started_at": j.started_at, "ready_at": j.ready_at, "collected_at": j.collected_at,
-            "notes": j.notes,
+            "notes": j.notes, "balance": float(owing.get(j.id, 0)), "visit_id": j.visit_id,
             "lens": ", ".join(x for x in [rx.lens_type, rx.lens_material, rx.lens_coating] if x) if rx else None,
             "frame": " ".join(x for x in [rx.frame_code, rx.frame_size] if x) if rx else None,
             "rx": {
@@ -171,21 +178,54 @@ async def mark_ready(job_id: int, data: NotesIn | None = None, db: AsyncSession 
     return (await _job_rows(db, [job]))[0]
 
 
+async def _glasses_balance(db, job):
+    """What is still owed on these glasses: the prescription's items plus any POS sale linked to it."""
+    from decimal import Decimal
+    from app.services.balances import patient_charges
+
+    def for_these_glasses(c):
+        if c.kind == "prescription":
+            return c.id == job.prescription_id
+        return c.kind == "sale" and getattr(c.obj, "prescription_id", None) == job.prescription_id
+
+    if not job.patient_id:
+        return Decimal("0")
+    return sum((c.balance for c in await patient_charges(db, job.patient_id) if for_these_glasses(c)), Decimal("0"))
+
+
 @router.post("/jobs/{job_id}/collect")
-async def mark_collected(job_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(COLLECT)):
-    """Front desk hands the glasses over (take any balance at checkout first)."""
+async def mark_collected(job_id: int, data: CollectIn | None = None, db: AsyncSession = Depends(get_db), user: User = Depends(COLLECT)):
+    """Front desk hands the glasses over. Anything owed on them must be paid first."""
+    import json
+    from app.models.audit import AuditLog
     job = await _get_job(db, job_id)
     if job.status != "ready":
         raise HTTPException(400, "Only ready glasses can be collected")
-    job.status = "collected"
-    job.collected_at = datetime.utcnow()
-    job.collected_by_id = user.id
+    owed = await _glasses_balance(db, job)
+    reason = (data.override_reason or "").strip() if data else ""
+    if owed > 0:
+        if not reason:
+            raise HTTPException(409, f"GHS {owed:,.2f} is still owed on these glasses. Take payment at checkout first.")
+        if not is_admin(user):
+            raise HTTPException(403, "Only an admin can hand over glasses that aren't paid for")
+    # Claim the job so two clicks can't both hand it over
+    now = datetime.utcnow()
+    claimed = await db.execute(update(LabJob).where(LabJob.id == job.id, LabJob.status == "ready")
+                               .values(status="collected", collected_at=now, collected_by_id=user.id))
+    if claimed.rowcount != 1:
+        await db.rollback()
+        raise HTTPException(400, "Only ready glasses can be collected")
+    if owed > 0:
+        db.add(AuditLog(user_id=user.id, action="lab_collect_unpaid", entity_type="lab_jobs", entity_id=job.id,
+                        new_values=json.dumps({"balance": str(owed), "reason": reason}),
+                        ip_address=db.info.get("ip"), user_agent=db.info.get("user_agent")))
     from app.models.clinical import Prescription
     rx = await db.get(Prescription, job.prescription_id)
     if rx:
         rx.is_dispensed = True
-        rx.dispensed_at = job.collected_at
+        rx.dispensed_at = now
     await db.commit()
+    await db.refresh(job)
     return (await _job_rows(db, [job]))[0]
 
 
@@ -205,8 +245,8 @@ async def cancel_job(job_id: int, data: NotesIn | None = None, db: AsyncSession 
 
 async def _lens_category_ids(db) -> list[int]:
     from app.models.sales import ProductCategory
-    rows = (await db.execute(select(ProductCategory.id).where(
-        or_(func.lower(ProductCategory.name).like("%lens%"), func.lower(ProductCategory.category_type) == "optical")))).scalars().all()
+    # Only categories named for lenses: other optical stock (frames) is not the lab's to add
+    rows = (await db.execute(select(ProductCategory.id).where(func.lower(ProductCategory.name).like("%lens%")))).scalars().all()
     return list(rows)
 
 
@@ -303,9 +343,10 @@ async def create_delivery(data: DeliveryIn, db: AsyncSession = Depends(get_db), 
     elif not data.branch_id or not await db.get(Branch, data.branch_id):
         raise HTTPException(400, "Choose a branch")
     ids = {i.product_id for i in data.items}
-    found = set((await db.execute(select(Product.id).where(Product.id.in_(ids)))).scalars().all())
+    cats = await _lens_category_ids(db)
+    found = set((await db.execute(select(Product.id).where(Product.id.in_(ids), Product.category_id.in_(cats)))).scalars().all()) if cats else set()
     if found != ids:
-        raise HTTPException(400, "One of the products doesn't exist")
+        raise HTTPException(400, "Deliveries can only contain lens products")
     count = (await db.execute(select(func.count(LensDelivery.id)))).scalar_one() + 1
     d = LensDelivery(delivery_number=f"LD-{date.today():%y%m%d}-{count:04d}", technician_id=user.id,
                      destination_type=data.destination_type,
@@ -331,51 +372,47 @@ async def create_delivery(data: DeliveryIn, db: AsyncSession = Depends(get_db), 
     return (await _delivery_rows(db, [d]))[0]
 
 
-@router.post("/deliveries/{delivery_id}/confirm")
-async def confirm_delivery(delivery_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(DELIVERY_VIEW)):
-    """Count received: stock goes up at the destination only now."""
-    from app.models.sales import BranchStock
-    from app.models.inventory import WarehouseStock
+async def _claim_delivery(db, delivery_id: int, user: User, status: str, action: str, reason: str | None = None) -> LensDelivery:
+    """Move a pending delivery to confirmed/rejected in one UPDATE, so only one request wins."""
     d = await db.get(LensDelivery, delivery_id)
     if not d:
         raise HTTPException(404, "Delivery not found")
     if d.status != "pending":
         raise HTTPException(400, "This delivery was already handled")
     if not _can_confirm(user, d):
-        raise HTTPException(403, "Only staff at the receiving branch (or stock managers) can confirm this")
+        raise HTTPException(403, f"Only staff at the receiving branch (or stock managers) can {action} this")
+    claimed = await db.execute(update(LensDelivery).where(LensDelivery.id == d.id, LensDelivery.status == "pending")
+                               .values(status=status, confirmed_by_id=user.id, confirmed_at=datetime.utcnow(), reject_reason=reason))
+    if claimed.rowcount != 1:
+        await db.rollback()
+        raise HTTPException(400, "This delivery was already handled")
+    return d
+
+
+@router.post("/deliveries/{delivery_id}/confirm")
+async def confirm_delivery(delivery_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(DELIVERY_VIEW)):
+    """Count received: stock goes up at the destination only now."""
+    from app.models.sales import BranchStock
+    from app.models.inventory import WarehouseStock
+    d = await _claim_delivery(db, delivery_id, user, "confirmed", "confirm")
     items = (await db.execute(select(LensDeliveryItem).where(LensDeliveryItem.delivery_id == d.id))).scalars().all()
     for i in items:
         if d.destination_type == "branch":
-            stock = (await db.execute(select(BranchStock).where(BranchStock.branch_id == d.branch_id, BranchStock.product_id == i.product_id))).scalar_one_or_none()
-            if stock:
-                stock.quantity = (stock.quantity or 0) + i.quantity
-            else:
-                db.add(BranchStock(branch_id=d.branch_id, product_id=i.product_id, quantity=i.quantity, min_quantity=5))
+            model, where = BranchStock, (BranchStock.branch_id == d.branch_id, BranchStock.product_id == i.product_id)
+            new_row = dict(branch_id=d.branch_id)
         else:
-            stock = (await db.execute(select(WarehouseStock).where(WarehouseStock.warehouse_id == d.warehouse_id, WarehouseStock.product_id == i.product_id))).scalar_one_or_none()
-            if stock:
-                stock.quantity = (stock.quantity or 0) + i.quantity
-            else:
-                db.add(WarehouseStock(warehouse_id=d.warehouse_id, product_id=i.product_id, quantity=i.quantity, min_quantity=5))
-    d.status = "confirmed"
-    d.confirmed_by_id = user.id
-    d.confirmed_at = datetime.utcnow()
+            model, where = WarehouseStock, (WarehouseStock.warehouse_id == d.warehouse_id, WarehouseStock.product_id == i.product_id)
+            new_row = dict(warehouse_id=d.warehouse_id)
+        # Add in SQL rather than read-then-write, so concurrent stock changes aren't lost
+        bumped = await db.execute(update(model).where(*where).values(quantity=func.coalesce(model.quantity, 0) + i.quantity))
+        if bumped.rowcount == 0:
+            db.add(model(product_id=i.product_id, quantity=i.quantity, min_quantity=5, **new_row))
     await db.commit()
     return {"message": "Delivery received and stock updated"}
 
 
 @router.post("/deliveries/{delivery_id}/reject")
 async def reject_delivery(delivery_id: int, data: RejectIn, db: AsyncSession = Depends(get_db), user: User = Depends(DELIVERY_VIEW)):
-    d = await db.get(LensDelivery, delivery_id)
-    if not d:
-        raise HTTPException(404, "Delivery not found")
-    if d.status != "pending":
-        raise HTTPException(400, "This delivery was already handled")
-    if not _can_confirm(user, d):
-        raise HTTPException(403, "Only staff at the receiving branch (or stock managers) can reject this")
-    d.status = "rejected"
-    d.reject_reason = data.reason
-    d.confirmed_by_id = user.id
-    d.confirmed_at = datetime.utcnow()
+    await _claim_delivery(db, delivery_id, user, "rejected", "reject", data.reason)
     await db.commit()
     return {"message": "Delivery rejected"}

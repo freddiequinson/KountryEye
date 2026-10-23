@@ -28,13 +28,19 @@ async def resolve_audience(db, audience: dict, *, respect_opt_out: bool = True) 
     kind = (audience or {}).get("type", "filters")
     out, seen = [], set()
     skipped_opt_out = skipped_no_phone = 0
+    # Numbers of opted-out patients, so pasted numbers and phone-only group members are skipped too
+    opted_out = set()
+    if respect_opt_out:
+        for raw in (await db.execute(select(Patient.phone).where(Patient.promo_opt_out.is_(True)))).scalars():
+            if normalize_phone(raw):
+                opted_out.add(normalize_phone(raw))
 
     def push(phone, name, patient=None):
         nonlocal skipped_opt_out, skipped_no_phone
-        if patient is not None and respect_opt_out and patient.promo_opt_out:
+        number = normalize_phone(phone)
+        if respect_opt_out and ((patient is not None and patient.promo_opt_out) or (number and number in opted_out)):
             skipped_opt_out += 1
             return
-        number = normalize_phone(phone)
         if not number:
             skipped_no_phone += 1
             return
@@ -44,9 +50,16 @@ async def resolve_audience(db, audience: dict, *, respect_opt_out: bool = True) 
         out.append({"phone": number, "name": name, "patient": patient})
 
     if kind == "numbers":
-        for raw in re.split(r"[\s,;]+", str(audience.get("numbers") or "")):
-            if raw.strip():
-                push(raw, None)
+        for chunk in re.split(r"[\n,;]+", str(audience.get("numbers") or "")):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            # "+233 24 512 3002" is one number; "0244111222 0244333444" is two
+            if normalize_phone(re.sub(r"[\s-]", "", chunk)):
+                push(chunk, None)
+            else:
+                for raw in chunk.split():
+                    push(raw, None)
     elif kind == "group":
         members = (await db.execute(select(ContactGroupMember).where(ContactGroupMember.group_id == int(audience.get("group_id") or 0)))).scalars().all()
         patients = {}

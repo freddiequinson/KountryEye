@@ -66,6 +66,17 @@ def _cost(info: dict, rate: Decimal, recipients: int) -> float:
     return float((rate * info["segments"] * recipients).quantize(Decimal("0.01")))
 
 
+def campaign_body(message: str, recipient: dict) -> str:
+    """The text a recipient actually gets (placeholders filled)."""
+    p = recipient.get("patient")
+    return message.replace("{first_name}", p.first_name if p else "").strip()
+
+
+def audience_segments(message: str, recipients: list[dict]) -> int:
+    """Total segments across all recipients, after their placeholders are filled."""
+    return sum(sms_info(campaign_body(message, r))["segments"] for r in recipients)
+
+
 @router.get("/credit")
 async def get_credit(db: AsyncSession = Depends(get_db), user: User = Depends(ANY_SMS)):
     return await credit_status(db)
@@ -123,7 +134,12 @@ async def preview(data: PreviewIn, db: AsyncSession = Depends(get_db), user: Use
         result = {"recipients": len(aud["recipients"]), "skipped_opt_out": aud["skipped_opt_out"],
                   "skipped_no_phone": aud["skipped_no_phone"],
                   "sample": [r["name"] or r["phone"] for r in aud["recipients"][:5]]}
-    cost = _cost(info, rate, max(result["recipients"], 1 if not data.audience else 0))
+    if data.audience:
+        segments = audience_segments(data.message, aud["recipients"])
+        result["total_segments"] = segments
+        cost = float((rate * segments).quantize(Decimal("0.01")))
+    else:
+        cost = _cost(info, rate, 1)
     after = credit["balance"] - cost
     return {**info, **result, "cost": cost, "shop_rate": float(rate), "credit": credit["balance"],
             "credit_after": round(after, 2), "within_credit": after >= -credit["overdraft_limit"]}
@@ -133,16 +149,17 @@ async def run_campaign(db, campaign: SmsCampaign) -> None:
     """Queue every recipient of a campaign (caller commits and kicks)."""
     aud = await resolve_audience(db, json.loads(campaign.audience))
     rate = await get_decimal(db, "sms.shop_rate", "0")
-    info = sms_info(campaign.message)
-    queued = 0
+    queued = segments = 0
     for r in aud["recipients"]:
         p = r["patient"]
-        body = campaign.message.replace("{first_name}", p.first_name if p else "").strip()
-        msg = await queue_sms(db, r["phone"], body, "promo", name=r["name"], patient=p, campaign_id=campaign.id,
-                              sent_by_id=campaign.created_by_id, dedupe_key=f"campaign:{campaign.id}:{r['phone']}")
-        queued += 1 if msg else 0
+        msg = await queue_sms(db, r["phone"], campaign_body(campaign.message, r), "promo", name=r["name"], patient=p,
+                              campaign_id=campaign.id, sent_by_id=campaign.created_by_id,
+                              dedupe_key=f"campaign:{campaign.id}:{r['phone']}")
+        if msg:
+            queued += 1
+            segments += msg.segments
     campaign.recipients = queued
-    campaign.shop_cost = rate * info["segments"] * queued
+    campaign.shop_cost = rate * segments
     campaign.status = "sent"
     campaign.finished_at = datetime.utcnow()
 
@@ -172,8 +189,8 @@ async def create_campaign(data: CampaignIn, db: AsyncSession = Depends(get_db), 
     aud = await resolve_audience(db, data.audience)
     if not aud["recipients"]:
         raise HTTPException(400, "Nobody matches this audience")
-    info = sms_info(data.message)
-    cost = _cost(info, await get_decimal(db, "sms.shop_rate", "0"), len(aud["recipients"]))
+    rate = await get_decimal(db, "sms.shop_rate", "0")
+    cost = float((rate * audience_segments(data.message, aud["recipients"])).quantize(Decimal("0.01")))
     if credit["balance"] - cost < -credit["overdraft_limit"]:
         raise HTTPException(402, f"Not enough SMS credit: this costs GHS {cost:.2f}, credit is GHS {credit['balance']:.2f}")
     later = data.scheduled_at and data.scheduled_at.replace(tzinfo=None) > datetime.utcnow() + timedelta(minutes=1)

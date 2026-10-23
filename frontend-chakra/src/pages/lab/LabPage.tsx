@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Badge,
   Box,
@@ -28,7 +28,8 @@ import api from '@/lib/api'
 import { apiErrorMessage } from '@/lib/errors'
 import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/stores/auth'
-import { hasPermission } from '@/config/nav'
+import { getUserRole, hasPermission } from '@/config/nav'
+import { ghs } from '@/lib/money'
 import PageHeader from '@/components/PageHeader'
 import TabCard from '@/components/card/TabCard'
 import StatCard from '@/components/card/StatCard'
@@ -49,6 +50,8 @@ type Job = {
   ready_at?: string | null
   collected_at?: string | null
   notes?: string | null
+  balance?: number
+  visit_id?: number | null
   lens?: string | null
   frame?: string | null
   rx?: {
@@ -112,13 +115,18 @@ function RxTable({ rx }: { rx: NonNullable<Job['rx']> }) {
 
 function JobDetail({ job, onClose, canManage, canCollect }: { job: Job | null; onClose: () => void; canManage: boolean; canCollect: boolean }) {
   const action = useJobAction()
+  const navigate = useNavigate()
+  const { user } = useAuthStore()
   const [date, setDate] = useState('')
+  const [reason, setReason] = useState('')
   if (!job) return null
   const working = job.status === 'received' || job.status === 'in_progress'
+  const owing = job.status === 'ready' && (job.balance ?? 0) > 0
+  const close = () => { setReason(''); onClose() }
   return (
     <AppModal
       isOpen={!!job}
-      onClose={onClose}
+      onClose={close}
       size="2xl"
       title={<Flex align="center" gap="10px">{job.patient_name}<Badge colorScheme={STATUS[job.status].color}>{STATUS[job.status].label}</Badge>{job.overdue && <Badge colorScheme="red">Overdue</Badge>}</Flex>}
       description={`${job.job_number} · ${job.patient_phone || 'no phone'} · pickup at ${job.pickup_branch || '—'}`}
@@ -130,8 +138,11 @@ function JobDetail({ job, onClose, canManage, canCollect }: { job: Job | null; o
           {canManage && job.status === 'in_progress' && (
             <Button variant="brand" leftIcon={<MdCheck />} isLoading={action.isPending} onClick={() => action.mutate({ id: job.id, action: 'ready' }, { onSuccess: onClose })}>Glasses are ready</Button>
           )}
-          {canCollect && job.status === 'ready' && (
-            <Button variant="brand" leftIcon={<MdCheck />} isLoading={action.isPending} onClick={() => action.mutate({ id: job.id, action: 'collect' }, { onSuccess: onClose })}>Handed to patient</Button>
+          {canCollect && owing && job.visit_id && (
+            <Button variant="brand" onClick={() => navigate(`/frontdesk/checkout/${job.visit_id}`)}>Take payment</Button>
+          )}
+          {canCollect && job.status === 'ready' && !owing && (
+            <Button variant="brand" leftIcon={<MdCheck />} isLoading={action.isPending} onClick={() => action.mutate({ id: job.id, action: 'collect' }, { onSuccess: close })}>Handed to patient</Button>
           )}
         </>
       }
@@ -147,6 +158,21 @@ function JobDetail({ job, onClose, canManage, canCollect }: { job: Job | null; o
           <Box gridColumn={{ base: 'span 2', md: 'span 2' }}><Text color="secondaryGray.600">Frame</Text><Text fontWeight="700">{job.frame || '—'}</Text></Box>
         </SimpleGrid>
         {job.rx?.remarks && <Text fontSize="sm"><b>Doctor's remarks:</b> {job.rx.remarks}</Text>}
+        {owing && (
+          <Box p="16px" borderRadius="14px" bg="orange.50" _dark={{ bg: 'rgba(221,107,32,0.15)' }}>
+            <Text fontWeight="700">{ghs(job.balance)} still owed on these glasses</Text>
+            <Text fontSize="sm" color="secondaryGray.600">Take payment at checkout before handing them over.</Text>
+            {canCollect && getUserRole(user) === 'admin' && (
+              <Flex gap="8px" mt="12px" wrap="wrap">
+                <Input variant="main" size="sm" flex="1" minW="200px" placeholder="Reason to hand over unpaid (saved in the audit log)" value={reason} onChange={(e) => setReason(e.target.value)} />
+                <Button size="sm" variant="light" colorScheme="orange" isDisabled={!reason.trim()} isLoading={action.isPending}
+                  onClick={() => action.mutate({ id: job.id, action: 'collect', body: { override_reason: reason.trim() } }, { onSuccess: close })}>
+                  Hand over unpaid
+                </Button>
+              </Flex>
+            )}
+          </Box>
+        )}
         {canManage && working && (
           <Box p="16px" borderRadius="14px" bg="brand.50" _dark={{ bg: 'whiteAlpha.100' }}>
             <Text fontWeight="700" mb="8px">{job.status === 'received' ? 'Start work: when will it be ready?' : `Ready by ${day(job.estimated_ready_date)}. Change the date?`}</Text>
@@ -172,9 +198,10 @@ function JobDetail({ job, onClose, canManage, canCollect }: { job: Job | null; o
 export function LabJobsTable({ status, compact = false }: { status: string; compact?: boolean }) {
   const { user } = useAuthStore()
   const canManage = hasPermission(user, ['lab.manage'])
-  const canCollect = hasPermission(user, ['payments.create', 'visits.checkin', 'lab.manage'])
+  const canCollect = hasPermission(user, ['payments.create'])
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState<Job | null>(null)
+  const navigate = useNavigate()
   const action = useJobAction()
   const { data, isLoading } = useJobs(status, search)
   const rows = data?.items ?? []
@@ -193,9 +220,15 @@ export function LabJobsTable({ status, compact = false }: { status: string; comp
                 <Td><Text>{j.job_number}</Text><Text fontSize="sm" color="secondaryGray.600">{j.pickup_branch}</Text></Td>
                 <Td maxW="240px"><Text noOfLines={1}>{j.lens || '—'}</Text><Text fontSize="sm" color="secondaryGray.600" noOfLines={1}>{j.frame}</Text></Td>
                 <Td whiteSpace="nowrap" color={j.overdue ? 'red.500' : undefined} fontWeight={j.overdue ? '700' : undefined}>{day(j.estimated_ready_date)}{j.overdue && ' · overdue'}</Td>
-                <Td><Badge colorScheme={STATUS[j.status].color}>{STATUS[j.status].label}</Badge></Td>
+                <Td>
+                  <Badge colorScheme={STATUS[j.status].color}>{STATUS[j.status].label}</Badge>
+                  {j.status === 'ready' && (j.balance ?? 0) > 0 && <Text fontSize="sm" color="orange.500" fontWeight="700" mt="4px" whiteSpace="nowrap">Owes {ghs(j.balance)}</Text>}
+                </Td>
                 <Td textAlign="right" whiteSpace="nowrap">
-                  {canCollect && j.status === 'ready' && (
+                  {canCollect && j.status === 'ready' && (j.balance ?? 0) > 0 && (
+                    <Button size="sm" variant="light" me="8px" onClick={() => (j.visit_id ? navigate(`/frontdesk/checkout/${j.visit_id}`) : setOpen(j))}>Take payment</Button>
+                  )}
+                  {canCollect && j.status === 'ready' && !((j.balance ?? 0) > 0) && (
                     <Button size="sm" variant="brand" me="8px" isLoading={action.isPending && action.variables?.id === j.id} onClick={() => action.mutate({ id: j.id, action: 'collect' })}>Collected</Button>
                   )}
                   {canManage && j.status === 'in_progress' && (
