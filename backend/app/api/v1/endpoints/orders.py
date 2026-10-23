@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.database import get_db
-from app.api.v1.deps import get_current_active_user
+from app.api.v1.deps import has_permission, get_current_active_user
 from app.models.user import User
 from app.models.orders import GlassesOrder, OrderStatusHistory
 
@@ -34,9 +34,9 @@ class GlassesOrderCreate(BaseModel):
     axis_os: Optional[str] = None
     add_os: Optional[str] = None
     pd: Optional[str] = None
-    lens_price: float = 0
-    frame_price: float = 0
-    deposit_paid: float = 0
+    lens_price: float = Field(default=0, ge=0, le=10_000_000, allow_inf_nan=False)
+    frame_price: float = Field(default=0, ge=0, le=10_000_000, allow_inf_nan=False)
+    deposit_paid: float = Field(default=0, ge=0, le=10_000_000, allow_inf_nan=False)
     expected_date: Optional[date] = None
     notes: Optional[str] = None
     special_instructions: Optional[str] = None
@@ -59,8 +59,15 @@ async def create_glasses_order(
     count = count_result.scalar() or 0
     order_number = f"GO-{today.strftime('%Y%m%d')}-{count + 1:04d}"
     
-    total_price = data.lens_price + data.frame_price
-    balance = total_price - data.deposit_paid
+    from decimal import Decimal
+    from app.services.billing import money
+    total_price = money(data.lens_price) + money(data.frame_price)
+    deposit = money(data.deposit_paid)
+    if deposit > 0 and not has_permission(current_user, "payments.create"):
+        raise HTTPException(status_code=403, detail="You don't have permission to take payments")
+    if deposit > total_price:
+        raise HTTPException(status_code=400, detail="The deposit can't be more than the order total")
+    balance = total_price - deposit
     
     order = GlassesOrder(
         order_number=order_number,
@@ -86,7 +93,7 @@ async def create_glasses_order(
         lens_price=data.lens_price,
         frame_price=data.frame_price,
         total_price=total_price,
-        deposit_paid=data.deposit_paid,
+        deposit_paid=deposit,
         balance=balance,
         expected_date=data.expected_date,
         notes=data.notes,
@@ -106,10 +113,16 @@ async def create_glasses_order(
         updated_by_id=current_user.id
     )
     db.add(history)
-    
+    if deposit > 0:
+        # A deposit is money received: record it like any other payment
+        from app.models.revenue import Revenue
+        db.add(Revenue(category="sale", description=f"Glasses order deposit ({order_number})", amount=deposit,
+                       payment_method="cash", reference_type="glasses_order", reference_id=order.id,
+                       patient_id=order.patient_id, branch_id=order.branch_id, recorded_by_id=current_user.id))
+
     await db.commit()
     await db.refresh(order)
-    
+
     return order
 
 
@@ -273,7 +286,14 @@ async def update_order_status(
     
     if new_status not in ["pending", "in_production", "ready", "delivered", "cancelled"]:
         raise HTTPException(status_code=400, detail="Invalid status")
-    
+    if order.status in ("delivered", "cancelled"):
+        raise HTTPException(status_code=400, detail="This order is closed")
+    if new_status == "delivered":
+        from app.services.billing import money
+        owed = money(order.total_price) - money(order.deposit_paid)
+        if owed > 0:
+            raise HTTPException(status_code=409, detail=f"GHS {owed:,.2f} is still owed on this order. Take payment first.")
+
     order.status = new_status
     
     if new_status == "ready":
@@ -314,12 +334,18 @@ async def record_order_payment(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    amount = Decimal(str(data.get("amount", 0)))
-    payment_method = data.get("payment_method", "cash")
-    
-    if amount <= 0:
-        raise HTTPException(status_code=400, detail="Payment amount must be positive")
-    
+    from app.services.billing import parse_amount, lock_for_payment, money
+    if not has_permission(current_user, "payments.create"):
+        raise HTTPException(status_code=403, detail="You don't have permission to take payments")
+    await lock_for_payment(db, order)
+    if order.status in ("cancelled",):
+        raise HTTPException(status_code=400, detail="This order was cancelled")
+    owed = money(order.total_price) - money(order.deposit_paid)
+    if owed <= 0:
+        raise HTTPException(status_code=400, detail="This order is already fully paid")
+    amount = min(parse_amount(data.get("amount"), owed), owed)  # anything above the balance is change
+    payment_method = str(data.get("payment_method") or "cash")[:50]
+
     current_paid = order.deposit_paid or Decimal("0")
     new_paid = current_paid + amount
     order.deposit_paid = new_paid

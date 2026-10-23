@@ -6,6 +6,7 @@ import { BrowserRouter } from 'react-router-dom'
 import theme from './theme/theme'
 import App from './App'
 import { apiErrorMessage } from './lib/errors'
+import { clearOnAccountChange } from './lib/session-cleanup'
 
 const { ToastContainer, toast } = createStandaloneToast({ theme })
 
@@ -24,6 +25,9 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+// One person's patients and messages must never show for the next person on this browser
+clearOnAccountChange(queryClient)
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

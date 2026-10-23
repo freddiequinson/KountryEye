@@ -77,6 +77,8 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
     must_change_password = Column(Boolean, default=True, info={"backfill": False})  # Force password change on first login
+    # Goes up when the password changes or the account is switched off; older tokens stop working
+    token_version = Column(Integer, default=0, server_default="0", info={"backfill": 0})
     
     role_id = Column(Integer, ForeignKey("roles.id"))
     branch_id = Column(Integer, ForeignKey("branches.id"))  # Primary branch
@@ -118,3 +120,38 @@ class BranchAssignment(Base):
     user = relationship("User", back_populates="branch_assignments", foreign_keys=[user_id])
     branch = relationship("Branch")
     assigned_by = relationship("User", foreign_keys=[assigned_by_id])
+
+
+# ---------- sign everyone out of an account when its password or status changes ----------
+from sqlalchemy import event, inspect as _inspect
+from sqlalchemy.orm import Session as _Session
+
+
+# Called with the ids of accounts just signed out (e.g. to close their live chat sockets)
+REVOKE_LISTENERS: list = []
+
+
+@event.listens_for(_Session, "before_flush")
+def _bump_token_version(session, flush_context, instances):
+    for obj in session.dirty:
+        if not isinstance(obj, User):
+            continue
+        state = _inspect(obj)
+        if any(state.attrs[name].history.has_changes() for name in ("hashed_password", "is_active")):
+            obj.token_version = (obj.token_version or 0) + 1
+            session.info.setdefault("revoked_users", set()).add(obj.id)
+
+
+@event.listens_for(_Session, "after_commit")
+def _announce_revoked(session):
+    ids = session.info.pop("revoked_users", None)
+    for listener in REVOKE_LISTENERS if ids else ():
+        try:
+            listener(ids)
+        except Exception:
+            pass
+
+
+@event.listens_for(_Session, "after_rollback")
+def _forget_revoked(session):
+    session.info.pop("revoked_users", None)

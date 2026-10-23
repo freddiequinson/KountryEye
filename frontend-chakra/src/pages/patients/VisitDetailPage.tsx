@@ -29,6 +29,8 @@ import SectionCard from '@/components/card/SectionCard'
 import { TabbedSections } from '@/components/card/TabCard'
 import { RowBox } from '@/components/dashboard/widgets'
 import { EmptyState } from '@/components/ui'
+import { useAuthStore } from '@/stores/auth'
+import { hasPermission } from '@/config/nav'
 
 const paidScheme = (status: string) => (status === 'paid' ? 'green' : 'gray')
 
@@ -234,7 +236,11 @@ export default function VisitDetailPage() {
               </TabbedSections>
             ) : (
               <Card>
-                <EmptyState>No clinical record found for this visit</EmptyState>
+                <EmptyState>
+                  {hasPermission(useAuthStore.getState().user, ['clinical.view', 'clinical.queue', 'prescriptions.view'])
+                    ? 'No clinical record found for this visit'
+                    : "Only clinical staff can see the doctor's notes"}
+                </EmptyState>
               </Card>
             )}
           </TabPanel>

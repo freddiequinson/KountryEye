@@ -1,30 +1,34 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.payment import PaymentStatus, PaymentMethod
 
 
+# Money fields: finite, not negative, sensible upper bound
+Money = lambda **kw: Field(ge=0, le=10_000_000, max_digits=12, decimal_places=2, allow_inf_nan=False, **kw)
+
+
 class InvoiceItemCreate(BaseModel):
-    description: str
-    quantity: int = 1
-    unit_price: Decimal
-    
+    description: str = Field(min_length=1, max_length=255)
+    quantity: int = Field(default=1, gt=0, le=10_000)
+    unit_price: Decimal = Money()
+
 
 class InvoiceCreate(BaseModel):
     visit_id: Optional[int] = None
     patient_id: int
-    items: List[InvoiceItemCreate] = []
-    discount: Decimal = Decimal("0")
-    tax: Decimal = Decimal("0")
-    notes: Optional[str] = None
+    items: List[InvoiceItemCreate] = Field(min_length=1, max_length=200)
+    discount: Decimal = Money(default=Decimal("0"))
+    tax: Decimal = Money(default=Decimal("0"))
+    notes: Optional[str] = Field(default=None, max_length=1000)
 
 
 class InvoiceUpdate(BaseModel):
-    discount: Optional[Decimal] = None
-    tax: Optional[Decimal] = None
-    notes: Optional[str] = None
+    discount: Optional[Decimal] = Money(default=None)
+    tax: Optional[Decimal] = Money(default=None)
+    notes: Optional[str] = Field(default=None, max_length=1000)
 
 
 class InvoiceResponse(BaseModel):
@@ -50,7 +54,7 @@ class InvoiceResponse(BaseModel):
 
 class PaymentCreate(BaseModel):
     invoice_id: int
-    amount: Decimal
+    amount: Decimal = Field(gt=0, le=10_000_000, max_digits=12, decimal_places=2, allow_inf_nan=False)
     payment_method: PaymentMethod
     reference: Optional[str] = None
     notes: Optional[str] = None

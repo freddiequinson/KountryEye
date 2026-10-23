@@ -39,17 +39,22 @@ venv/bin/pip install -q --upgrade pip
 venv/bin/pip install -q -r requirements.txt
 
 ENV="$STAGING/backend/.env"
+set_env() { sed -i "/^$1=/d" "$ENV"; echo "$1=$2" >> "$ENV"; }
 if [ ! -f "$ENV" ]; then
   # Start from prod's settings (AI keys etc.), then override what must differ.
   [ -f "$PROD/backend/.env" ] && cp "$PROD/backend/.env" "$ENV" || touch "$ENV"
-  set_env() { sed -i "/^$1=/d" "$ENV"; echo "$1=$2" >> "$ENV"; }
   # Different secret: prod logins/tokens and staging ones never mix.
   set_env SECRET_KEY "$(openssl rand -hex 32)"
   set_env DATABASE_URL "sqlite+aiosqlite:///$STAGING/backend/data/kountry_eyecare.db"
   set_env FRONTEND_URL "http://$(curl -s ifconfig.me):$PORT"
   set_env PROJECT_NAME "Kountry Eyecare (STAGING)"
-  echo "Created $ENV (SMTP copied from prod if it was set there)."
+  echo "Created $ENV."
 fi
+# Every deploy: staging has a copy of real patients, so it must never text or email them
+set_env SMS_DRY_RUN 1
+set_env SCHEDULER_ENABLED 0
+set_env SMTP_HOST ""
+set_env TRUSTED_PROXIES 127.0.0.1
 mkdir -p data uploads
 chown -R www-data:www-data "$STAGING/backend/data" "$STAGING/backend/uploads" "$ENV"
 

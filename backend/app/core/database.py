@@ -14,7 +14,8 @@ class Base(DeclarativeBase):
 
 async def get_db(request: Request):
     async with async_session_maker() as session:
-        session.info.update(ip=request.client.host if request.client else None, user_agent=request.headers.get("user-agent", "")[:255])
+        from app.core.ratelimit import client_ip
+        session.info.update(ip=client_ip(request), user_agent=request.headers.get("user-agent", "")[:255])
         try:
             yield session
         finally:

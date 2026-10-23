@@ -37,7 +37,9 @@ export default function ProfilePage() {
 
   const changePasswordMutation = useMutation({
     mutationFn: (data: any) => api.post('/users/me/change-password', data),
-    onSuccess: () => {
+    onSuccess: (r) => {
+      // Other devices are signed out; this browser keeps working with the new token
+      if (r.data?.access_token) useAuthStore.setState({ token: r.data.access_token })
       toast({ title: 'Password changed successfully' })
       setIsPasswordDialogOpen(false)
       setPasswordForm({ current_password: '', new_password: '', confirm_password: '' })

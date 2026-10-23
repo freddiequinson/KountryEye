@@ -61,7 +61,7 @@ uvicorn app.main:app --reload
 
 After running `seed_data.py`:
 - **Email**: admin@kountryeyecare.com
-- **Password**: admin123
+- **Password**: a random one, printed once by the script. You must change it at first login.
 
 ### Frontend Setup
 

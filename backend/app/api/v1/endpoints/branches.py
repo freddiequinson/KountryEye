@@ -151,7 +151,10 @@ async def get_user_assignment_history(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get branch assignment history for a user"""
+    """Get branch assignment history for a user (your own, or anyone's if you manage staff)"""
+    from app.api.v1.deps import has_permission
+    if user_id != current_user.id and not has_permission(current_user, "employees.view", "employees.manage"):
+        raise HTTPException(status_code=403, detail="You can only see your own branch history")
     result = await db.execute(
         select(BranchAssignmentHistory)
         .where(BranchAssignmentHistory.user_id == user_id)

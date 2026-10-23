@@ -9,12 +9,12 @@ import jwt  # PyJWT
 from app.core.config import settings
 
 
-def create_access_token(subject: Union[str, Any], expires_delta: timedelta = None) -> str:
+def create_access_token(subject: Union[str, Any], expires_delta: timedelta = None, version: int = 0) -> str:
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode = {"exp": expire, "sub": str(subject)}
+    to_encode = {"exp": expire, "sub": str(subject), "ver": int(version or 0)}
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
@@ -38,15 +38,25 @@ def get_password_hash(password: str) -> str:
     return salt + pwdhash.hex()
 
 
-def decode_token(token: str) -> Optional[str]:
+def decode_access_token(token: str) -> Optional[dict]:
+    """Claims of a valid login token, or None. Reset links and other purpose tokens never count."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        # Purpose-scoped tokens (e.g. password reset) must never authenticate API requests
-        if payload.get("purpose"):
-            return None
-        return payload.get("sub")
     except jwt.PyJWTError:
         return None
+    if payload.get("purpose") or not payload.get("sub"):
+        return None
+    return payload
+
+
+def decode_token(token: str) -> Optional[str]:
+    payload = decode_access_token(token)
+    return payload.get("sub") if payload else None
+
+
+def token_is_current(payload: dict, user) -> bool:
+    """False once the password changed or the account was switched off after this token was issued."""
+    return int(payload.get("ver", 0) or 0) == int(getattr(user, "token_version", 0) or 0)
 
 
 RESET_PURPOSE = "pwd_reset"

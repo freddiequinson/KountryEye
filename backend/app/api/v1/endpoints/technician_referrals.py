@@ -2042,7 +2042,9 @@ async def mark_scan_paid(
     
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
-    
+    from app.services.billing import lock_for_payment
+    await lock_for_payment(db, scan)
+
     # Get pricing
     price_result = await db.execute(
         select(ScanPricing).where(ScanPricing.scan_type == scan.scan_type)

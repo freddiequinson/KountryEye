@@ -1,12 +1,12 @@
 from typing import Set
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.core.security import decode_token
+from app.core.security import decode_access_token, token_is_current
 from app.models.user import User, Role
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -37,24 +37,31 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    user_id = decode_token(token)
-    if user_id is None:
+    payload = decode_access_token(token)
+    if payload is None:
         raise credentials_exception
     try:
-        user = await load_user(db, int(user_id))
-    except ValueError:
+        user = await load_user(db, int(payload["sub"]))
+    except (ValueError, TypeError):
         raise credentials_exception
-    if user is None:
+    if user is None or not token_is_current(payload, user):
         raise credentials_exception
     db.info["actor_id"] = user.id
     return user
 
 
+# What an account with a temporary password may still do: see itself, change the password
+PASSWORD_CHANGE_ALLOWED = {"/api/v1/auth/change-password", "/api/v1/users/me"}
+
+
 async def get_current_active_user(
+    request: Request,
     current_user: User = Depends(get_current_user)
 ) -> User:
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+    if current_user.must_change_password and request.url.path not in PASSWORD_CHANGE_ALLOWED:
+        raise HTTPException(status_code=403, detail="Change your temporary password first")
     return current_user
 
 
@@ -107,16 +114,26 @@ async def require_admin(current_user: User = Depends(get_current_active_user)) -
     return current_user
 
 
-def module_gate(read: tuple[str, ...], write: tuple[str, ...] | None = None):
+def module_gate(read: tuple[str, ...], write: tuple[str, ...] | None = None, prefix: str | None = None):
     """Router-level dependency. GET/HEAD need one of `read`; other methods need one of `write`.
-    Superadmins always pass. Finer checks live on individual routes."""
+    Superadmins always pass. With `prefix`, the route's own entry in
+    core/route_permissions.py decides instead (see that file)."""
     from fastapi import Request
+    from app.core.config import settings
+    from app.core.route_permissions import ROUTE_PERMISSIONS
     write = write if write is not None else read
+    table = ROUTE_PERMISSIONS.get(prefix or "", {})
+    base = settings.API_V1_STR + (prefix or "")
 
     async def gate(request: Request, current_user: User = Depends(get_current_active_user)) -> User:
         if current_user.is_superuser:
             return current_user
-        codes = read if request.method in ("GET", "HEAD", "OPTIONS") else write
+        route = request.scope.get("route")
+        path = getattr(route, "path", "")
+        key = (request.method, path[len(base):] if path.startswith(base) else path)
+        codes = table.get(key) if key in table else None
+        if codes is None:
+            codes = read if request.method in ("GET", "HEAD", "OPTIONS") else write
         if codes and not has_permission(current_user, *codes):
             raise HTTPException(status_code=403, detail="You don't have permission to do this")
         return current_user

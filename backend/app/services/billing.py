@@ -20,17 +20,37 @@ def visit_balance(visit) -> Decimal:
     return max(visit_total(visit) - money(visit.amount_paid), Decimal("0.00"))
 
 
+# Largest single payment we accept; anything bigger is a typo or tampering
+MAX_PAYMENT = Decimal("10000000")
+
+
 def parse_amount(raw, default: Decimal) -> Decimal:
     from fastapi import HTTPException
     if raw in (None, ""):
         return default
     try:
-        value = money(raw)
+        value = Decimal(str(raw))
+        if not value.is_finite():
+            raise ValueError
+        value = money(value)
     except Exception:
         raise HTTPException(status_code=400, detail="Amount must be a number")
     if value <= 0:
         raise HTTPException(status_code=400, detail="Payment amount must be greater than 0")
+    if value > MAX_PAYMENT:
+        raise HTTPException(status_code=400, detail="Payment amount is too large")
     return value
+
+
+async def lock_for_payment(db, obj) -> None:
+    """Take the write lock on this row, then reload it.
+
+    Two payments for the same charge then run one after the other, and the second
+    sees the first one's amount instead of the old balance."""
+    from sqlalchemy import update
+    table = obj.__table__
+    await db.execute(update(table).where(table.c.id == obj.id).values(id=obj.id))
+    await db.refresh(obj)
 
 
 def visit_money(visit) -> dict:

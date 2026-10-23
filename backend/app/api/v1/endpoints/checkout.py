@@ -179,13 +179,15 @@ async def process_visit_checkout(
     consultation first, then prescriptions, scans and products."""
     from app.services.balances import visit_charges, apply_payment_to_charge, PAY_ORDER, REVENUE_CATEGORY, REFERENCE_TYPE
     from app.services.vat import vat_share
-    from app.services.billing import parse_amount
+    from app.services.billing import parse_amount, lock_for_payment
 
     visit = (await db.execute(
         select(Visit).options(selectinload(Visit.patient)).where(Visit.id == visit_id)
     )).scalar_one_or_none()
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")
+    # Lock before reading balances so two checkouts can't both pay the same charge
+    await lock_for_payment(db, visit)
 
     charges = sorted((c for c in await visit_charges(db, visit_id) if c.balance > 0), key=lambda c: PAY_ORDER[c.kind])
     owed = sum((c.balance for c in charges), Decimal("0"))

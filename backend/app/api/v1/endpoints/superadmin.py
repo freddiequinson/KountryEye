@@ -189,11 +189,14 @@ async def sms_summary(month: str | None = None, db: AsyncSession = Depends(get_d
     except ValueError:
         raise HTTPException(400, "Month must look like 2026-10")
     end = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
-    billed = SmsMessage.status.in_(["sent", "delivered"])
+    # The bill is what the wallet was actually charged: one ledger debit per accepted message.
+    # Arkesel charges on acceptance, so a later "failed" delivery report doesn't remove it.
+    from app.models.sms import SmsCreditEntry
     rows = (await db.execute(
         select(SmsMessage.category, func.count(), func.coalesce(func.sum(SmsMessage.segments), 0),
-               func.coalesce(func.sum(SmsMessage.provider_cost), 0), func.coalesce(func.sum(SmsMessage.shop_cost), 0))
-        .where(billed, SmsMessage.created_at >= start, SmsMessage.created_at < end).group_by(SmsMessage.category)
+               func.coalesce(func.sum(SmsMessage.provider_cost), 0), func.coalesce(func.sum(-SmsCreditEntry.amount), 0))
+        .join(SmsCreditEntry, (SmsCreditEntry.message_id == SmsMessage.id) & (SmsCreditEntry.kind == "send"))
+        .where(SmsMessage.created_at >= start, SmsMessage.created_at < end).group_by(SmsMessage.category)
     )).all()
     by_category = [{"category": c, "messages": n, "segments": int(seg), "provider_cost": float(pc), "shop_cost": float(sc)} for c, n, seg, pc, sc in rows]
     status_counts = dict((await db.execute(

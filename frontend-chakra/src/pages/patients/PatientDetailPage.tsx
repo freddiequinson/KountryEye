@@ -113,9 +113,13 @@ export default function PatientDetailPage() {
     queryFn: async () => (await api.get(`/patients/${id}/visits`)).data as Visit[],
   })
 
+  // Medical notes and scans are only for clinical staff (the server enforces the same rule)
+  const canSeeClinical = hasPermission(user, ['clinical.view', 'clinical.queue', 'prescriptions.view'])
+  const canSeeScans = canSeeClinical || hasPermission(user, ['technician.scans', 'technician.view'])
   const { data: clinicalRecords = [] } = useQuery({
     queryKey: ['patient-clinical-records', id],
     queryFn: async () => (await api.get(`/clinical/patients/${id}/records`)).data,
+    enabled: !!id && canSeeClinical,
   })
 
   const [smsOpen, setSmsOpen] = useState(false)
@@ -173,7 +177,7 @@ export default function PatientDetailPage() {
   const { data: patientScans = [] } = useQuery({
     queryKey: ['patient-scans', id],
     queryFn: async () => (await api.get(`/technician/patient/${id}/scans`)).data,
-    enabled: !!id,
+    enabled: !!id && canSeeScans,
   })
 
   const vatRate = useVatRate()
@@ -395,14 +399,18 @@ export default function PatientDetailPage() {
               <Icon as={MdEvent} me="8px" />
               Visits
             </Tab>
-            <Tab>
-              <Icon as={MdDescription} me="8px" />
-              Clinical Records
-            </Tab>
-            <Tab>
-              <Icon as={MdVisibility} me="8px" />
-              Scans ({patientScans.length})
-            </Tab>
+            {canSeeClinical && (
+              <Tab>
+                <Icon as={MdDescription} me="8px" />
+                Clinical Records
+              </Tab>
+            )}
+            {canSeeScans && (
+              <Tab>
+                <Icon as={MdVisibility} me="8px" />
+                Scans ({patientScans.length})
+              </Tab>
+            )}
           </TabList>
           <Button variant="brand" leftIcon={<MdAdd />} onClick={() => setIsVisitDialogOpen(true)}>
             New Visit
@@ -488,7 +496,7 @@ export default function PatientDetailPage() {
             </Card>
           </TabPanel>
 
-          <TabPanel p="0">
+          {canSeeClinical && <TabPanel p="0">
             {clinicalRecords.length === 0 ? (
               <Card>
                 <EmptyState>No clinical records found</EmptyState>
@@ -564,9 +572,9 @@ export default function PatientDetailPage() {
                 ))}
               </Stack>
             )}
-          </TabPanel>
+          </TabPanel>}
 
-          <TabPanel p="0">
+          {canSeeScans && <TabPanel p="0">
             {patientScans.length === 0 ? (
               <Card>
                 <EmptyState>No scans recorded for this patient</EmptyState>
@@ -636,7 +644,7 @@ export default function PatientDetailPage() {
                 </TableBox>
               </Card>
             )}
-          </TabPanel>
+          </TabPanel>}
         </TabPanels>
       </Tabs>
 

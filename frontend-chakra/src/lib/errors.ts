@@ -14,3 +14,8 @@ export function apiErrorMessage(error: unknown, fallback = 'Something went wrong
   if (!e?.response) return 'Cannot reach the server. Check your connection.'
   return fallback
 }
+
+/** True for an in-app path like "/lab?job=3"; false for other sites or tricks like "//x" and "/\x". */
+export function isSafeAppPath(url: string | null | undefined): url is string {
+  return !!url && url.startsWith('/') && !url.startsWith('//') && !url.includes('\\')
+}
