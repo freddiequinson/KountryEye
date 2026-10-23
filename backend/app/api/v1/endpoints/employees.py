@@ -6,7 +6,9 @@ from typing import List, Optional
 from datetime import datetime, date, timedelta
 from app.core.database import get_db
 from app.core.security import get_password_hash
-from app.api.v1.deps import get_current_active_user
+from app.core.ratelimit import client_ip
+from app.core.usernames import normalize_username, ensure_username_free
+from app.api.v1.deps import get_current_active_user, require_permission, has_permission
 from app.models.user import User, Role
 from app.models.branch import Branch
 from app.models.employee import Attendance, ActivityLog, Task, EmployeeStats
@@ -17,15 +19,43 @@ from app.schemas.employee import (
     AttendanceResponse, AttendanceClockIn, AttendanceClockOut,
     TaskCreate, TaskUpdate, TaskResponse,
     ActivityLogCreate, ActivityLogResponse,
-    EmployeeCreate, EmployeeResponse, EmployeeStatsResponse
+    EmployeeCreate, EmployeeUpdate, EmployeeResponse, EmployeeStatsResponse
 )
 
 router = APIRouter()
 
 
-def generate_password(first_name: str) -> str:
-    """Generate a simple password from first name"""
-    return f"{first_name.lower()}123"
+def generate_password(first_name: str = "") -> str:
+    """Random temporary password; the employee must change it at first login."""
+    import secrets
+    alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(10))
+
+
+VIEW = require_permission("employees.view", "employees.manage")
+MANAGE = require_permission("employees.manage")
+
+
+def _self_or(perm_codes):
+    """Allow a user to read their own record, or anyone holding one of perm_codes."""
+    def check(employee_id: int, user: User):
+        if user.id != employee_id and not has_permission(user, *perm_codes):
+            raise HTTPException(status_code=403, detail="You don't have permission to do this")
+    return check
+
+
+_check_self_or_view = _self_or(("employees.view", "employees.manage"))
+
+
+async def _check_role_assignable(db: AsyncSession, role_id: Optional[int], user: User):
+    """Only a superadmin may hand out the admin role."""
+    if role_id is None or user.is_superuser:
+        return
+    role = await db.get(Role, role_id)
+    if not role:
+        raise HTTPException(status_code=400, detail=f"Role with id {role_id} not found")
+    if not role.admin_may_assign or (role.name or "").strip().lower() in ("admin", "administrator"):
+        raise HTTPException(status_code=403, detail="This role is not available for clinic administrators to assign")
 
 
 # Employee CRUD
@@ -35,7 +65,7 @@ async def get_employees(
     role_id: Optional[int] = None,
     active_only: bool = True,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(VIEW)
 ):
     """Get all employees"""
     query = select(User).options(
@@ -59,12 +89,15 @@ async def get_employees(
 async def create_employee(
     employee_in: EmployeeCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(MANAGE)
 ):
     """Create a new employee with auto-generated password"""
     try:
         # Check if email exists
-        existing = await db.execute(select(User).where(User.email == employee_in.email))
+        await _check_role_assignable(db, employee_in.role_id, current_user)
+        username = normalize_username(employee_in.username)
+        await ensure_username_free(db, username)
+        existing = await db.execute(select(User).where(func.lower(User.email) == employee_in.email.strip().lower()))
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Email already registered")
         
@@ -83,14 +116,16 @@ async def create_employee(
         hashed_password = get_password_hash(password)
         
         employee = User(
-            email=employee_in.email,
+            email=employee_in.email.strip(),
+            username=username,
             hashed_password=hashed_password,
             first_name=employee_in.first_name,
             last_name=employee_in.last_name,
             phone=employee_in.phone,
             role_id=employee_in.role_id,
             branch_id=employee_in.branch_id,
-            is_active=True
+            is_active=True,
+            must_change_password=True,
         )
         
         db.add(employee)
@@ -108,17 +143,17 @@ async def create_employee(
         )
         employee = result.scalar_one()
         
-        # Return employee with temporary password info
+        # The temporary password is shown once to the admin who created the account
         response = EmployeeResponse.model_validate(employee)
-        # Add password to response (not in schema, but useful for first-time setup)
-        print(f"Created employee {employee.email} with password: {password}")
+        response.temporary_password = password
         return response
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        print(f"Error creating employee: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to create employee: {str(e)}")
+        import logging
+        logging.getLogger(__name__).exception("Error creating employee")
+        raise HTTPException(status_code=500, detail="Failed to create employee")
 
 
 # ============================================
@@ -134,7 +169,7 @@ async def get_roles(
     """Get all roles"""
     result = await db.execute(select(Role).order_by(Role.name))
     roles = result.scalars().all()
-    return [{"id": r.id, "name": r.name} for r in roles]
+    return [{"id": r.id, "name": r.name, "admin_may_assign": r.admin_may_assign} for r in roles]
 
 
 # Attendance endpoints
@@ -142,7 +177,7 @@ async def get_roles(
 async def get_today_attendance(
     branch_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("attendance.view_all", "employees.view", "employees.manage"))
 ):
     """Get today's attendance for all employees"""
     today = date.today()
@@ -330,11 +365,13 @@ async def get_tasks(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get all tasks"""
+    """Get tasks. Staff without employee access only see tasks assigned to them."""
     query = select(Task).options(
         selectinload(Task.assigned_to),
         selectinload(Task.assigned_by)
     )
+    if not has_permission(current_user, "employees.view", "employees.manage"):
+        assigned_to_id = current_user.id
     
     if assigned_to_id:
         query = query.where(Task.assigned_to_id == assigned_to_id)
@@ -350,7 +387,7 @@ async def get_tasks(
 async def create_task(
     task_in: TaskCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(MANAGE)
 ):
     """Create a new task"""
     task = Task(
@@ -375,8 +412,15 @@ async def update_task(
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
-    for field, value in task_in.model_dump(exclude_unset=True).items():
+    manager = has_permission(current_user, "employees.manage")
+    if not manager and task.assigned_to_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only update your own tasks")
+    updates = task_in.model_dump(exclude_unset=True)
+    if not manager:
+        # Assignees may only move their task along, not reassign or rewrite it
+        updates = {k: v for k, v in updates.items() if k in ("status", "notes")}
+
+    for field, value in updates.items():
         setattr(task, field, value)
     
     if task_in.status == "completed" and not task.completed_at:
@@ -391,7 +435,7 @@ async def update_task(
 async def delete_task(
     task_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(MANAGE)
 ):
     """Delete a task"""
     result = await db.execute(select(Task).where(Task.id == task_id))
@@ -434,7 +478,7 @@ async def log_activity(
         description=activity_in.description,
         extra_data=activity_in.extra_data,
         page_path=activity_in.page_path,
-        ip_address=request.client.host if request.client else None,
+        ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent", "")[:500]
     )
     db.add(activity)
@@ -454,6 +498,7 @@ async def get_employee(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get a single employee"""
+    _check_self_or_view(employee_id, current_user)
     result = await db.execute(
         select(User).options(
             selectinload(User.role),
@@ -469,38 +514,59 @@ async def get_employee(
 @router.put("/{employee_id}", response_model=EmployeeResponse)
 async def update_employee(
     employee_id: int,
-    employee_in: EmployeeCreate,
+    employee_in: EmployeeUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(MANAGE)
 ):
-    """Update an employee"""
-    result = await db.execute(select(User).where(User.id == employee_id))
-    employee = result.scalar_one_or_none()
+    """Update an employee. Only the fields sent are changed."""
+    employee = await db.get(User, employee_id)
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
-    
-    employee.first_name = employee_in.first_name
-    employee.last_name = employee_in.last_name
-    employee.phone = employee_in.phone
-    employee.role_id = employee_in.role_id
-    employee.branch_id = employee_in.branch_id
-    
+    if employee.is_superuser and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="This account can only be changed by the system administrator")
+    if not current_user.is_superuser:
+        await _check_role_assignable(db, employee.role_id, current_user)
+    updates = employee_in.model_dump(exclude_unset=True)
+    if "role_id" in updates and updates["role_id"] != employee.role_id:
+        await _check_role_assignable(db, updates["role_id"], current_user)
+    if updates.get("is_active") is False and employee.id == current_user.id:
+        raise HTTPException(status_code=400, detail="You cannot deactivate your own account")
+    if "username" in updates:
+        updates["username"] = normalize_username(updates["username"])
+        await ensure_username_free(db, updates["username"], exclude_user_id=employee_id)
+    if "email" in updates and updates["email"]:
+        updates["email"] = updates["email"].strip()
+        clash = await db.execute(select(User.id).where(func.lower(User.email) == updates["email"].lower(), User.id != employee_id))
+        if clash.first():
+            raise HTTPException(status_code=400, detail="Email already registered")
+    for field, value in updates.items():
+        if value is not None or field in ("phone", "username"):
+            setattr(employee, field, value)
+
     await db.commit()
-    await db.refresh(employee)
-    return employee
+    result = await db.execute(
+        select(User).options(selectinload(User.role), selectinload(User.branch)).where(User.id == employee_id)
+    )
+    return result.scalar_one()
 
 
 @router.delete("/{employee_id}")
 async def delete_employee(
     employee_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(MANAGE)
 ):
     """Delete an employee - hard delete if no records, soft delete (deactivate) if has records"""
     result = await db.execute(select(User).where(User.id == employee_id))
     employee = result.scalar_one_or_none()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
+    if employee.id == current_user.id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account")
+    if employee.is_superuser and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="This account can only be changed by the system administrator")
+    if not current_user.is_superuser:
+        await _check_role_assignable(db, employee.role_id, current_user)
     
     # Check if employee has any related records
     has_attendance = await db.execute(
@@ -509,7 +575,7 @@ async def delete_employee(
     attendance_count = has_attendance.scalar() or 0
     
     has_sales = await db.execute(
-        select(func.count(Sale.id)).where(Sale.created_by_id == employee_id)
+        select(func.count(Sale.id)).where(Sale.cashier_id == employee_id)
     )
     sales_count = has_sales.scalar() or 0
     
@@ -552,19 +618,23 @@ async def delete_employee(
 async def reset_employee_password(
     employee_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(MANAGE)
 ):
-    """Reset employee password to default (first_name + 123)"""
-    result = await db.execute(select(User).where(User.id == employee_id))
-    employee = result.scalar_one_or_none()
+    """Give the employee a new random temporary password (must be changed at next login)."""
+    employee = await db.get(User, employee_id)
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
-    
-    password = generate_password(employee.first_name)
-    employee.hashed_password = pwd_context.hash(password)
+    if employee.is_superuser and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="This account can only be changed by the system administrator")
+    if not current_user.is_superuser:
+        await _check_role_assignable(db, employee.role_id, current_user)
+
+    password = generate_password()
+    employee.hashed_password = get_password_hash(password)
+    employee.must_change_password = True
     await db.commit()
-    
-    return {"message": f"Password reset to: {password}"}
+
+    return {"message": f"Temporary password: {password}", "temporary_password": password}
 
 
 @router.get("/{employee_id}/attendance", response_model=List[AttendanceResponse])
@@ -576,6 +646,7 @@ async def get_employee_attendance(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get attendance history for an employee"""
+    _check_self_or_view(employee_id, current_user)
     query = select(Attendance).options(
         selectinload(Attendance.user)
     ).where(Attendance.user_id == employee_id)
@@ -600,6 +671,7 @@ async def get_employee_activity(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get activity logs for an employee with pagination"""
+    _check_self_or_view(employee_id, current_user)
     # Get total count
     count_query = select(func.count(ActivityLog.id)).where(ActivityLog.user_id == employee_id)
     if module:
@@ -634,6 +706,7 @@ async def get_employee_stats(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get aggregated stats for an employee"""
+    _check_self_or_view(employee_id, current_user)
     if not start_date:
         start_date = date.today() - timedelta(days=30)
     if not end_date:

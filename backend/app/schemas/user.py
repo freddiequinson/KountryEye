@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, date
 
 
 class UserBase(BaseModel):
@@ -13,18 +13,28 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    username: Optional[str] = None
     role_id: Optional[int] = None
     branch_id: Optional[int] = None
 
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
+    username: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone: Optional[str] = None
     is_active: Optional[bool] = None
     role_id: Optional[int] = None
     branch_id: Optional[int] = None
+
+
+class UserSelfUpdate(BaseModel):
+    """Fields a user may change on their own account."""
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    date_of_birth: Optional[date] = None
 
 
 class PermissionInfo(BaseModel):
@@ -55,7 +65,11 @@ class BranchInfo(BaseModel):
 
 
 class UserResponse(UserBase):
+    email: str  # validated on the way in only; never fail to show a stored account
     id: int
+    username: Optional[str] = None
+    avatar_url: Optional[str] = None
+    date_of_birth: Optional[date] = None
     role_id: Optional[int]
     branch_id: Optional[int]
     is_superuser: bool

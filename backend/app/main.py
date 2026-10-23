@@ -19,105 +19,41 @@ def get_base_path():
 
 from app.core.database import init_db, async_session_maker
 from app.api.v1.router import api_router
+from app.services import change_history  # register transaction-level audit hooks
 
 
 async def seed_permissions_on_startup():
-    """Seed default permissions and roles with their default permissions"""
-    from sqlalchemy import select
-    from sqlalchemy.orm import selectinload
-    from app.models.user import Permission, Role
-    
-    DEFAULT_PERMISSIONS = [
-        {"name": "View Dashboard", "code": "dashboard.view", "module": "dashboard"},
-        {"name": "View Admin Dashboard", "code": "dashboard.admin", "module": "dashboard"},
-        {"name": "View Doctor Dashboard", "code": "dashboard.doctor", "module": "dashboard"},
-        {"name": "View Front Desk Dashboard", "code": "dashboard.frontdesk", "module": "dashboard"},
-        {"name": "View Marketing Dashboard", "code": "dashboard.marketing", "module": "dashboard"},
-        {"name": "View Patients", "code": "patients.view", "module": "patients"},
-        {"name": "Create Patients", "code": "patients.create", "module": "patients"},
-        {"name": "Edit Patients", "code": "patients.edit", "module": "patients"},
-        {"name": "Delete Patients", "code": "patients.delete", "module": "patients"},
-        {"name": "View Visits", "code": "visits.view", "module": "visits"},
-        {"name": "Create Visits", "code": "visits.create", "module": "visits"},
-        {"name": "Check-in Patients", "code": "visits.checkin", "module": "visits"},
-        {"name": "View Consultations", "code": "clinical.view", "module": "clinical"},
-        {"name": "Create Consultations", "code": "clinical.create", "module": "clinical"},
-        {"name": "View Prescriptions", "code": "prescriptions.view", "module": "clinical"},
-        {"name": "Create Prescriptions", "code": "prescriptions.create", "module": "clinical"},
-        {"name": "Access Doctor Queue", "code": "clinical.queue", "module": "clinical"},
-        {"name": "Access POS", "code": "pos.access", "module": "sales"},
-        {"name": "View Sales", "code": "sales.view", "module": "sales"},
-        {"name": "Create Sales", "code": "sales.create", "module": "sales"},
-        {"name": "Apply Discounts", "code": "sales.discount", "module": "sales"},
-        {"name": "Process Refunds", "code": "sales.refund", "module": "sales"},
-        {"name": "View Payments", "code": "payments.view", "module": "payments"},
-        {"name": "Process Payments", "code": "payments.create", "module": "payments"},
-        {"name": "Generate Receipts", "code": "receipts.generate", "module": "payments"},
-        {"name": "View Inventory", "code": "inventory.view", "module": "inventory"},
-        {"name": "Manage Inventory", "code": "inventory.manage", "module": "inventory"},
-        {"name": "View Assets", "code": "assets.view", "module": "assets"},
-        {"name": "Manage Assets", "code": "assets.manage", "module": "assets"},
-        {"name": "View Marketing", "code": "marketing.view", "module": "marketing"},
-        {"name": "Manage Campaigns", "code": "marketing.manage", "module": "marketing"},
-        {"name": "View Accounting", "code": "accounting.view", "module": "accounting"},
-        {"name": "Manage Accounting", "code": "accounting.manage", "module": "accounting"},
-        {"name": "View Revenue", "code": "revenue.view", "module": "revenue"},
-        {"name": "View Employees", "code": "employees.view", "module": "employees"},
-        {"name": "Manage Employees", "code": "employees.manage", "module": "employees"},
-        {"name": "Manage Branches", "code": "branches.manage", "module": "branches"},
-        {"name": "Manage Permissions", "code": "permissions.manage", "module": "permissions"},
-    ]
-    
-    # Default permissions per role
-    ROLE_PERMISSIONS = {
-        "admin": ["*"],  # All permissions
-        "doctor": [
-            "dashboard.view", "dashboard.doctor", "patients.view", "patients.edit",
-            "visits.view", "clinical.view", "clinical.create", "clinical.queue",
-            "prescriptions.view", "prescriptions.create"
-        ],
-        "frontdesk": [
-            "dashboard.view", "dashboard.frontdesk", "patients.view", "patients.create",
-            "patients.edit", "visits.view", "visits.create", "visits.checkin",
-            "pos.access", "sales.view", "sales.create", "payments.view", "payments.create",
-            "receipts.generate"
-        ],
-        "marketing": [
-            "dashboard.view", "dashboard.marketing", "patients.view",
-            "marketing.view", "marketing.manage"
-        ],
-    }
-    
+    """Make sure every permission code and default role exists (adds only, never removes)."""
+    import logging
+    from app.core.rbac import ensure_rbac
     async with async_session_maker() as db:
-        # Get all permissions
-        result = await db.execute(select(Permission))
-        all_permissions = {p.code: p for p in result.scalars().all()}
-        
-        # Get all roles with their permissions
-        result = await db.execute(select(Role).options(selectinload(Role.permissions)))
-        roles = {r.name.lower(): r for r in result.scalars().all()}
-        
-        # Assign permissions to roles if they have none
-        for role_name, perm_codes in ROLE_PERMISSIONS.items():
-            if role_name in roles:
-                role = roles[role_name]
-                if len(role.permissions) == 0:  # Only assign if role has no permissions
-                    if perm_codes == ["*"]:
-                        # Admin gets all permissions
-                        role.permissions = list(all_permissions.values())
-                    else:
-                        role.permissions = [all_permissions[code] for code in perm_codes if code in all_permissions]
-                    print(f"Assigned {len(role.permissions)} permissions to {role_name}")
-        
-        await db.commit()
-        print("Role permissions assigned successfully")
+        report = await ensure_rbac(db)
+        # Secret the SMS provider must send back with delivery reports
+        import secrets
+        from sqlalchemy import select
+        from app.models.settings import SystemSetting
+        if not (await db.execute(select(SystemSetting).where(SystemSetting.key == "sms.webhook_token"))).scalar_one_or_none():
+            db.add(SystemSetting(key="sms.webhook_token", value=secrets.token_urlsafe(24)))
+            await db.commit()
+    if report["permissions_added"] or report["roles_added"]:
+        logging.getLogger("app.rbac").warning("RBAC sync: %s", report)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     await seed_permissions_on_startup()
+    if settings.SCHEDULER_ENABLED:
+        from app.services import scheduler
+        scheduler.start()
+    else:
+        # Still send anything left in the queue (e.g. after a restart)
+        from app.services.sms.service import kick
+        kick()
     yield
+    if settings.SCHEDULER_ENABLED:
+        from app.services import scheduler
+        scheduler.stop()
 
 
 app = FastAPI(
@@ -142,9 +78,22 @@ base_path = get_base_path()
 # Serve uploaded files - must be mounted before API router
 uploads_dir = os.path.join(base_path, "uploads")
 os.makedirs(uploads_dir, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
+class PublicUploads(StaticFiles):
+    """Uploaded product/asset images are public; scan results are medical records and are not."""
+    async def get_response(self, path, scope):
+        if path.replace("\\", "/").lstrip("/").split("/")[0] in ("scans", "private"):
+            from starlette.exceptions import HTTPException as StarletteHTTPException
+            raise StarletteHTTPException(status_code=404)
+        return await super().get_response(path, scope)
+
+
+app.mount("/uploads", PublicUploads(directory=uploads_dir), name="uploads")
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# Short receipt links sent by SMS (/r/{token}); nginx forwards /r/ to the backend
+from app.api.v1.endpoints.public import receipt_router  # noqa: E402
+app.include_router(receipt_router, tags=["Public"])
 
 # Serve frontend static files in production
 frontend_dir = os.path.join(base_path, "frontend")
@@ -162,8 +111,9 @@ if os.path.exists(frontend_dir):
             return {"detail": "Not found"}
         
         # Try to serve the exact file
-        file_path = os.path.join(frontend_dir, full_path)
-        if os.path.isfile(file_path):
+        file_path = os.path.realpath(os.path.join(frontend_dir, full_path))
+        # Never serve anything outside the frontend folder (blocks ../ tricks)
+        if file_path.startswith(os.path.realpath(frontend_dir) + os.sep) and os.path.isfile(file_path):
             return FileResponse(file_path)
         
         # For SPA routing, serve index.html

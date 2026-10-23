@@ -1,3 +1,5 @@
+from decimal import Decimal
+from app.services.billing import money
 from typing import List, Optional
 from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,7 +10,7 @@ from sqlalchemy.orm import joinedload
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.api.v1.deps import get_current_active_user
+from app.api.v1.deps import get_current_active_user, require_permission
 from app.models.user import User
 from app.utils.pdf_generator import generate_spectacles_prescription_pdf
 from app.models.patient import Visit, Patient
@@ -20,6 +22,8 @@ from app.schemas.clinical import (
     ClinicalRecordCreate, ClinicalRecordUpdate, ClinicalRecordResponse,
     PrescriptionCreate, PrescriptionResponse
 )
+
+from app.services.billing import visit_money
 
 router = APIRouter()
 
@@ -37,7 +41,7 @@ async def get_consultation_types(
     return result.scalars().all()
 
 
-@router.post("/types", response_model=ConsultationTypeResponse)
+@router.post("/types", response_model=ConsultationTypeResponse, dependencies=[Depends(require_permission("settings.manage"))])
 async def create_consultation_type(
     type_in: ConsultationTypeCreate,
     db: AsyncSession = Depends(get_db),
@@ -50,7 +54,7 @@ async def create_consultation_type(
     return consultation_type
 
 
-@router.put("/types/{type_id}", response_model=ConsultationTypeResponse)
+@router.put("/types/{type_id}", response_model=ConsultationTypeResponse, dependencies=[Depends(require_permission("settings.manage"))])
 async def update_consultation_type(
     type_id: int,
     type_in: ConsultationTypeCreate,
@@ -70,7 +74,7 @@ async def update_consultation_type(
     return consultation_type
 
 
-@router.patch("/types/{type_id}/deactivate")
+@router.patch("/types/{type_id}/deactivate", dependencies=[Depends(require_permission("settings.manage"))])
 async def deactivate_consultation_type(
     type_id: int,
     db: AsyncSession = Depends(get_db),
@@ -86,7 +90,7 @@ async def deactivate_consultation_type(
     return {"message": "Consultation type deactivated"}
 
 
-@router.patch("/types/{type_id}/activate")
+@router.patch("/types/{type_id}/activate", dependencies=[Depends(require_permission("settings.manage"))])
 async def activate_consultation_type(
     type_id: int,
     db: AsyncSession = Depends(get_db),
@@ -102,7 +106,7 @@ async def activate_consultation_type(
     return {"message": "Consultation type activated"}
 
 
-@router.delete("/types/{type_id}")
+@router.delete("/types/{type_id}", dependencies=[Depends(require_permission("settings.manage"))])
 async def delete_consultation_type(
     type_id: int,
     db: AsyncSession = Depends(get_db),
@@ -273,8 +277,7 @@ async def get_visit_detail(
         "reason": visit.reason,
         "status": visit.status,
         "payment_status": visit.payment_status,
-        "consultation_fee": float(visit.consultation_fee) if visit.consultation_fee else 0,
-        "amount_paid": float(visit.amount_paid) if visit.amount_paid else 0,
+        **visit_money(visit),
         "clinical_record": {
             "id": clinical_record.id,
             "chief_complaint": clinical_record.chief_complaint,
@@ -431,9 +434,7 @@ async def get_doctor_queue(
             "status": visit.status,
             "payment_status": getattr(visit, 'payment_status', 'unknown') or "unknown",
             "payment_type": getattr(visit, 'payment_type', 'cash') or "cash",
-            "consultation_fee": consultation_fee,
-            "amount_paid": amount_paid,
-            "balance": balance,
+            **visit_money(visit),
             "consultation_type": visit.consultation_type.name if visit.consultation_type else "",
             "wait_time_minutes": max(0, wait_minutes),
             "visit_date": visit.visit_date.isoformat() if visit.visit_date else "",
@@ -464,8 +465,7 @@ async def get_visit_details(
         "status": visit.status,
         "visit_date": visit.visit_date.isoformat() if visit.visit_date else "",
         "payment_status": visit.payment_status,
-        "consultation_fee": float(visit.consultation_fee) if visit.consultation_fee else 0,
-        "amount_paid": float(visit.amount_paid) if visit.amount_paid else 0,
+        **visit_money(visit),
     }
 
 
@@ -486,7 +486,7 @@ async def update_visit_status(
     return {"message": "Status updated"}
 
 
-@router.post("/visits/{visit_id}/record")
+@router.post("/visits/{visit_id}/record", dependencies=[Depends(require_permission("clinical.create"))])
 async def save_clinical_record_for_visit(
     visit_id: int,
     record_data: dict,
@@ -580,6 +580,10 @@ async def save_clinical_record_for_visit(
         )
         db.add(history_entry)
     
+    # The follow-up date the doctor sets drives the "review due" SMS reminders
+    if 'follow_up_date' in processed_data:
+        fu = processed_data['follow_up_date']
+        visit.next_review_date = fu.date() if isinstance(fu, datetime) else fu
     await db.commit()
     return {"message": "Clinical record saved"}
 
@@ -680,7 +684,7 @@ async def get_visit_prescriptions(
     ]
 
 
-@router.post("/visits/{visit_id}/prescription")
+@router.post("/visits/{visit_id}/prescription", dependencies=[Depends(require_permission("prescriptions.create", "clinical.create"))])
 async def create_prescription_for_visit(
     visit_id: int,
     prescription_data: dict,
@@ -696,14 +700,33 @@ async def create_prescription_for_visit(
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")
     
-    items = prescription_data.get("items", [])
-    total = sum(item.get("quantity", 1) * item.get("unit_price", 0) for item in items)
-    
+    from app.models.sales import Product
+    from app.services.billing import money
+
+    items = [i for i in (prescription_data.get("items") or []) if isinstance(i, dict)]
+    for item in items:
+        try:
+            item["quantity"] = max(int(item.get("quantity") or 1), 1)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Quantity must be a whole number")
+        # Stock items are charged at the product's price, not whatever the browser sent
+        product = await db.get(Product, item["product_id"]) if item.get("product_id") else None
+        if product:
+            item["unit_price"] = money(product.unit_price)
+            item.setdefault("name", product.name)
+        else:
+            item["unit_price"] = money(item.get("unit_price") or 0)
+    total = sum((item["unit_price"] * item["quantity"] for item in items), Decimal("0"))
+    from app.services.vat import get_vat_rate, vat_on
+    vat_rate = await get_vat_rate(db)
+
     prescription = Prescription(
         visit_id=visit_id,
         patient_id=visit.patient_id,
         prescribed_by_id=current_user.id,
         total_amount=total,
+        vat_rate=vat_rate,
+        vat_amount=vat_on(total, vat_rate),
         status="pending"
     )
     db.add(prescription)
@@ -743,7 +766,7 @@ async def create_prescription_for_visit(
     return {"message": "Prescription created", "prescription_id": prescription.id}
 
 
-@router.post("/visits/{visit_id}/optical-prescription")
+@router.post("/visits/{visit_id}/optical-prescription", dependencies=[Depends(require_permission("prescriptions.create", "clinical.create"))])
 async def create_optical_prescription(
     visit_id: int,
     prescription_data: dict,
@@ -798,10 +821,13 @@ async def create_optical_prescription(
             pass
     
     db.add(prescription)
+    await db.flush()
+    # Straight into the lab's queue for glasses
+    from app.services.lab import create_job_for_prescription
+    job = await create_job_for_prescription(db, prescription, visit)
     await db.commit()
-    await db.refresh(prescription)
-    
-    return {"message": "Optical prescription saved", "prescription_id": prescription.id}
+
+    return {"message": "Optical prescription saved", "prescription_id": prescription.id, "lab_job_id": job.id}
 
 
 @router.get("/patients/{patient_id}/history")
@@ -832,112 +858,147 @@ async def get_pending_prescriptions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
+    """Prescriptions with something still to pay (unpaid or part-paid)."""
     result = await db.execute(
         select(Prescription)
         .options(joinedload(Prescription.patient), joinedload(Prescription.items))
-        .where(Prescription.status == "pending")
+        .where(Prescription.status.in_(["pending", "partial"]))
         .order_by(Prescription.created_at.desc())
     )
     prescriptions = result.unique().scalars().all()
-    
-    return [
-        {
+
+    out = []
+    for p in prescriptions:
+        net = _prescription_total(p.items)
+        vat = money(p.vat_amount)
+        total = net + vat
+        if total <= 0:
+            continue  # optical-only prescriptions have nothing to pay here
+        paid = Decimal(str(p.amount_paid or 0))
+        out.append({
             "id": p.id,
             "patient_name": f"{p.patient.first_name} {p.patient.last_name}" if p.patient else "Unknown",
             "patient_number": p.patient.patient_number if p.patient else "",
             "items": [
-                {"name": item.name, "quantity": item.quantity, "unit_price": float(item.unit_price)}
+                {"name": item.name, "quantity": item.quantity, "unit_price": float(item.unit_price or 0)}
                 for item in p.items
             ],
-            "total_amount": float(p.total_amount) if p.total_amount else 0,
+            "subtotal": float(net),
+            "vat_rate": float(p.vat_rate or 0),
+            "vat_amount": float(vat),
+            "total_amount": float(total),
+            "amount_paid": float(paid),
+            "balance": float(max(total - paid, Decimal("0"))),
             "created_at": p.created_at.isoformat() if p.created_at else "",
             "status": p.status,
-        }
-        for p in prescriptions
-    ]
+        })
+    return out
 
 
-@router.post("/prescriptions/{prescription_id}/payment")
+def _prescription_total(items) -> Decimal:
+    total = Decimal("0")
+    for item in items:
+        total += Decimal(str(item.unit_price or 0)) * Decimal(str(item.quantity or 1))
+    return total.quantize(Decimal("0.01"))
+
+
+async def _prescription_visit(db: AsyncSession, prescription: Prescription):
+    """The visit a prescription belongs to (set directly, or through its consultation)."""
+    visit_id = prescription.visit_id
+    if not visit_id and prescription.consultation_id:
+        consultation = await db.get(Consultation, prescription.consultation_id)
+        visit_id = consultation.visit_id if consultation else None
+    return await db.get(Visit, visit_id) if visit_id else None
+
+
+@router.post("/prescriptions/{prescription_id}/payment", dependencies=[Depends(require_permission("payments.create"))])
 async def process_prescription_payment(
     prescription_id: int,
     payment_data: dict,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    from decimal import Decimal
+    """Record a payment (full or part) against a prescription."""
     from app.models.revenue import Revenue
-    from sqlalchemy.orm import joinedload
-    
+
     result = await db.execute(
         select(Prescription)
-        .options(joinedload(Prescription.patient))
+        .options(joinedload(Prescription.patient), joinedload(Prescription.items))
         .where(Prescription.id == prescription_id)
     )
     prescription = result.unique().scalar_one_or_none()
     if not prescription:
         raise HTTPException(status_code=404, detail="Prescription not found")
-    
-    payment_method = payment_data.get("payment_method", "cash")
-    
-    # Calculate prescription total
-    prescription_total = Decimal("0")
-    items_result = await db.execute(
-        select(PrescriptionItem).where(PrescriptionItem.prescription_id == prescription_id)
-    )
-    items = items_result.scalars().all()
-    for item in items:
-        prescription_total += Decimal(str(item.unit_price or 0)) * Decimal(str(item.quantity or 1))
-    
-    prescription.status = "paid"
+    if prescription.status == "paid":
+        raise HTTPException(status_code=400, detail="This prescription is already fully paid")
+
+    payment_method = str(payment_data.get("payment_method") or "cash")[:50]
+    net = _prescription_total(prescription.items)
+    total = net + money(prescription.vat_amount)
+    already_paid = Decimal(str(prescription.amount_paid or 0))
+    balance = total - already_paid
+
+    raw_amount = payment_data.get("amount_paid", payment_data.get("amount"))
+    try:
+        offered = Decimal(str(raw_amount)) if raw_amount not in (None, "") else balance
+    except Exception:
+        raise HTTPException(status_code=400, detail="Amount must be a number")
+    if offered <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be more than zero")
+    applied = min(offered, balance).quantize(Decimal("0.01"))  # anything above the balance is change
+    change = (offered - applied).quantize(Decimal("0.01"))
+
+    first_payment = already_paid == 0
+    prescription.total_amount = net
+    prescription.amount_paid = already_paid + applied
+    prescription.status = "paid" if prescription.amount_paid >= total else "partial"
     prescription.payment_method = payment_method
     prescription.paid_at = datetime.utcnow()
-    
-    # Track insurance usage if this is an insurance visit
-    visit = None
-    if prescription.consultation_id:
-        consultation_result = await db.execute(
-            select(Consultation).where(Consultation.id == prescription.consultation_id)
-        )
-        consultation = consultation_result.scalar_one_or_none()
-        if consultation and consultation.visit_id:
-            visit_result = await db.execute(
-                select(Visit).where(Visit.id == consultation.visit_id)
-            )
-            visit = visit_result.scalar_one_or_none()
-            if visit and visit.payment_type == "insurance" and visit.insurance_limit:
-                # Update insurance used
-                current_used = Decimal(str(visit.insurance_used or 0))
-                new_used = current_used + prescription_total
-                insurance_limit = Decimal(str(visit.insurance_limit))
-                
-                if new_used > insurance_limit:
-                    # Patient needs to pay the excess
-                    visit.patient_topup = new_used - insurance_limit
-                    visit.insurance_used = insurance_limit
-                else:
-                    visit.insurance_used = new_used
-    
-    # Record revenue for prescription payment
-    if prescription_total > 0:
-        patient_name = ""
-        if prescription.patient:
-            patient_name = f" - {prescription.patient.first_name} {prescription.patient.last_name}"
-        
-        revenue = Revenue(
+
+    visit = await _prescription_visit(db, prescription)
+    # Insurance usage is counted once, against the full prescription value
+    if first_payment and visit and visit.payment_type == "insurance" and visit.insurance_limit:
+        current_used = Decimal(str(visit.insurance_used or 0))
+        new_used = current_used + total
+        insurance_limit = Decimal(str(visit.insurance_limit))
+        if new_used > insurance_limit:
+            visit.patient_topup = Decimal(str(visit.patient_topup or 0)) + (new_used - insurance_limit)
+            visit.insurance_used = insurance_limit
+        else:
+            visit.insurance_used = new_used
+
+    if applied > 0:
+        patient_name = f" - {prescription.patient.first_name} {prescription.patient.last_name}" if prescription.patient else ""
+        from app.services.vat import vat_share
+        db.add(Revenue(
             category="prescription",
             description=f"Prescription payment{patient_name}",
-            amount=float(prescription_total),
+            amount=float(applied),
+            vat_amount=vat_share(applied, prescription.vat_amount, total),
             payment_method=payment_method,
             reference_type="prescription",
             reference_id=prescription_id,
             patient_id=prescription.patient_id,
             branch_id=visit.branch_id if visit else current_user.branch_id,
             recorded_by_id=current_user.id
-        )
-        db.add(revenue)
-    
+        ))
+
+    from app.services.sms.receipts import queue_receipt_sms
+    from app.services.sms.service import kick
+    from app.services.vat import vat_share as _vs
+    await queue_receipt_sms(db, kind="prescription", ref_id=prescription.id, patient=prescription.patient, amount=applied,
+                            vat=_vs(applied, prescription.vat_amount, total), balance=total - prescription.amount_paid,
+                            sent_by_id=current_user.id)
     await db.commit()
-    return {"message": "Payment processed", "receipt_id": prescription.id, "amount": float(prescription_total)}
+    kick()
+    return {
+        "message": "Payment processed",
+        "receipt_id": prescription.id,
+        "amount": float(applied),
+        "change": float(change),
+        "balance": float(total - prescription.amount_paid),
+        "status": prescription.status,
+    }
 
 
 @router.get("/out-of-stock-analytics")

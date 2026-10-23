@@ -6,8 +6,8 @@ This document outlines the production deployment process for KountryEye.
 
 ## Server Details
 
-- **Production Server:** `144.126.199.94`
-- **SSH Access:** `ssh root@144.126.199.94`
+- **Production Server:** `$SERVER_IP`
+- **SSH Access:** `ssh root@$SERVER_IP`
 - **Application Path:** `/var/www/kountryeye/`
 
 ---
@@ -38,7 +38,7 @@ This document outlines the production deployment process for KountryEye.
 ```nginx
 server {
     listen 80;
-    server_name 144.126.199.94;
+    server_name $SERVER_IP;
 
     location / {
         root /var/www/kountryeye/frontend-dist;
@@ -98,32 +98,32 @@ git push origin HEAD:main
 ### 3. Pull Changes on Production Server
 
 ```bash
-ssh root@144.126.199.94 "cd /var/www/kountryeye && git pull origin main"
+ssh root@$SERVER_IP "cd /var/www/kountryeye && git pull origin main"
 ```
 
 ### 4. Deploy Frontend Build
 
 **Copy built files to production:**
 ```bash
-scp -r frontend/dist/* root@144.126.199.94:/var/www/kountryeye/frontend-dist/
-scp -r frontend/dist/assets/* root@144.126.199.94:/var/www/kountryeye/frontend-dist/assets/
+scp -r frontend/dist/* root@$SERVER_IP:/var/www/kountryeye/frontend-dist/
+scp -r frontend/dist/assets/* root@$SERVER_IP:/var/www/kountryeye/frontend-dist/assets/
 ```
 
 **Fix permissions (important!):**
 ```bash
-ssh root@144.126.199.94 "chmod 755 /var/www/kountryeye/frontend-dist/assets && chmod 644 /var/www/kountryeye/frontend-dist/assets/*"
+ssh root@$SERVER_IP "chmod 755 /var/www/kountryeye/frontend-dist/assets && chmod 644 /var/www/kountryeye/frontend-dist/assets/*"
 ```
 
 ### 5. Restart Backend
 
 ```bash
-ssh root@144.126.199.94 "systemctl restart kountryeye"
+ssh root@$SERVER_IP "systemctl restart kountryeye"
 ```
 
 ### 6. Reload NGINX (if needed)
 
 ```bash
-ssh root@144.126.199.94 "nginx -s reload"
+ssh root@$SERVER_IP "nginx -s reload"
 ```
 
 ---
@@ -135,19 +135,19 @@ ssh root@144.126.199.94 "nginx -s reload"
 SQLite doesn't support full migrations. Use direct SQL:
 
 ```bash
-ssh root@144.126.199.94 "sqlite3 /var/www/kountryeye/backend/kountry_eyecare.db 'ALTER TABLE users ADD COLUMN new_column BOOLEAN DEFAULT 0;'"
+ssh root@$SERVER_IP "sqlite3 /var/www/kountryeye/backend/kountry_eyecare.db 'ALTER TABLE users ADD COLUMN new_column BOOLEAN DEFAULT 0;'"
 ```
 
 ### Query Database
 
 ```bash
-ssh root@144.126.199.94 "sqlite3 /var/www/kountryeye/backend/kountry_eyecare.db 'SELECT id, email FROM users;'"
+ssh root@$SERVER_IP "sqlite3 /var/www/kountryeye/backend/kountry_eyecare.db 'SELECT id, email FROM users;'"
 ```
 
 ### Backup Database
 
 ```bash
-ssh root@144.126.199.94 "cp /var/www/kountryeye/backend/kountry_eyecare.db /var/www/kountryeye/backend/kountry_eyecare_backup_$(date +%Y%m%d).db"
+ssh root@$SERVER_IP "cp /var/www/kountryeye/backend/kountry_eyecare.db /var/www/kountryeye/backend/kountry_eyecare_backup_$(date +%Y%m%d).db"
 ```
 
 ---
@@ -164,10 +164,10 @@ cd frontend && npm run build && cd ..
 git add -A && git commit -m "Deploy update" && git push origin HEAD:main
 
 # Deploy to server
-ssh root@144.126.199.94 "cd /var/www/kountryeye && git pull origin main"
-scp -r frontend/dist/* root@144.126.199.94:/var/www/kountryeye/frontend-dist/
-scp -r frontend/dist/assets/* root@144.126.199.94:/var/www/kountryeye/frontend-dist/assets/
-ssh root@144.126.199.94 "chmod 755 /var/www/kountryeye/frontend-dist/assets && systemctl restart kountryeye"
+ssh root@$SERVER_IP "cd /var/www/kountryeye && git pull origin main"
+scp -r frontend/dist/* root@$SERVER_IP:/var/www/kountryeye/frontend-dist/
+scp -r frontend/dist/assets/* root@$SERVER_IP:/var/www/kountryeye/frontend-dist/assets/
+ssh root@$SERVER_IP "chmod 755 /var/www/kountryeye/frontend-dist/assets && systemctl restart kountryeye"
 ```
 
 ---
@@ -181,7 +181,7 @@ ssh root@144.126.199.94 "chmod 755 /var/www/kountryeye/frontend-dist/assets && s
 ### Old JS Files Cached
 **Fix:** Clear old files before deploying:
 ```bash
-ssh root@144.126.199.94 "rm -f /var/www/kountryeye/frontend-dist/assets/index-*.js /var/www/kountryeye/frontend-dist/assets/index-*.css"
+ssh root@$SERVER_IP "rm -f /var/www/kountryeye/frontend-dist/assets/index-*.js /var/www/kountryeye/frontend-dist/assets/index-*.css"
 ```
 
 ### Backend Not Starting

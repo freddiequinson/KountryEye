@@ -46,7 +46,10 @@ class Patient(Base):
     
     emergency_contact_name = Column(String(200))
     emergency_contact_phone = Column(String(20))
-    
+    nationality = Column(String(100))
+    ghana_card = Column(String(50))
+    promo_opt_out = Column(Boolean, default=False)  # no promotions or birthday SMS
+
     branch_id = Column(Integer, ForeignKey("branches.id"))
     
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -67,7 +70,10 @@ class Visit(Base):
     notes = Column(Text)
     status = Column(String(20), default="pending_payment")  # pending_payment -> waiting -> in_consultation -> completed
     payment_status = Column(String(20), default="unpaid")  # unpaid, partial, paid
-    consultation_fee = Column(Numeric(10, 2), default=0)
+    next_review_date = Column(Date)  # set by the doctor; drives review reminders
+    consultation_fee = Column(Numeric(10, 2), default=0)  # VAT-exclusive
+    vat_rate = Column(Numeric(5, 2), nullable=True)
+    vat_amount = Column(Numeric(10, 2), default=0)
     amount_paid = Column(Numeric(10, 2), default=0)
     
     # Payment type: cash, insurance, visioncare
@@ -96,6 +102,17 @@ class Visit(Base):
     branch = relationship("Branch", back_populates="visits")
     consultations = relationship("Consultation", back_populates="visit")
     consultation_type = relationship("ConsultationType")
+
+    @property
+    def total_amount(self):
+        """Fee plus VAT: what the patient is billed for the consultation."""
+        from app.services.billing import visit_total
+        return visit_total(self)
+
+    @property
+    def balance(self):
+        from app.services.billing import visit_balance
+        return visit_balance(self)
 
 
 class PendingRegistration(Base):

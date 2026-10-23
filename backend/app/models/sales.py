@@ -86,6 +86,7 @@ class Sale(Base):
     discount_percent = Column(Numeric(5, 2), default=0)
     discount_reason = Column(Text)
     tax_amount = Column(Numeric(10, 2), default=0)
+    vat_rate = Column(Numeric(5, 2), nullable=True)  # rate used for this sale (null on older sales)
     total_amount = Column(Numeric(10, 2), nullable=False)
     
     payment_method = Column(String(50))
@@ -104,6 +105,12 @@ class Sale(Base):
     cashier = relationship("User")
     items = relationship("SaleItem", back_populates="sale")
     payments = relationship("Payment", back_populates="sale")
+
+    @property
+    def cashier_name(self):
+        """Name of the account that made the sale, for the receipt. None unless `cashier` was loaded with the sale."""
+        cashier = self.__dict__.get("cashier")
+        return f"{cashier.first_name} {cashier.last_name}".strip() if cashier else None
 
 
 class SaleItem(Base):

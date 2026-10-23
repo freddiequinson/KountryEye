@@ -7,66 +7,55 @@ import csv
 import io
 
 from app.core.database import get_db
-from app.api.v1.deps import get_current_active_user
+from app.api.v1.deps import get_current_active_user, require_permission, has_permission
 from app.models.user import User
 from app.models.settings import SystemSetting, VisionCareMember, VisitFeeSettings
 
 router = APIRouter()
 
+import re
 
-@router.get("/")
-async def get_all_settings(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Get all system settings"""
-    result = await db.execute(select(SystemSetting))
-    settings = result.scalars().all()
-    return {s.key: s.value for s in settings}
+# Keys with these prefixes hold secrets (API keys etc.) and are never sent to the browser
+SECRET_PREFIXES = ("secret.", "sms.api_key", "sms.webhook_token")
+KEY_RE = re.compile(r"^[a-z0-9_.-]{1,64}$")
 
 
-@router.get("/{key}")
-async def get_setting(
-    key: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Get a specific setting by key"""
-    result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
-    setting = result.scalar_one_or_none()
-    if not setting:
-        return {"key": key, "value": None}
-    return {"key": setting.key, "value": setting.value}
+def is_secret_key(key: str) -> bool:
+    return key.startswith(SECRET_PREFIXES)
 
 
-@router.put("/{key}")
-async def update_setting(
-    key: str,
-    data: dict,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Update or create a system setting"""
-    if not current_user.is_superuser and current_user.role not in ['admin', 'doctor', 'optometrist']:
-        raise HTTPException(status_code=403, detail="Not authorized to change settings")
-    
-    result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
-    setting = result.scalar_one_or_none()
-    
-    if setting:
-        setting.value = data.get("value")
-        setting.updated_by_id = current_user.id
-    else:
-        setting = SystemSetting(
-            key=key,
-            value=data.get("value"),
-            description=data.get("description", ""),
-            updated_by_id=current_user.id
-        )
-        db.add(setting)
-    
-    await db.commit()
-    return {"key": key, "value": setting.value, "message": "Setting updated"}
+def validate_setting(key: str, value):
+    if key.startswith("sms."):
+        from decimal import Decimal, InvalidOperation
+        if key == "sms.sender_id" and not re.fullmatch(r"[A-Za-z0-9 ]{1,11}", str(value or "")):
+            raise HTTPException(400, "Sender ID must be 1-11 letters or numbers")
+        if key.startswith("sms.template.") and len(str(value or "")) > 459:
+            raise HTTPException(400, "Keep templates under 459 characters (3 SMS)")
+        if key in ("sms.cost_per_segment", "sms.shop_rate", "sms.automation.debt_minimum", "sms.credit_overdraft", "sms.credit_low_warning"):
+            try:
+                number = Decimal(str(value))
+                valid = number.is_finite() and 0 <= number <= 1000000
+            except InvalidOperation:
+                valid = False
+            if not valid:
+                raise HTTPException(400, "Enter a non-negative amount below 1,000,000")
+        if key.endswith("_time") and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", str(value)):
+            raise HTTPException(400, "Time must be HH:MM in Ghana time")
+        if key == "sms.automation.debt_frequency" and value not in ("off", "weekly", "fortnightly", "monthly"):
+            raise HTTPException(400, "Choose off, weekly, fortnightly, or monthly")
+        if key.endswith("_enabled") and value not in ("true", "false"):
+            raise HTTPException(400, "Choose true or false")
+    if key == "vat_rate":
+        try:
+            rate = float(value)
+        except (TypeError, ValueError):
+            rate = -1
+        if not 0 <= rate <= 100:
+            raise HTTPException(status_code=400, detail="VAT rate must be a number between 0 and 100")
+        return f"{rate:g}"
+    if value is not None and not isinstance(value, (str, int, float, bool)):
+        raise HTTPException(status_code=400, detail="Setting value must be text or a number")
+    return None if value is None else str(value)[:5000]
 
 
 # VisionCare Membership endpoints
@@ -133,7 +122,7 @@ async def create_visioncare_member(
     current_user: User = Depends(get_current_active_user)
 ):
     """Create a new VisionCare member"""
-    if not current_user.is_superuser:
+    if not has_permission(current_user, "settings.manage"):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     # Check for duplicate member_id
@@ -168,7 +157,7 @@ async def upload_visioncare_members(
     current_user: User = Depends(get_current_active_user)
 ):
     """Upload VisionCare members from CSV file"""
-    if not current_user.is_superuser:
+    if not has_permission(current_user, "settings.manage"):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     if not file.filename.endswith('.csv'):
@@ -229,7 +218,7 @@ async def delete_visioncare_member(
     current_user: User = Depends(get_current_active_user)
 ):
     """Deactivate a VisionCare member"""
-    if not current_user.is_superuser:
+    if not has_permission(current_user, "settings.manage"):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     result = await db.execute(select(VisionCareMember).where(VisionCareMember.id == member_id))
@@ -292,7 +281,7 @@ async def update_visit_fee_settings(
     current_user: User = Depends(get_current_active_user)
 ):
     """Update visit fee settings (admin only)"""
-    if not current_user.is_superuser:
+    if not has_permission(current_user, "settings.manage"):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     branch_id = data.get("branch_id")
@@ -336,3 +325,66 @@ async def update_visit_fee_settings(
         "subsequent_visit_fee": float(settings.subsequent_visit_fee or 0),
         "review_period_days": settings.review_period_days
     }
+
+
+# ============================================
+# GENERIC KEY/VALUE SETTINGS - keep last so they don't shadow the routes above
+# ============================================
+
+@router.get("/")
+async def get_all_settings(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get all non-secret system settings"""
+    result = await db.execute(select(SystemSetting))
+    return {s.key: s.value for s in result.scalars().all() if not is_secret_key(s.key) and (current_user.is_superuser or not s.key.startswith(("sms.", "phase3_")))}
+
+
+@router.get("/{key}")
+async def get_setting(
+    key: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get a specific setting by key"""
+    if is_secret_key(key) or (not current_user.is_superuser and key.startswith(("sms.", "phase3_"))):
+        raise HTTPException(status_code=404, detail="Setting not found")
+    result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
+    setting = result.scalar_one_or_none()
+    if not setting:
+        return {"key": key, "value": None}
+    return {"key": setting.key, "value": setting.value}
+
+
+@router.put("/{key}")
+async def update_setting(
+    key: str,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("settings.manage"))
+):
+    """Update or create a system setting"""
+    if not KEY_RE.match(key):
+        raise HTTPException(status_code=400, detail="Invalid setting name")
+    if key != "vat_rate" and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only the system administrator can change this")
+    value = validate_setting(key, data.get("value"))
+
+    result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
+    setting = result.scalar_one_or_none()
+
+    if setting:
+        setting.value = value
+        setting.updated_by_id = current_user.id
+    else:
+        setting = SystemSetting(
+            key=key,
+            value=value,
+            description=str(data.get("description", ""))[:255],
+            updated_by_id=current_user.id
+        )
+        db.add(setting)
+
+    await db.commit()
+    return {"key": key, "value": None if is_secret_key(key) else setting.value, "message": "Setting updated"}

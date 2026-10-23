@@ -105,6 +105,7 @@ class SaleCreate(BaseModel):
     discount_percent: float = 0
     discount_reason: Optional[str] = None
     payment_method: Optional[str] = None
+    amount_tendered: Optional[float] = None  # cash handed over, to work out change
     notes: Optional[str] = None
 
 
@@ -127,10 +128,12 @@ class SaleResponse(BaseModel):
     patient_id: Optional[int] = None
     prescription_id: Optional[int] = None
     cashier_id: int
+    cashier_name: Optional[str] = None
     subtotal: float
     discount_amount: float
     discount_percent: float
     tax_amount: float
+    vat_rate: Optional[float] = None
     total_amount: float
     payment_method: Optional[str] = None
     payment_status: str

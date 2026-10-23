@@ -18,6 +18,9 @@ class PatientBase(BaseModel):
     occupation: Optional[str] = None
     emergency_contact_name: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
+    nationality: Optional[str] = None
+    ghana_card: Optional[str] = None
+    promo_opt_out: Optional[bool] = False
 
 
 class PatientCreate(PatientBase):
@@ -37,9 +40,13 @@ class PatientUpdate(BaseModel):
     occupation: Optional[str] = None
     emergency_contact_name: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
+    nationality: Optional[str] = None
+    ghana_card: Optional[str] = None
+    promo_opt_out: Optional[bool] = False
 
 
 class PatientResponse(PatientBase):
+    email: Optional[str] = None  # stored data may predate validation
     id: int
     patient_number: str
     branch_id: int
@@ -87,7 +94,11 @@ class VisitResponse(VisitBase):
     recorded_by_id: int
     status: str
     consultation_type_id: Optional[int] = None
-    consultation_fee: Optional[float] = None
+    consultation_fee: Optional[float] = None  # before VAT
+    vat_rate: Optional[float] = None
+    vat_amount: Optional[float] = None
+    total_amount: Optional[float] = None  # fee + VAT: what the patient is billed
+    balance: Optional[float] = None
     amount_paid: Optional[float] = None
     payment_status: Optional[str] = None
     payment_type: Optional[str] = None

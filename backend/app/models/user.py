@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Table, Text
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Table, Text, Date
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
@@ -53,6 +53,7 @@ class Role(Base):
     name = Column(String(50), unique=True, nullable=False)
     description = Column(String(255))
     is_system = Column(Boolean, default=False)
+    admin_may_assign = Column(Boolean, default=False, nullable=False)
     default_page = Column(String(100), default="/dashboard")  # Default landing page for role
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -65,14 +66,17 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
+    # Optional login name, stored lower-case; unique when set
+    username = Column(String(50), unique=True, index=True, nullable=True)
     hashed_password = Column(String(255), nullable=False)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     phone = Column(String(20))
     avatar_url = Column(String(500))  # Profile picture URL
+    date_of_birth = Column(Date)  # for staff birthday wishes
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
-    must_change_password = Column(Boolean, default=True)  # Force password change on first login
+    must_change_password = Column(Boolean, default=True, info={"backfill": False})  # Force password change on first login
     
     role_id = Column(Integer, ForeignKey("roles.id"))
     branch_id = Column(Integer, ForeignKey("branches.id"))  # Primary branch

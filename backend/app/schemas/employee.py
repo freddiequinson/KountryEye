@@ -84,7 +84,8 @@ class TaskResponse(BaseModel):
     due_date: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
-    
+    temporary_password: Optional[str] = None  # only set right after create/reset
+
     class Config:
         from_attributes = True
 
@@ -132,11 +133,23 @@ class EmployeeStatsResponse(BaseModel):
 # Employee Create (extends User creation)
 class EmployeeCreate(BaseModel):
     email: str
+    username: Optional[str] = None
     first_name: str
     last_name: str
     phone: Optional[str] = None
     role_id: int
     branch_id: int
+
+
+class EmployeeUpdate(BaseModel):
+    email: Optional[str] = None
+    username: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    role_id: Optional[int] = None
+    branch_id: Optional[int] = None
+    is_active: Optional[bool] = None
 
 
 class RoleInfo(BaseModel):
@@ -158,6 +171,7 @@ class BranchInfo(BaseModel):
 class EmployeeResponse(BaseModel):
     id: int
     email: str
+    username: Optional[str] = None
     first_name: str
     last_name: str
     phone: Optional[str] = None
@@ -167,6 +181,7 @@ class EmployeeResponse(BaseModel):
     role: Optional[RoleInfo] = None
     branch: Optional[BranchInfo] = None
     created_at: Optional[datetime] = None
-    
+    temporary_password: Optional[str] = None  # only set right after create/reset
+
     class Config:
         from_attributes = True

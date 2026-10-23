@@ -127,7 +127,11 @@ class Prescription(Base):
     prescribed_by_id = Column(Integer, ForeignKey("users.id"))
     prescription_type = Column(String(50))
     total_amount = Column(Numeric(10, 2), default=0)
-    status = Column(String(50), default="pending")
+    vat_rate = Column(Numeric(5, 2), nullable=True)
+    vat_amount = Column(Numeric(10, 2), default=0)
+    # Older rows stay NULL: their status says whether they were paid
+    amount_paid = Column(Numeric(10, 2), default=0, info={"backfill": None})
+    status = Column(String(50), default="pending")  # pending, partial, paid
     payment_method = Column(String(50))
     paid_at = Column(DateTime)
     

@@ -19,7 +19,7 @@ import os
 import shutil
 
 from app.core.database import get_db
-from app.api.v1.deps import get_current_active_user
+from app.api.v1.deps import get_current_active_user, require_permission
 from app.models.user import User, Role
 from app.models.patient import Patient, Visit
 from app.models.clinical import Consultation
@@ -1108,36 +1108,18 @@ async def upload_scan_pdf(
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
     
-    # Validate file type
-    if not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
-    
-    # Use absolute path for uploads directory
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
-    upload_dir = os.path.join(base_dir, "uploads", "scans")
-    
+    # Scan results are medical records: stored privately, only served through the logged-in route below
+    from app.core.uploads import save_upload
     try:
-        os.makedirs(upload_dir, exist_ok=True)
-    except PermissionError:
-        # Fallback to /tmp if main directory is not writable
-        upload_dir = os.path.join("/tmp", "kountryeye", "uploads", "scans")
-        os.makedirs(upload_dir, exist_ok=True)
-    
-    # Save file
-    filename = f"{scan.scan_number}_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
-    file_path = os.path.join(upload_dir, filename)
-    
-    try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        file_path, _ = await save_upload(file, "scans", kinds=("pdf",), max_mb=25, private=True, prefix=scan.scan_number or "")
     except PermissionError:
         raise HTTPException(status_code=500, detail="Permission denied: Unable to save file. Please contact administrator.")
-    
+
     scan.pdf_file_path = file_path
     scan.updated_at = datetime.utcnow()
     await db.commit()
-    
-    return {"message": "PDF uploaded successfully", "file_path": file_path}
+
+    return {"message": "PDF uploaded successfully"}
 
 
 @router.get("/scans/{scan_id}/pdf")
@@ -1315,7 +1297,7 @@ async def list_payment_settings(
     return response
 
 
-@router.post("/payment-settings")
+@router.post("/payment-settings", dependencies=[Depends(require_permission("referrals.payments.manage"))])
 async def create_payment_setting(
     data: PaymentSettingCreate,
     db: AsyncSession = Depends(get_db),
@@ -1408,7 +1390,7 @@ async def list_referral_payments(
     return response
 
 
-@router.put("/payments/{payment_id}")
+@router.put("/payments/{payment_id}", dependencies=[Depends(require_permission("referrals.payments.manage"))])
 async def update_payment(
     payment_id: int,
     data: PaymentUpdate,
@@ -1438,7 +1420,7 @@ async def update_payment(
     return {"message": "Payment updated successfully"}
 
 
-@router.post("/payments/{payment_id}/mark-paid")
+@router.post("/payments/{payment_id}/mark-paid", dependencies=[Depends(require_permission("referrals.payments.manage"))])
 async def mark_payment_paid(
     payment_id: int,
     payment_method: str,
@@ -1475,7 +1457,7 @@ class ManualPaymentCreate(BaseModel):
     notes: Optional[str] = None
 
 
-@router.post("/payments/create-manual")
+@router.post("/payments/create-manual", dependencies=[Depends(require_permission("referrals.payments.manage"))])
 async def create_manual_payment(
     data: ManualPaymentCreate,
     db: AsyncSession = Depends(get_db),
@@ -1515,7 +1497,7 @@ async def create_manual_payment(
     }
 
 
-@router.post("/referrals/{referral_id}/create-payment")
+@router.post("/referrals/{referral_id}/create-payment", dependencies=[Depends(require_permission("referrals.payments.manage"))])
 async def create_payment_for_referral(
     referral_id: int,
     db: AsyncSession = Depends(get_db),
@@ -1844,7 +1826,7 @@ async def list_scan_pricing(
     ]
 
 
-@router.put("/scan-pricing/{scan_type}")
+@router.put("/scan-pricing/{scan_type}", dependencies=[Depends(require_permission("settings.manage", "technician.scans"))])
 async def update_scan_pricing(
     scan_type: str,
     price: float,
@@ -1925,8 +1907,13 @@ async def create_scan_payment(
         
         scan_amount = Decimal(str(pricing.price))
     
+    # VAT on top of the scan price; insurance covers the VAT-inclusive amount
+    from app.services.vat import get_vat_rate, vat_on
+    scan_vat = vat_on(scan_amount, await get_vat_rate(db))
+    scan_gross = scan_amount + scan_vat
+
     insurance_covered = Decimal("0")
-    patient_pays = scan_amount
+    patient_pays = scan_gross
     
     # Check if visit uses insurance and has remaining balance
     if scan.visit_id:
@@ -1942,12 +1929,12 @@ async def create_scan_payment(
             
             if insurance_remaining > 0:
                 # Deduct from insurance
-                if scan_amount <= insurance_remaining:
-                    insurance_covered = scan_amount
+                if scan_gross <= insurance_remaining:
+                    insurance_covered = scan_gross
                     patient_pays = Decimal("0")
                 else:
                     insurance_covered = insurance_remaining
-                    patient_pays = scan_amount - insurance_remaining
+                    patient_pays = scan_gross - insurance_remaining
                 
                 # Update visit insurance_used
                 visit.insurance_used = insurance_used + insurance_covered
@@ -1979,6 +1966,7 @@ async def create_scan_payment(
         payment = ScanPayment(
             scan_id=scan_id,
             amount=float(scan_amount),
+            vat_amount=scan_vat,
             is_paid=actual_is_paid,
             payment_method=payment_method or ("insurance" if insurance_covered > 0 else None),
             payment_date=datetime.utcnow() if actual_is_paid else None,
@@ -1988,7 +1976,7 @@ async def create_scan_payment(
         db.add(payment)
     
     # Record revenue if payment is being marked as paid (and wasn't already paid)
-    if actual_is_paid and not was_already_paid and float(scan_amount) > 0:
+    if actual_is_paid and not was_already_paid and float(scan_gross) > 0:
         scan_type_labels = {
             "oct": "OCT Scan",
             "vft": "Visual Field Test",
@@ -2012,7 +2000,8 @@ async def create_scan_payment(
         revenue = Revenue(
             category="service",
             description=f"{description}{patient_name}",
-            amount=float(scan_amount),
+            amount=float(scan_gross),
+            vat_amount=scan_vat,
             payment_method=actual_payment_method,
             reference_type="scan",
             reference_id=scan_id,
@@ -2028,7 +2017,9 @@ async def create_scan_payment(
     return {
         "message": "Payment recorded successfully",
         "is_paid": actual_is_paid,
-        "amount": float(scan_amount),
+        "amount": float(scan_gross),
+        "subtotal": float(scan_amount),
+        "vat_amount": float(scan_vat),
         "insurance_covered": float(insurance_covered),
         "patient_pays": float(patient_pays)
     }
@@ -2057,18 +2048,33 @@ async def mark_scan_paid(
         select(ScanPricing).where(ScanPricing.scan_type == scan.scan_type)
     )
     pricing = price_result.scalar_one_or_none()
-    amount = float(pricing.price) if pricing else 0
-    
+
     # Check if payment exists
     payment_result = await db.execute(
         select(ScanPayment).where(ScanPayment.scan_id == scan_id)
     )
     payment = payment_result.scalar_one_or_none()
-    
+
     was_already_paid = payment and payment.is_paid
+
+    from decimal import Decimal
+    from app.services.billing import money
+    from app.services.vat import get_vat_rate, vat_on
+    if payment:
+        net = money(payment.amount)
+        vat = money(payment.vat_amount)
+        already = money(payment.amount_paid)
+    else:
+        net = money(pricing.price if pricing else 0)
+        vat = vat_on(net, await get_vat_rate(db))
+        already = Decimal("0.00")
+    # Only what is still owed counts as new revenue (part may have been paid at checkout)
+    amount = float(max(net + vat - already, Decimal("0.00")))
+    vat_part = money(vat * Decimal(str(amount)) / (net + vat)) if (net + vat) > 0 else Decimal("0.00")
     
     if payment:
         payment.is_paid = True
+        payment.amount_paid = net + vat
         payment.payment_method = payment_method
         payment.payment_date = datetime.utcnow()
         payment.notes = notes
@@ -2077,7 +2083,9 @@ async def mark_scan_paid(
     else:
         payment = ScanPayment(
             scan_id=scan_id,
-            amount=amount,
+            amount=net,
+            vat_amount=vat,
+            amount_paid=net + vat,
             is_paid=True,
             payment_method=payment_method,
             payment_date=datetime.utcnow(),
@@ -2110,6 +2118,7 @@ async def mark_scan_paid(
             category="service",
             description=f"{description}{patient_name}",
             amount=amount,
+            vat_amount=vat_part,
             payment_method=payment_method,
             reference_type="scan",
             reference_id=scan_id,
