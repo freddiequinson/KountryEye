@@ -243,16 +243,17 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     }
   }, [user?.id]);
 
-  // Auto-start onboarding for first-time users
+  // Auto-start onboarding for first-time users (not while they must choose a new password)
+  const mustChangePassword = !!user?.must_change_password || window.location.pathname.startsWith('/change-password');
   useEffect(() => {
-    if (user?.id && !hasCompletedOnboarding && !isOnboarding) {
+    if (user?.id && !mustChangePassword && !hasCompletedOnboarding && !isOnboarding) {
       // Small delay to let the UI render first
       const timer = setTimeout(() => {
         startOnboarding();
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [user?.id, hasCompletedOnboarding, isOnboarding, startOnboarding]);
+  }, [user?.id, mustChangePassword, hasCompletedOnboarding, isOnboarding, startOnboarding]);
 
   return (
     <OnboardingContext.Provider
