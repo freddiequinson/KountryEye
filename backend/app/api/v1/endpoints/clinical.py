@@ -10,7 +10,7 @@ from sqlalchemy.orm import joinedload
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.api.v1.deps import get_current_active_user, require_permission
+from app.api.v1.deps import get_current_active_user, require_permission, has_permission
 from app.models.user import User
 from app.utils.pdf_generator import generate_spectacles_prescription_pdf
 from app.models.patient import Visit, Patient
@@ -263,6 +263,9 @@ async def get_visit_detail(
         select(ClinicalRecord).where(ClinicalRecord.visit_id == visit_id)
     )
     clinical_record = record_result.scalar_one_or_none()
+    # Front desk can open a visit (payments, prescriptions to bill) but not the doctor's notes
+    if not has_permission(current_user, "clinical.view", "clinical.queue", "prescriptions.view"):
+        clinical_record = None
     
     # Get prescriptions
     rx_result = await db.execute(
@@ -929,6 +932,8 @@ async def process_prescription_payment(
     prescription = result.unique().scalar_one_or_none()
     if not prescription:
         raise HTTPException(status_code=404, detail="Prescription not found")
+    from app.services.billing import lock_for_payment
+    await lock_for_payment(db, prescription)
     if prescription.status == "paid":
         raise HTTPException(status_code=400, detail="This prescription is already fully paid")
 
@@ -938,13 +943,10 @@ async def process_prescription_payment(
     already_paid = Decimal(str(prescription.amount_paid or 0))
     balance = total - already_paid
 
-    raw_amount = payment_data.get("amount_paid", payment_data.get("amount"))
-    try:
-        offered = Decimal(str(raw_amount)) if raw_amount not in (None, "") else balance
-    except Exception:
-        raise HTTPException(status_code=400, detail="Amount must be a number")
-    if offered <= 0:
-        raise HTTPException(status_code=400, detail="Amount must be more than zero")
+    from app.services.billing import parse_amount
+    if balance <= 0:
+        raise HTTPException(status_code=400, detail="This prescription is already fully paid")
+    offered = parse_amount(payment_data.get("amount_paid", payment_data.get("amount")), balance)
     applied = min(offered, balance).quantize(Decimal("0.01"))  # anything above the balance is change
     change = (offered - applied).quantize(Decimal("0.01"))
 

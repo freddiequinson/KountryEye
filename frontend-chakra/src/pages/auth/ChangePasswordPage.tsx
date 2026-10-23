@@ -24,13 +24,16 @@ export default function ChangePasswordPage() {
       const response = await api.post('/auth/change-password', data)
       return response.data
     },
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       toast({ title: 'Password changed successfully' })
+      // Changing the password signs out old sessions; keep this one with the new token
+      const fresh = data?.access_token || token
+      if (fresh) useAuthStore.setState({ token: fresh })
 
       // Refresh user data to update must_change_password flag
       try {
         const userResponse = await api.get('/users/me')
-        if (token) setAuth(userResponse.data, token)
+        if (fresh) setAuth(userResponse.data, fresh)
       } catch {
         // Ignore error, user will be redirected anyway
       }

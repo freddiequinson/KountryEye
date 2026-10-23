@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ProductCategoryBase(BaseModel):
@@ -149,8 +149,8 @@ class SaleResponse(BaseModel):
 
 class PaymentCreate(BaseModel):
     sale_id: int
-    amount: float
-    payment_method: str
+    amount: float = Field(gt=0, le=10_000_000, allow_inf_nan=False)
+    payment_method: str = Field(max_length=50)
     reference: Optional[str] = None
 
 

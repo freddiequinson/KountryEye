@@ -63,6 +63,12 @@ async def client(seeded):
 @pytest.fixture
 def auth(seeded):
     """auth('frontdesk') -> headers for that user."""
+    import sqlite3
+
     def make(key: str) -> dict:
-        return {"Authorization": f"Bearer {create_access_token(subject=seeded[key])}"}
+        # Use the account's current login version: tests that reset a password sign it out
+        with sqlite3.connect(f"{_tmp}/test.db") as conn:
+            row = conn.execute("SELECT token_version FROM users WHERE id = ?", (seeded[key],)).fetchone()
+        version = (row[0] or 0) if row else 0
+        return {"Authorization": f"Bearer {create_access_token(subject=seeded[key], version=version)}"}
     return make

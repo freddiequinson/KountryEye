@@ -457,7 +457,8 @@ async def get_messages(
         # Get reply-to info if this is a reply
         reply_to_info = None
         if msg.reply_to_id:
-            reply_result = await db.execute(select(Message).where(Message.id == msg.reply_to_id))
+            reply_result = await db.execute(select(Message).where(
+                Message.id == msg.reply_to_id, Message.conversation_id == msg.conversation_id))
             reply_msg = reply_result.scalar_one_or_none()
             if reply_msg:
                 reply_sender_result = await db.execute(select(User).where(User.id == reply_msg.sender_id))
@@ -528,7 +529,14 @@ async def send_message(
     
     if not participant:
         raise HTTPException(status_code=403, detail="Not a participant in this conversation")
-    
+
+    # A reply can only quote a message from this same conversation
+    if data.reply_to_id:
+        same = (await db.execute(select(Message.id).where(
+            Message.id == data.reply_to_id, Message.conversation_id == conversation_id))).first()
+        if not same:
+            raise HTTPException(status_code=400, detail="You can only reply to a message in this conversation")
+
     # Create message
     message = Message(
         conversation_id=conversation_id,
@@ -1051,21 +1059,52 @@ async def _participant_conversations(user_id: int) -> set:
         return {r[0] for r in rows.all()}
 
 
+def _close_revoked_sockets(user_ids) -> None:
+    """Password changed or account switched off: drop that user's live socket now."""
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    for uid in user_ids:
+        ws = manager.active_connections.get(uid)
+        if ws is not None:
+            async def _kick(uid=uid, ws=ws):
+                try:
+                    await ws.close(code=4401)
+                except Exception:
+                    pass
+                if manager.active_connections.get(uid) is ws:
+                    await manager.disconnect(uid)
+            loop.create_task(_kick())
+
+
+from app.models.user import REVOKE_LISTENERS as _REVOKE_LISTENERS
+_REVOKE_LISTENERS.append(_close_revoked_sockets)
+
+
+
+async def _socket_user_ok(user_id: int, payload: dict) -> bool:
+    import time
+    from app.core.security import token_is_current
+    from app.models.user import User as _User
+    # The login the socket was opened with has run out: the browser must reconnect with a fresh one
+    if float(payload.get("exp") or 0) <= time.time():
+        return False
+    async with async_session_maker() as db:
+        u = await db.get(_User, user_id)
+        return bool(u and u.is_active and not u.must_change_password and token_is_current(payload, u))
+
+
 @router.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: int):
     """WebSocket endpoint for real-time messaging. Needs ?token=<JWT> for the same user."""
-    from app.core.security import decode_token
-    from app.models.user import User as _User
+    from app.core.security import decode_access_token
     token = websocket.query_params.get("token") or ""
-    subject = decode_token(token) if token else None
-    if subject is None or str(subject) != str(user_id):
+    payload = decode_access_token(token) if token else None
+    if payload is None or str(payload.get("sub")) != str(user_id) or not await _socket_user_ok(user_id, payload):
         await websocket.close(code=4401)
         return
-    async with async_session_maker() as db:
-        ws_user = await db.get(_User, user_id)
-        if not ws_user or not ws_user.is_active:
-            await websocket.close(code=4401)
-            return
 
     await manager.connect(websocket, user_id)
     allowed = await _participant_conversations(user_id)
@@ -1073,6 +1112,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
     try:
         while True:
             data = await websocket.receive_text()
+            # Backup to the instant close above (which only sees changes made through the app):
+            # re-check the account before acting on anything it sends
+            if not await _socket_user_ok(user_id, payload):
+                await websocket.close(code=4401)
+                raise WebSocketDisconnect(code=4401)
             try:
                 message = json.loads(data)
             except ValueError:

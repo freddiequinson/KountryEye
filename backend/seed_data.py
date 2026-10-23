@@ -8,6 +8,9 @@ from app.models import (
 )
 
 async def seed_data():
+    import secrets
+    # Random first password, shown once; the account must change it at first login
+    admin_password = secrets.token_urlsafe(12)
     async with async_session_maker() as session:
         role = Role(name="admin", description="Administrator with full access")
         session.add(role)
@@ -15,12 +18,13 @@ async def seed_data():
 
         admin_user = User(
             email="admin@kountryeyecare.com",
-            hashed_password=get_password_hash("admin123"),
+            hashed_password=get_password_hash(admin_password),
             first_name="System",
             last_name="Administrator",
             role_id=role.id,
             is_active=True,
-            is_superuser=True
+            is_superuser=True,
+            must_change_password=True,
         )
         session.add(admin_user)
 
@@ -99,7 +103,7 @@ async def seed_data():
 
         await session.commit()
         print("Seed data created successfully!")
-        print("Admin login: admin@kountryeyecare.com / admin123")
+        print(f"Admin login: admin@kountryeyecare.com / {admin_password}  (shown once; change it at first login)")
 
 if __name__ == "__main__":
     asyncio.run(seed_data())

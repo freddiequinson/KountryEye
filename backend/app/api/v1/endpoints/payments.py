@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.core.database import get_db
-from app.api.v1.deps import get_current_active_user
+from app.api.v1.deps import get_current_active_user, require_permission, has_permission
 from app.models.user import User
 from app.models.patient import Patient
 from app.models.payment import Invoice, InvoicePayment, PaymentStatus
@@ -16,6 +16,15 @@ from app.schemas.payment import (
 )
 
 router = APIRouter()
+
+
+def _check_discount(user, discount, subtotal) -> None:
+    """Same rule as the POS: discounts need sales.discount and can't exceed the bill."""
+    if discount and discount > 0:
+        if not has_permission(user, "sales.discount"):
+            raise HTTPException(status_code=403, detail="You don't have permission to give discounts")
+        if discount > subtotal:
+            raise HTTPException(status_code=400, detail="Discount can't be more than the bill")
 
 
 def generate_invoice_number(branch_id: int, count: int) -> str:
@@ -76,6 +85,7 @@ async def create_invoice(
     
     # Calculate totals from items
     subtotal = sum(item.quantity * item.unit_price for item in invoice_in.items)
+    _check_discount(current_user, invoice_in.discount, subtotal)
     total_amount = subtotal - invoice_in.discount + invoice_in.tax
     
     # Generate invoice number
@@ -122,8 +132,14 @@ async def update_invoice(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     
-    for field, value in invoice_in.model_dump(exclude_unset=True).items():
-        setattr(invoice, field, value)
+    changes = invoice_in.model_dump(exclude_unset=True)
+    if "discount" in changes:
+        _check_discount(current_user, changes["discount"] or Decimal("0"), invoice.subtotal or Decimal("0"))
+    for field, value in changes.items():
+        setattr(invoice, field, value if value is not None or field == "notes" else Decimal("0"))
+    # Totals always come from the server, never the browser
+    invoice.total_amount = (invoice.subtotal or 0) - (invoice.discount or 0) + (invoice.tax or 0)
+    invoice.balance = invoice.total_amount - (invoice.amount_paid or 0)
     
     await db.commit()
     await db.refresh(invoice)
@@ -170,6 +186,8 @@ async def create_payment(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     
+    from app.services.billing import lock_for_payment
+    await lock_for_payment(db, invoice)
     if payment_in.amount <= 0:
         raise HTTPException(status_code=400, detail="Payment amount must be positive")
     

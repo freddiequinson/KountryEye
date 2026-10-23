@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class WarehouseBase(BaseModel):
@@ -37,8 +37,8 @@ class WarehouseStockResponse(BaseModel):
 
 class ImportItemCreate(BaseModel):
     product_id: int
-    expected_quantity: int
-    unit_cost: Optional[float] = None
+    expected_quantity: int = Field(gt=0, le=100_000)
+    unit_cost: Optional[float] = Field(default=None, ge=0, le=10_000_000, allow_inf_nan=False)
 
 
 class ImportCreate(BaseModel):
@@ -80,7 +80,7 @@ class ImportResponse(BaseModel):
 
 class StockTransferItemCreate(BaseModel):
     product_id: int
-    requested_quantity: int
+    requested_quantity: int = Field(gt=0, le=100_000)
 
 
 class StockTransferCreate(BaseModel):

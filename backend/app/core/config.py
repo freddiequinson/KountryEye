@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     SMS_DRY_RUN: bool = False  # log messages instead of sending (staging/dev)
     # Public address of the site, used in links sent by SMS (e.g. http://1.2.3.4)
     PUBLIC_BASE_URL: str = ""
+    # Proxies allowed to tell us the caller's address (nginx on the same box: 127.0.0.1)
+    TRUSTED_PROXIES: str = ""
     SCHEDULER_ENABLED: bool = False  # run birthday/reminder jobs in this process
 
     class Config:
@@ -90,6 +92,9 @@ def _persistent_secret() -> str:
 
 
 settings = Settings()
+# Staging holds a copy of real patients: never send them real SMS from there
+if "STAGING" in (settings.PROJECT_NAME or "").upper():
+    settings.SMS_DRY_RUN = True
 if settings.SECRET_KEY == DEFAULT_SECRET or len(settings.SECRET_KEY) < 16:
     settings.SECRET_KEY = _persistent_secret()
 if settings.CORS_ORIGINS:

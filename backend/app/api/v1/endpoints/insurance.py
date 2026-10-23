@@ -1,4 +1,5 @@
 """Insurance company management and analytics endpoints"""
+from app.utils.safe_export import csv_writer as safe_csv_writer, SafeSheet
 from typing import List, Optional
 from datetime import datetime, date
 from decimal import Decimal
@@ -575,7 +576,7 @@ async def export_insurance_analytics(
     
     # Create CSV
     output = io.StringIO()
-    writer = csv.writer(output)
+    writer = safe_csv_writer(output)
     
     # Header
     writer.writerow([

@@ -7,8 +7,16 @@ _hits: dict[str, deque] = defaultdict(deque)
 
 
 def client_ip(request: Request) -> str:
-    fwd = request.headers.get("x-real-ip") or request.headers.get("x-forwarded-for", "")
-    return (fwd.split(",")[0].strip() if fwd else "") or (request.client.host if request.client else "unknown")
+    """The caller's address. X-Real-IP is only believed when the request came through one of
+    our own proxies (TRUSTED_PROXIES, e.g. nginx on 127.0.0.1); anyone else could fake it."""
+    from app.core.config import settings
+    peer = request.client.host if request.client else "unknown"
+    trusted = {p.strip() for p in (settings.TRUSTED_PROXIES or "").split(",") if p.strip()}
+    if peer in trusted:
+        real = (request.headers.get("x-real-ip") or "").strip()
+        if real:
+            return real[:64]
+    return peer
 
 
 def _window(key: str, window_seconds: int) -> deque:

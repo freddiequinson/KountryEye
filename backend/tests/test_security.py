@@ -26,17 +26,33 @@ def _dep_names(dependant, acc):
 
 
 def test_every_route_requires_login_unless_public():
-    missing = []
-    for r in app.routes:
-        if not isinstance(r, APIRoute):
-            continue
-        names = _dep_names(r.dependant, set())
-        for m in r.methods:
-            if (m, r.path) in PUBLIC or r.path.startswith("/api/v1/public/"):
+    from tests.routes import api_routes
+    missing, checked = [], 0
+    for path, methods, dependant in api_routes(app):
+        names = _dep_names(dependant, set())
+        for m in methods - {"HEAD", "OPTIONS"}:
+            if (m, path) in PUBLIC or path.startswith("/api/v1/public/") or path == "/r/{token}":
                 continue
+            checked += 1
             if not names & AUTH_DEPS:
-                missing.append(f"{m} {r.path}")
+                missing.append(f"{m} {path}")
+    assert checked > 300, f"Only {checked} routes found: the route walk is broken"
     assert not missing, "Routes without a login check:\n" + "\n".join(sorted(missing))
+
+
+def test_route_permission_table_covers_sensitive_modules():
+    """Every route in the medical/money modules has an explicit entry (core/route_permissions.py)."""
+    from tests.routes import api_routes
+    from app.core.route_permissions import ROUTE_PERMISSIONS
+    missing = []
+    for path, methods, _ in api_routes(app):
+        for prefix, table in ROUTE_PERMISSIONS.items():
+            base = "/api/v1" + prefix
+            if path == base or path.startswith(base + "/"):
+                for m in methods - {"HEAD", "OPTIONS"}:
+                    if (m, path[len(base):]) not in table:
+                        missing.append(f"{m} {path}")
+    assert not missing, "Add these to core/route_permissions.py:\n" + "\n".join(sorted(missing))
 
 
 async def test_hard_reset_is_not_public(client):
@@ -94,8 +110,19 @@ async def test_clinic_admin_cannot_grant_admin_role(client, auth, seeded):
 async def test_partial_employee_update_and_reset(client, auth, seeded):
     r = await client.put(f"/api/v1/employees/{seeded['marketing']}", json={"phone": "0240000000"}, headers=auth("admin"))
     assert r.status_code == 200, r.text
+    old = auth("marketing")
     r = await client.post(f"/api/v1/employees/{seeded['marketing']}/reset-password", headers=auth("admin"))
     assert r.status_code == 200 and r.json()["temporary_password"]
+    # The reset signs the old session out, and the new one may only change the password
+    assert (await client.get("/api/v1/patients", headers=old)).status_code == 401
+    assert (await client.get("/api/v1/patients", headers=auth("marketing"))).status_code == 403
+    # Put the account back for the tests that follow
+    from app.core.database import async_session_maker
+    from app.models.user import User
+    async with async_session_maker() as db:
+        u = await db.get(User, seeded["marketing"])
+        u.must_change_password = False
+        await db.commit()
 
 
 async def test_login_wildcards_do_not_match(client):

@@ -89,8 +89,13 @@ async def change_password(
         raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
     
     current_user.hashed_password = get_password_hash(password_data.new_password)
-    await db.commit()
-    return {"message": "Password changed successfully"}
+    current_user.must_change_password = False
+    await db.commit()  # signs the account out everywhere else
+    await db.refresh(current_user)
+    from app.core.security import create_access_token
+    return {"message": "Password changed successfully",
+            "access_token": create_access_token(subject=current_user.id, version=current_user.token_version),
+            "token_type": "bearer"}
 
 
 @router.get("", response_model=List[UserResponse])

@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { isSafeAppPath } from '@/lib/errors'
 import { useNavigate } from 'react-router-dom'
 import { Box, Button, Flex, HStack, Spinner, useColorModeValue } from '@chakra-ui/react'
 import { MdDelete, MdDoneAll, MdNotificationsNone } from 'react-icons/md'
@@ -41,7 +42,7 @@ export default function NotificationsPage() {
 
   const handleNotificationClick = (notification: Notification) => {
     if (!notification.is_read) markAsReadMutation.mutate(notification.id)
-    if (notification.action_url) navigate(notification.action_url)
+    if (isSafeAppPath(notification.action_url)) navigate(notification.action_url)
   }
 
   const unreadCount = notifications.filter((n: Notification) => !n.is_read).length

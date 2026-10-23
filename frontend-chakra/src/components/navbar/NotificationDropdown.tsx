@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { isSafeAppPath } from '@/lib/errors'
 import { useNavigate } from 'react-router-dom'
 import {
   Badge,
@@ -104,7 +105,7 @@ export default function NotificationDropdown() {
 
   const handleNotificationClick = (notification: Notification) => {
     if (!notification.is_read) markAsReadMutation.mutate(notification.id)
-    if (notification.action_url) {
+    if (isSafeAppPath(notification.action_url)) {
       onClose()
       navigate(notification.action_url)
     }

@@ -2,7 +2,7 @@ from typing import List, Optional
 from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update, func
 
 from app.core.database import get_db
 from app.api.v1.deps import get_current_active_user
@@ -319,46 +319,41 @@ async def remove_import_item(
     return {"message": "Item removed successfully"}
 
 
+async def _claim(db, model, obj_id: int, from_status: tuple[str, ...], values: dict, already: str):
+    """Move a record on in one UPDATE so a repeated or parallel click can't apply it twice."""
+    done = await db.execute(update(model).where(model.id == obj_id, model.status.in_(from_status)).values(**values))
+    if done.rowcount != 1:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=already)
+
+
+async def _add_stock(db, model, where: tuple, qty: int, new_row: dict) -> None:
+    bumped = await db.execute(update(model).where(*where).values(quantity=func.coalesce(model.quantity, 0) + qty))
+    if bumped.rowcount == 0:
+        db.add(model(quantity=qty, **new_row))
+
+
 @router.put("/imports/{import_id}/receive")
 async def receive_import(
     import_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    result = await db.execute(select(Import).where(Import.id == import_id))
-    import_record = result.scalar_one_or_none()
+    import_record = (await db.execute(select(Import).where(Import.id == import_id))).scalar_one_or_none()
     if not import_record:
         raise HTTPException(status_code=404, detail="Import not found")
-    
-    items_result = await db.execute(
-        select(ImportItem).where(ImportItem.import_id == import_id)
-    )
-    items = items_result.scalars().all()
-    
+    warehouse_id = import_record.warehouse_id
+    await _claim(db, Import, import_id, ("pending", "in_transit", "ordered", "draft"),
+                 {"status": "received", "arrival_date": date.today()}, "This import was already received")
+    items = (await db.execute(select(ImportItem).where(ImportItem.import_id == import_id))).scalars().all()
     for item in items:
-        item.received_quantity = item.expected_quantity
-        
-        stock_result = await db.execute(
-            select(WarehouseStock).where(
-                WarehouseStock.warehouse_id == import_record.warehouse_id,
-                WarehouseStock.product_id == item.product_id
-            )
-        )
-        stock = stock_result.scalar_one_or_none()
-        
-        if stock:
-            stock.quantity += item.expected_quantity
-        else:
-            stock = WarehouseStock(
-                warehouse_id=import_record.warehouse_id,
-                product_id=item.product_id,
-                quantity=item.expected_quantity
-            )
-            db.add(stock)
-    
-    import_record.status = "received"
-    import_record.arrival_date = date.today()
-    
+        qty = item.expected_quantity or 0
+        if qty <= 0:
+            await db.rollback()
+            raise HTTPException(status_code=400, detail="Every item needs a quantity above zero")
+        item.received_quantity = qty
+        await _add_stock(db, WarehouseStock, (WarehouseStock.warehouse_id == warehouse_id, WarehouseStock.product_id == item.product_id),
+                         qty, {"warehouse_id": warehouse_id, "product_id": item.product_id})
     await db.commit()
     return {"message": "Import received successfully"}
 
@@ -414,23 +409,17 @@ async def approve_transfer(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    result = await db.execute(select(StockTransfer).where(StockTransfer.id == transfer_id))
-    transfer = result.scalar_one_or_none()
-    if not transfer:
+    if not (await db.execute(select(StockTransfer.id).where(StockTransfer.id == transfer_id))).first():
         raise HTTPException(status_code=404, detail="Transfer not found")
-    
-    items_result = await db.execute(
-        select(StockTransferItem).where(StockTransferItem.transfer_id == transfer_id)
-    )
-    items = items_result.scalars().all()
-    
+    await _claim(db, StockTransfer, transfer_id, ("pending",),
+                 {"status": "approved", "approved_by_id": current_user.id, "approved_date": datetime.utcnow()},
+                 "Only pending transfers can be approved")
+    items = (await db.execute(select(StockTransferItem).where(StockTransferItem.transfer_id == transfer_id))).scalars().all()
     for item in items:
+        if (item.requested_quantity or 0) <= 0:
+            await db.rollback()
+            raise HTTPException(status_code=400, detail="Every item needs a quantity above zero")
         item.approved_quantity = item.requested_quantity
-    
-    transfer.status = "approved"
-    transfer.approved_by_id = current_user.id
-    transfer.approved_date = datetime.utcnow()
-    
     await db.commit()
     return {"message": "Transfer approved"}
 
@@ -441,52 +430,29 @@ async def complete_transfer(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    result = await db.execute(select(StockTransfer).where(StockTransfer.id == transfer_id))
-    transfer = result.scalar_one_or_none()
+    """Move approved stock from the warehouse to the branch, once, and only if the warehouse has it."""
+    transfer = (await db.execute(select(StockTransfer).where(StockTransfer.id == transfer_id))).scalar_one_or_none()
     if not transfer:
         raise HTTPException(status_code=404, detail="Transfer not found")
-    
-    items_result = await db.execute(
-        select(StockTransferItem).where(StockTransferItem.transfer_id == transfer_id)
-    )
-    items = items_result.scalars().all()
-    
+    from_wh, to_branch = transfer.from_warehouse_id, transfer.to_branch_id
+    await _claim(db, StockTransfer, transfer_id, ("approved",),
+                 {"status": "completed", "completed_date": datetime.utcnow()},
+                 "Only approved transfers can be completed, and only once")
+    items = (await db.execute(select(StockTransferItem).where(StockTransferItem.transfer_id == transfer_id))).scalars().all()
     for item in items:
-        item.received_quantity = item.approved_quantity or item.requested_quantity
-        
-        wh_stock_result = await db.execute(
-            select(WarehouseStock).where(
-                WarehouseStock.warehouse_id == transfer.from_warehouse_id,
-                WarehouseStock.product_id == item.product_id
-            )
-        )
-        wh_stock = wh_stock_result.scalar_one_or_none()
-        if wh_stock:
-            wh_stock.quantity -= item.received_quantity
-        
-        br_stock_result = await db.execute(
-            select(BranchStock).where(
-                BranchStock.branch_id == transfer.to_branch_id,
-                BranchStock.product_id == item.product_id
-            )
-        )
-        br_stock = br_stock_result.scalar_one_or_none()
-        
-        if br_stock:
-            br_stock.quantity += item.received_quantity
-            br_stock.last_restocked = datetime.utcnow()
-        else:
-            br_stock = BranchStock(
-                branch_id=transfer.to_branch_id,
-                product_id=item.product_id,
-                quantity=item.received_quantity,
-                last_restocked=datetime.utcnow()
-            )
-            db.add(br_stock)
-    
-    transfer.status = "completed"
-    transfer.completed_date = datetime.utcnow()
-    
+        qty = item.approved_quantity or 0
+        if qty <= 0:
+            await db.rollback()
+            raise HTTPException(status_code=400, detail="Every item needs an approved quantity above zero")
+        taken = await db.execute(update(WarehouseStock).where(
+            WarehouseStock.warehouse_id == from_wh, WarehouseStock.product_id == item.product_id,
+            WarehouseStock.quantity >= qty).values(quantity=WarehouseStock.quantity - qty))
+        if taken.rowcount != 1:
+            await db.rollback()
+            raise HTTPException(status_code=400, detail="The warehouse doesn't have enough stock for this transfer")
+        item.received_quantity = qty
+        await _add_stock(db, BranchStock, (BranchStock.branch_id == to_branch, BranchStock.product_id == item.product_id),
+                         qty, {"branch_id": to_branch, "product_id": item.product_id, "last_restocked": datetime.utcnow()})
     await db.commit()
     return {"message": "Transfer completed"}
 

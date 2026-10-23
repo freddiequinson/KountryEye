@@ -1,4 +1,5 @@
 from typing import List, Optional
+from app.utils.safe_export import csv_writer as safe_csv_writer, SafeSheet
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
@@ -225,7 +226,7 @@ async def export_products(
             from openpyxl import Workbook
             
             wb = Workbook()
-            ws = wb.active
+            ws = SafeSheet(wb.active)
             ws.title = "Products"
             
             # Headers
@@ -260,7 +261,7 @@ async def export_products(
     
     # CSV export
     output = io.StringIO()
-    writer = csv.writer(output)
+    writer = safe_csv_writer(output)
     
     # Headers
     writer.writerow(["ID", "SKU", "Name", "Category", "Cost Price", "Sale Price", "Stock", "Description", "Created At"])
@@ -657,6 +658,7 @@ async def create_sale(
 
     subtotal = Decimal("0.00")
     sale_items = []
+    wanted: dict[int, int] = {}  # per product across all lines, so split lines can't oversell
 
     for item_in in sale_in.items:
         if item_in.quantity <= 0:
@@ -673,10 +675,11 @@ async def create_sale(
         )
         stock = stock_result.scalar_one_or_none()
         available_qty = stock.quantity if stock else 0
-        if item_in.quantity > available_qty:
+        wanted[item_in.product_id] = wanted.get(item_in.product_id, 0) + item_in.quantity
+        if wanted[item_in.product_id] > available_qty:
             raise HTTPException(
                 status_code=400,
-                detail=f"Insufficient stock for {product.name}. Available: {available_qty}, Requested: {item_in.quantity}"
+                detail=f"Insufficient stock for {product.name}. Available: {available_qty}, Requested: {wanted[item_in.product_id]}"
             )
 
         # The shelf price, unless this user may change prices at the till
@@ -730,16 +733,15 @@ async def create_sale(
     for item_data in sale_items:
         sale_item = SaleItem(sale_id=sale.id, **item_data)
         db.add(sale_item)
-        
-        stock_result = await db.execute(
-            select(BranchStock).where(
-                BranchStock.branch_id == sale_in.branch_id,
-                BranchStock.product_id == item_data["product_id"]
-            )
-        )
-        stock = stock_result.scalar_one_or_none()
-        if stock:
-            stock.quantity -= item_data["quantity"]
+
+        # Take the stock only if it is still there (another till may have sold it meanwhile)
+        from sqlalchemy import update as sql_update
+        taken = await db.execute(sql_update(BranchStock).where(
+            BranchStock.branch_id == sale_in.branch_id, BranchStock.product_id == item_data["product_id"],
+            BranchStock.quantity >= item_data["quantity"]).values(quantity=BranchStock.quantity - item_data["quantity"]))
+        if taken.rowcount != 1:
+            await db.rollback()
+            raise HTTPException(status_code=409, detail="Stock changed while this sale was being made. Check the quantities and try again.")
     
     # Record revenue for this sale
     revenue = Revenue(
@@ -887,24 +889,46 @@ async def get_product_rank(
 async def create_payment(
     payment_in: PaymentCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("payments.create"))
 ):
-    sale_result = await db.execute(select(Sale).where(Sale.id == payment_in.sale_id))
-    sale = sale_result.scalar_one_or_none()
+    """Pay towards an existing sale. Same rules as checkout: positive amount, never more
+    than is owed (the rest is change), revenue and VAT recorded, receipt SMS queued."""
+    from decimal import Decimal
+    from app.services.billing import money, parse_amount, lock_for_payment
+    from app.services.vat import vat_share
+    sale = (await db.execute(select(Sale).where(Sale.id == payment_in.sale_id))).scalar_one_or_none()
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")
-    
-    payment = Payment(**payment_in.model_dump())
+    await lock_for_payment(db, sale)
+    if sale.payment_status in ("refunded", "cancelled", "void"):
+        raise HTTPException(status_code=400, detail="This sale can't take payments")
+    total = money(sale.total_amount)
+    owed = total - money(sale.paid_amount)
+    if owed <= 0:
+        raise HTTPException(status_code=400, detail="This sale is already fully paid")
+    applied = min(parse_amount(payment_in.amount, owed), owed)
+    method = str(payment_in.payment_method or "cash")[:50]
+
+    payment = Payment(sale_id=sale.id, amount=applied, payment_method=method, reference=payment_in.reference)
     db.add(payment)
-    
-    sale.paid_amount = float(sale.paid_amount) + payment_in.amount
-    if sale.paid_amount >= float(sale.total_amount):
-        sale.payment_status = "paid"
+    sale.paid_amount = money(sale.paid_amount) + applied
+    if sale.paid_amount >= total:
+        sale.payment_status = "completed"
         sale.completed_at = datetime.utcnow()
-        sale.change_amount = sale.paid_amount - float(sale.total_amount)
     else:
         sale.payment_status = "partial"
-    
+    vat = vat_share(applied, getattr(sale, "tax_amount", 0) or 0, total)
+    db.add(Revenue(category="sales", description=f"Sale payment {sale.receipt_number or sale.id}", amount=applied,
+                   vat_amount=vat, payment_method=method, reference_type="sale", reference_id=sale.id,
+                   patient_id=sale.patient_id, branch_id=sale.branch_id, recorded_by_id=current_user.id))
+    if sale.patient_id:
+        from app.models.patient import Patient
+        from app.services.sms.receipts import queue_receipt_sms
+        patient = await db.get(Patient, sale.patient_id)
+        await queue_receipt_sms(db, kind="sale", ref_id=sale.id, patient=patient, amount=applied, vat=vat,
+                                balance=max(total - sale.paid_amount, Decimal("0")), sent_by_id=current_user.id)
     await db.commit()
     await db.refresh(payment)
+    from app.services.sms.service import kick
+    kick()
     return payment

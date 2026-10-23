@@ -745,6 +745,11 @@ export default function FrontDeskPage() {
                                 ({r.other_names})
                               </Text>
                             )}
+                            {r.existing_patient && (
+                              <Text fontSize="sm" color="orange.500" fontWeight="600">
+                                Already a patient: {r.existing_patient.name} ({r.existing_patient.patient_number})
+                              </Text>
+                            )}
                           </Td>
                           <Td fontSize="sm">
                             <Text>{r.phone}</Text>

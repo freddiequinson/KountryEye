@@ -1,4 +1,5 @@
 from decimal import Decimal
+from app.utils.safe_export import csv_writer as safe_csv_writer, SafeSheet
 from typing import List, Optional
 from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -82,7 +83,7 @@ async def export_patients(
             from openpyxl import Workbook
             
             wb = Workbook()
-            ws = wb.active
+            ws = SafeSheet(wb.active)
             ws.title = "Patients"
             
             # Headers
@@ -120,7 +121,7 @@ async def export_patients(
     
     # CSV export
     output = io.StringIO()
-    writer = csv.writer(output)
+    writer = safe_csv_writer(output)
     
     # Headers
     writer.writerow(["Patient Number", "First Name", "Last Name", "Phone", "Email", "Gender", "Date of Birth", "Address", "Occupation", "Emergency Contact", "Emergency Phone", "Created At"])
@@ -234,6 +235,20 @@ async def search_patients(
     ]
 
 
+async def _existing_patient_for(db, reg) -> dict | None:
+    """A patient already on file with the same phone or Ghana Card (staff only)."""
+    conds = []
+    if (reg.phone or "").strip():
+        conds.append(Patient.phone == reg.phone.strip())
+    if (reg.ghana_card or "").strip():
+        conds.append(Patient.ghana_card == reg.ghana_card.strip())
+    if not conds:
+        return None
+    from sqlalchemy import or_
+    p = (await db.execute(select(Patient).where(or_(*conds)).limit(1))).scalars().first()
+    return {"id": p.id, "name": f"{p.first_name} {p.last_name}", "patient_number": p.patient_number} if p else None
+
+
 @router.get("/pending-registrations")
 async def get_pending_registrations(
     db: AsyncSession = Depends(get_db),
@@ -248,10 +263,12 @@ async def get_pending_registrations(
         .order_by(PendingRegistration.created_at.desc())
     )
     registrations = result.scalars().all()
-    
+    matches = {r.id: await _existing_patient_for(db, r) for r in registrations}
+
     return [
         {
             "id": r.id,
+            "existing_patient": matches[r.id],
             "first_name": r.first_name,
             "last_name": r.last_name,
             "other_names": r.other_names,
@@ -845,8 +862,9 @@ async def update_visit(
 async def apply_visit_payment(db, visit, payment_data: dict, current_user) -> dict:
     """Record a payment against a visit. Anything above the balance is change, not revenue."""
     from app.models.revenue import Revenue
-    from app.services.billing import money, visit_total, visit_balance, parse_amount
+    from app.services.billing import money, visit_total, visit_balance, parse_amount, lock_for_payment
 
+    await lock_for_payment(db, visit)
     balance = visit_balance(visit)
     if balance <= 0:
         raise HTTPException(status_code=400, detail="This visit is already fully paid")
@@ -1096,31 +1114,8 @@ async def self_register_patient(
     if not patient_data.get("first_name") or not patient_data.get("last_name"):
         raise HTTPException(status_code=400, detail="First and last name are required")
     
-    # Check for duplicate phone number globally
-    phone = patient_data.get("phone", "").strip()
-    if phone:
-        phone_check = await db.execute(
-            select(Patient.id).where(Patient.phone == phone).limit(1)
-        )
-        existing_by_phone = phone_check.first()
-        if existing_by_phone:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"A patient with this phone number already exists in our system. Please visit the front desk for assistance."
-            )
-    
-    # Check for duplicate ghana_card globally
-    ghana_card = patient_data.get("ghana_card", "").strip()
-    if ghana_card:
-        ghana_card_check = await db.execute(
-            select(Patient).where(Patient.ghana_card == ghana_card).limit(1)
-        )
-        existing_by_ghana_card = ghana_card_check.scalars().first()
-        if existing_by_ghana_card:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"A patient with this Ghana Card number already exists in our system. Please visit the front desk for assistance."
-            )
+    # No duplicate check here: telling a stranger "this number is already a patient" would
+    # reveal who visits the clinic. The front desk sees possible matches when reviewing.
     
     # Convert date_of_birth string to date object
     dob = patient_data.get("date_of_birth")
@@ -1248,7 +1243,12 @@ async def approve_pending_registration(
     pending = result.scalar_one_or_none()
     if not pending:
         raise HTTPException(status_code=404, detail="Pending registration not found")
-    
+    existing = await _existing_patient_for(db, pending)
+    if existing:
+        raise HTTPException(status_code=409, detail=(
+            f"{existing['name']} ({existing['patient_number']}) already has this phone or Ghana Card. "
+            "Reject this registration and use their existing record."))
+
     branch_id = current_user.branch_id or 1
     count_result = await db.execute(
         select(func.count(Patient.id)).where(Patient.branch_id == branch_id)

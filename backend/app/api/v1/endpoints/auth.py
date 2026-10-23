@@ -77,7 +77,7 @@ async def login(
     user.last_login = datetime.utcnow()
     await db.commit()
 
-    access_token = create_access_token(subject=user.id)
+    access_token = create_access_token(subject=user.id, version=user.token_version)
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -106,10 +106,14 @@ async def change_password(
     # Update password and clear flag
     current_user.hashed_password = get_password_hash(request.new_password)
     current_user.must_change_password = False
-    
-    await db.commit()
-    
-    return {"message": "Password changed successfully"}
+
+    await db.commit()  # signs the account out everywhere (token version goes up)
+    await db.refresh(current_user)
+
+    # A fresh login for this browser, so changing your password doesn't log you out here
+    return {"message": "Password changed successfully",
+            "access_token": create_access_token(subject=current_user.id, version=current_user.token_version),
+            "token_type": "bearer"}
 
 
 class ForgotPasswordRequest(BaseModel):
