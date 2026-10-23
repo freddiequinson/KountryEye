@@ -32,12 +32,14 @@ def main():
                         help='Generate the superadmin temporary password and print it once')
     parser.add_argument('--clinic-admin-email', action='append', required=True)
     parser.add_argument('--apply', action='store_true')
+    parser.add_argument('--production', action='store_true',
+                        help='Allow the production database (only at cutover, after a backup)')
     args = parser.parse_args()
     path = args.database.resolve(strict=True)
     if not path.is_file():
         parser.error('Database must be an existing SQLite file')
-    if path.is_relative_to(Path('/var/www/kountryeye')):
-        parser.error('Production is read-only in this phase. Use the staging database.')
+    if path.is_relative_to(Path('/var/www/kountryeye')) and not args.production:
+        parser.error('This is the production database. Add --production at cutover to run against it.')
     email = args.superadmin_email.strip().lower()
     username = (args.superadmin_username or '').strip().lower() or None
     clinic_emails = {s.strip().lower() for s in args.clinic_admin_email}
