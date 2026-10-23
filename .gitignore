@@ -62,3 +62,6 @@ KountryEyecare-Portable/
 #md
 .md
 !README.md
+# Runtime data: local databases and the generated token-signing key. Never commit.
+backend/data/
+secret.key
