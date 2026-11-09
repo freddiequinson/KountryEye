@@ -90,9 +90,9 @@ class BranchStockResponse(BaseModel):
 
 class SaleItemCreate(BaseModel):
     product_id: int
-    quantity: int
-    unit_price: Optional[float] = None
-    discount: float = 0
+    quantity: int = Field(gt=0)
+    unit_price: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    discount: float = Field(default=0, ge=0, allow_inf_nan=False)
 
 
 class SaleCreate(BaseModel):
@@ -101,8 +101,8 @@ class SaleCreate(BaseModel):
     visit_id: Optional[int] = None
     prescription_id: Optional[int] = None
     items: List[SaleItemCreate]
-    discount_amount: float = 0
-    discount_percent: float = 0
+    discount_amount: float = Field(default=0, ge=0, allow_inf_nan=False)
+    discount_percent: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
     discount_reason: Optional[str] = None
     payment_method: Optional[str] = None
     amount_tendered: Optional[float] = None  # cash handed over, to work out change

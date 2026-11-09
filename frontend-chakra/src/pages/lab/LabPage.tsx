@@ -84,9 +84,9 @@ function useJobAction() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: ({ id, action, body }: { id: number; action: string; body?: any }) => api.post(`/lab/jobs/${id}/${action}`, body ?? {}),
-    onSuccess: (_r, v) => {
+    onSuccess: (r, v) => {
       client.invalidateQueries({ queryKey: ['lab-jobs'] })
-      toast({ title: { start: 'Ready date saved. The patient has been texted.', ready: 'Marked ready. The patient has been texted.', collected: 'Handed over', collect: 'Handed over', cancel: 'Job cancelled' }[v.action] ?? 'Saved' })
+      toast({ title: { start: 'Ready date saved.', ready: 'Marked ready.', collected: 'Handed over', collect: 'Handed over', cancel: 'Job cancelled' }[v.action] ?? 'Saved', description: ['start', 'ready'].includes(v.action) ? (r.data.sms_status === 'queued' ? 'SMS queued. Delivery is not yet confirmed; check the SMS log.' : r.data.sms_status === 'failed' ? `SMS not sent: ${r.data.sms_error || 'Check the patient’s phone number.'}` : 'No new SMS queued.') : undefined })
     },
     onError: (e) => toast({ title: 'Could not update the job', description: apiErrorMessage(e), variant: 'destructive' }),
   })

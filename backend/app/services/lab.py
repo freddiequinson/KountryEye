@@ -6,6 +6,7 @@ from datetime import datetime, date
 from sqlalchemy import select, func
 
 from app.models.lab import LabJob
+from app.models.sms import SmsMessage
 
 
 def _staff_with(perm_codes: set[str]):
@@ -48,18 +49,18 @@ async def _patient_and_branch(db, job):
     return patient, branch
 
 
-async def sms_in_progress(db, job) -> None:
+async def sms_in_progress(db, job) -> SmsMessage | None:
     from app.services.sms.service import queue_sms, render
     patient, _ = await _patient_and_branch(db, job)
     if not patient or not job.estimated_ready_date:
         return
     body = await render(db, "in_progress", first_name=patient.first_name, date=job.estimated_ready_date.strftime("%a %d %b"))
-    await queue_sms(db, patient.phone, body, "lab", patient=patient, name=f"{patient.first_name} {patient.last_name}",
+    return await queue_sms(db, patient.phone, body, "lab", patient=patient, name=f"{patient.first_name} {patient.last_name}",
                     entity_type="lab_job", entity_id=job.id,
                     dedupe_key=f"lab:{job.id}:progress:{job.estimated_ready_date.isoformat()}")
 
 
-async def sms_ready(db, job) -> None:
+async def sms_ready(db, job) -> SmsMessage | None:
     from app.services.sms.service import queue_sms, render
     from app.services.balances import patient_balance
     patient, branch = await _patient_and_branch(db, job)
@@ -68,7 +69,7 @@ async def sms_ready(db, job) -> None:
     balance = await patient_balance(db, patient.id)
     body = await render(db, "ready", first_name=patient.first_name, branch=branch.name if branch else "the clinic",
                         balance=f"{balance:,.2f}", branch_phone=(branch.phone if branch else "") or "")
-    await queue_sms(db, patient.phone, body, "lab", patient=patient, name=f"{patient.first_name} {patient.last_name}",
+    return await queue_sms(db, patient.phone, body, "lab", patient=patient, name=f"{patient.first_name} {patient.last_name}",
                     entity_type="lab_job", entity_id=job.id, dedupe_key=f"lab:{job.id}:ready")
 
 

@@ -1,3 +1,4 @@
+import { useSearchStore } from '@/stores/search'
 import type { QueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth'
 
@@ -9,6 +10,7 @@ const OFFLINE_DB = 'kountry_eyecare_offline' // lib/offline-storage.ts
 /** Forget everything the last person loaded: cached API data, drafts, recent searches, offline copies. */
 export async function clearSessionData(queryClient: QueryClient) {
   queryClient.clear()
+  useSearchStore.getState().setTerm('')
   try {
     const keys: string[] = []
     for (let i = 0; i < sessionStorage.length; i++) keys.push(sessionStorage.key(i) as string)

@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query'
 import { Badge, Box, Flex, Heading, Icon, Input, InputGroup, InputLeftElement, InputRightElement, SimpleGrid, Spinner, Stack, Text, Wrap, useColorModeValue } from '@chakra-ui/react'
 import type { IconType } from 'react-icons'
 import {
-  MdAccessTime,
   MdArrowForward,
   MdAssignment,
   MdAttachMoney,
@@ -27,6 +26,7 @@ import {
 } from 'react-icons/md'
 import { FaGlasses } from 'react-icons/fa'
 import api from '@/lib/api'
+import { useSearchStore } from '@/stores/search'
 import Card from '@/components/card/Card'
 
 interface SearchResult {
@@ -75,24 +75,10 @@ const SUGGESTIONS = [
 
 const recentSearchesKey = 'kountry_recent_searches'
 
-function getRecentSearches(): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(recentSearchesKey) || '[]')
-  } catch {
-    return []
-  }
-}
-
-function saveRecentSearch(term: string) {
-  const recent = getRecentSearches().filter((s) => s !== term)
-  recent.unshift(term)
-  localStorage.setItem(recentSearchesKey, JSON.stringify(recent.slice(0, 8)))
-}
-
 export default function GlobalSearchPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const urlQuery = searchParams.get('q') || ''
+  const urlQuery = useSearchStore((s) => s.term)
   const [query, setQuery] = useState(urlQuery)
   const [debouncedQuery, setDebouncedQuery] = useState(urlQuery)
   const [activeFilter, setActiveFilter] = useState<string | null>(null)
@@ -102,9 +88,11 @@ export default function GlobalSearchPage() {
 
   useEffect(() => {
     inputRef.current?.focus()
+    localStorage.removeItem(recentSearchesKey)
+    if (searchParams.has('q')) setSearchParams({}, { replace: true })
   }, [])
 
-  // Follow ?q= changes made from outside this page (e.g. the navbar search box)
+  // Follow navbar searches without putting terms in the URL.
   useEffect(() => {
     if (urlQuery !== debouncedQuery.trim()) {
       setQuery(urlQuery)
@@ -119,32 +107,31 @@ export default function GlobalSearchPage() {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         setDebouncedQuery(value)
-        setSearchParams(value.trim() ? { q: value.trim() } : {})
+        useSearchStore.getState().setTerm(value)
       }, 350)
     },
-    [setSearchParams],
+    [],
   )
 
   const { data, isLoading, isFetching } = useQuery<SearchResponse>({
     queryKey: ['global-search', debouncedQuery],
-    queryFn: async () => (await api.get('/search/global', { params: { q: debouncedQuery, limit: 15 } })).data,
+    queryFn: async () => (await api.post('/search/global', { q: debouncedQuery, limit: 15 })).data,
     enabled: debouncedQuery.trim().length >= 1,
     staleTime: 30000,
   })
 
-  useEffect(() => {
-    if (data && debouncedQuery.trim()) saveRecentSearch(debouncedQuery.trim())
-  }, [data, debouncedQuery])
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+  }, [])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       setQuery('')
       setDebouncedQuery('')
-      setSearchParams({})
+      useSearchStore.getState().setTerm('')
     }
   }
 
-  const recentSearches = getRecentSearches()
   const hasResults = !!data && data.total_count > 0
   const hasSearched = debouncedQuery.trim().length >= 1
   const filteredResults = data?.results ? (activeFilter ? { [activeFilter]: data.results[activeFilter] || [] } : data.results) : {}
@@ -219,36 +206,6 @@ export default function GlobalSearchPage() {
       {/* No query yet - show recent searches & suggestions */}
       {!hasSearched && (
         <Stack spacing="24px">
-          {recentSearches.length > 0 && (
-            <Box>
-              <Flex align="center" gap="8px" fontSize="sm" fontWeight="500" color="secondaryGray.600" mb="12px">
-                <Icon as={MdAccessTime} />
-                Recent Searches
-              </Flex>
-              <Wrap spacing="8px">
-                {recentSearches.map((term, i) => (
-                  <Badge
-                    key={i}
-                    as="button"
-                    variant="outline"
-                    px="12px"
-                    py="6px"
-                    borderRadius="full"
-                    fontSize="sm"
-                    textTransform="none"
-                    display="inline-flex"
-                    alignItems="center"
-                    gap="6px"
-                    _hover={{ bg: hoverBg }}
-                    onClick={() => handleQueryChange(term)}
-                  >
-                    <Icon as={MdSearch} />
-                    {term}
-                  </Badge>
-                ))}
-              </Wrap>
-            </Box>
-          )}
 
           <Box>
             <Text fontSize="sm" fontWeight="500" color="secondaryGray.600" mb="12px">

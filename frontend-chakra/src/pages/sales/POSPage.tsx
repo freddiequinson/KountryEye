@@ -80,6 +80,8 @@ export default function POSPage() {
 
   const { data: products = [] } = useQuery({
     queryKey: ['pos-products', search, selectedCategoryId],
+    refetchInterval: 15000,
+    refetchOnMount: 'always',
     queryFn: async () => {
       const params: Record<string, any> = { search }
       if (selectedCategoryId) params.category_id = selectedCategoryId
@@ -95,6 +97,8 @@ export default function POSPage() {
   // Stock at the branch the user is signed in to
   const { data: branchStock = [] } = useQuery({
     queryKey: ['pos-branch-stock', branchId],
+    refetchInterval: 15000,
+    refetchOnMount: 'always',
     queryFn: async () => (await api.get(`/sales/stock/${branchId}`)).data,
     enabled: !!branchId,
   })
@@ -191,7 +195,8 @@ export default function POSPage() {
   // Same arithmetic as the server: line discounts, then the sale discount, then VAT on what is left
   const lineDiscount = (item: CartItem) => round2(item.unit_price * item.quantity * (item.discount_percent / 100))
   const subtotal = round2(cart.reduce((sum, item) => sum + item.quantity * item.unit_price - lineDiscount(item), 0))
-  const discountAmount = round2(subtotal * (discountPercent / 100))
+  const discountValid = Number.isFinite(discountPercent) && discountPercent >= 0 && discountPercent <= 100
+  const discountAmount = round2(subtotal * ((discountValid ? discountPercent : 0) / 100))
   const netAmount = subtotal - discountAmount
   const vatAmount = vatOn(netAmount, vatRate)
   const total = round2(netAmount + vatAmount)
@@ -200,6 +205,10 @@ export default function POSPage() {
   const money = (amount: number) => ghs(withVat(amount, vatRate))
 
   const handleCompleteSale = () => {
+    if (!discountValid) {
+      toast({ title: 'Discount must be between 0 and 100%', variant: 'destructive' })
+      return
+    }
     if (cart.length === 0) {
       toast({ title: 'Cart is empty', variant: 'destructive' })
       return
@@ -295,7 +304,7 @@ export default function POSPage() {
               </Button>
               {categories.map((cat: any) => (
                 <Button key={cat.id} {...pill(selectedCategoryId === cat.id)} onClick={() => setSelectedCategoryId(cat.id)}>
-                  {cat.name}
+                  {cat.name.toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase())}
                 </Button>
               ))}
             </Flex>
@@ -317,7 +326,7 @@ export default function POSPage() {
         </SimpleGrid>
         {products.length === 0 && (
           <Card>
-            <EmptyState icon={MdShoppingCart}>{search ? 'No products found' : 'Start typing to search products'}</EmptyState>
+            <EmptyState icon={MdShoppingCart}>{search ? 'No products match this name or SKU. Try All categories.' : selectedCategoryId ? 'No active products in this category. Check the catalogue or choose All categories.' : 'No active products are available in the catalogue.'}</EmptyState>
           </Card>
         )}
       </Flex>
@@ -442,7 +451,7 @@ export default function POSPage() {
               />
               <Text fontSize="sm">%</Text>
               <Text ms="auto" fontSize="sm">
-                -{ghs(discountAmount)}
+                {discountValid ? `-${ghs(discountAmount)}` : 'Enter 0–100%'}
               </Text>
             </Flex>
           )}
@@ -457,7 +466,7 @@ export default function POSPage() {
             <Text fontSize="lg">Total</Text>
             <Text fontSize="2xl" color="brand.600" _dark={{ color: "white" }}>{ghs(total)}</Text>
           </Flex>
-          <Button variant="brand" size="lg" leftIcon={<MdCreditCard />} isDisabled={cart.length === 0} onClick={() => setIsPaymentDialogOpen(true)}>
+          <Button variant="brand" size="lg" leftIcon={<MdCreditCard />} isDisabled={cart.length === 0 || !discountValid} onClick={() => setIsPaymentDialogOpen(true)}>
             Checkout
           </Button>
         </Stack>
@@ -522,7 +531,7 @@ export default function POSPage() {
             <Button variant="light" onClick={() => setIsPaymentDialogOpen(false)}>
               Cancel
             </Button>
-            <Button variant="brand" minW="128px" isLoading={createSaleMutation.isPending} loadingText="Processing..." onClick={handleCompleteSale}>
+            <Button variant="brand" minW="128px" isLoading={createSaleMutation.isPending} loadingText="Processing..." isDisabled={!discountValid} onClick={handleCompleteSale}>
               Complete Sale
             </Button>
           </>

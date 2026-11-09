@@ -154,11 +154,13 @@ async def start_job(job_id: int, data: StartIn, db: AsyncSession = Depends(get_d
     job.overdue_notified_at = None
     if data.notes is not None:
         job.notes = data.notes
-    if changed:
-        await lab_service.sms_in_progress(db, job)
+    sms = await lab_service.sms_in_progress(db, job) if changed else None
     await db.commit()
     kick()
-    return (await _job_rows(db, [job]))[0]
+    row = (await _job_rows(db, [job]))[0]
+    row["sms_status"] = sms.status if sms else "skipped"
+    row["sms_error"] = sms.error if sms else None
+    return row
 
 
 @router.post("/jobs/{job_id}/ready")
@@ -171,11 +173,14 @@ async def mark_ready(job_id: int, data: NotesIn | None = None, db: AsyncSession 
     job.technician_id = job.technician_id or user.id
     if data and data.notes is not None:
         job.notes = data.notes
-    await lab_service.sms_ready(db, job)
+    sms = await lab_service.sms_ready(db, job)
     await lab_service.notify_ready(db, job)
     await db.commit()
     kick()
-    return (await _job_rows(db, [job]))[0]
+    row = (await _job_rows(db, [job]))[0]
+    row["sms_status"] = sms.status if sms else "skipped"
+    row["sms_error"] = sms.error if sms else None
+    return row
 
 
 async def _glasses_balance(db, job):

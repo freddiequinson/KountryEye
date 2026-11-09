@@ -28,6 +28,7 @@ import NotificationDropdown from '@/components/navbar/NotificationDropdown'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/hooks/use-toast'
 import api from '@/lib/api'
+import { useSearchStore } from '@/stores/search'
 import { getPageTitle, getRoleDisplayName, getUserRole, hasPermission } from '@/config/nav'
 import { activityLogger } from '@/lib/activityLogger'
 import { ConfirmDialog } from '@/components/ui'
@@ -113,7 +114,10 @@ export default function Navbar({ onOpenDrawer, onToggleCollapse }: { onOpenDrawe
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    if (search.trim()) navigate(`/admin/search?q=${encodeURIComponent(search.trim())}`)
+    if (search.trim()) {
+      useSearchStore.getState().setTerm(search.trim())
+      navigate('/admin/search')
+    }
   }
 
   const handleLogout = () => {

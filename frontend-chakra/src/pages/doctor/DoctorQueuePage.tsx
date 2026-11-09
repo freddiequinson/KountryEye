@@ -49,6 +49,7 @@ export default function DoctorQueuePage() {
     mutationFn: ({ visitId, status }: { visitId: number; status: string }) => api.patch(`/clinical/visits/${visitId}/status`, { status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['doctor-queue'] })
+      queryClient.invalidateQueries({ queryKey: ['today-visits'] })
     },
   })
 
@@ -63,7 +64,7 @@ export default function DoctorQueuePage() {
     <>
       <PageHeader
         title="Patient Queue"
-        description="Patients waiting for consultation"
+        description={statusFilter === 'completed' ? 'Completed consultations' : statusFilter === 'in_consultation' ? 'Patients currently in consultation' : 'Patients waiting for consultation'}
         actions={
           <Select variant="main" w="180px" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="active">Active (All)</option>

@@ -2,6 +2,7 @@
 from typing import Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, func, cast, String
 
@@ -635,3 +636,17 @@ async def global_search(
         "total_count": total_count,
         "results": results,
     }
+
+
+class GlobalSearchInput(BaseModel):
+    q: str = Field(min_length=1, max_length=200)
+    limit: int = Field(default=10, ge=1, le=50)
+
+
+@router.post("/global")
+async def global_search_private(
+    data: GlobalSearchInput,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    return await global_search(q=data.q, limit=data.limit, db=db, current_user=current_user)

@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 import csv
 import io
@@ -162,7 +162,8 @@ async def get_products(
         # Filter by category type (medication, optical, general)
         query = query.join(ProductCategory).where(ProductCategory.category_type == category_type)
     if search:
-        query = query.where(Product.name.ilike(f"%{search}%"))
+        term = f"%{search.strip()}%"
+        query = query.where(or_(Product.name.ilike(term), Product.sku.ilike(term)))
     
     result = await db.execute(query.order_by(Product.name))
     products = result.scalars().all()

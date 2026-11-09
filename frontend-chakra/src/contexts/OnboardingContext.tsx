@@ -86,7 +86,7 @@ export const pageTutorials: Record<string, TutorialStep[]> = {
 
 // Main onboarding tutorial steps for each role
 export const adminTutorialSteps: TutorialStep[] = [
-  { id: 'welcome', target: '[data-tour="sidebar-logo"]', title: 'Welcome to Kountry Eyecare!', description: 'This is your admin dashboard. Let\'s take a quick tour to help you get started with the system.', position: 'right' },
+  { id: 'welcome', target: '[data-tour="sidebar-logo"]', title: 'Welcome to Kountry Eyecare!', description: 'Let\'s take a quick tour to help you get started with the system.', position: 'right' },
   { id: 'main-section', target: '[data-tour="section-main"]', title: 'Main Section', description: 'This section contains your primary daily tools: Dashboard, Front Desk, POS, Patients, and Messages.', position: 'right' },
   { id: 'dashboard', target: '[data-tour="nav-dashboard"]', title: 'Dashboard', description: 'Your central hub showing today\'s appointments, revenue metrics, and quick actions.', position: 'right' },
   { id: 'frontdesk', target: '[data-tour="nav-front-desk"]', title: 'Front Desk', description: 'Check in patients, create visits, and manage the patient queue.', position: 'right' },

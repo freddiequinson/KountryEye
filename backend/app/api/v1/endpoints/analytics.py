@@ -34,15 +34,15 @@ async def get_dashboard_analytics(
     if period == "today":
         start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "week":
-        start_date = now - timedelta(days=7)
+        start_date = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "month":
-        start_date = now - timedelta(days=30)
+        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     elif period == "quarter":
         start_date = now - timedelta(days=90)
     elif period == "year":
-        start_date = now - timedelta(days=365)
+        start_date = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
     else:
-        start_date = now - timedelta(days=30)
+        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
     # Previous period for comparison
     period_length = (now - start_date).days
@@ -107,7 +107,7 @@ async def get_dashboard_analytics(
     revenue_by_category = {row[0] or 'other': float(row[1] or 0) for row in revenue_by_category_result.all()}
     
     consultation_revenue = revenue_by_category.get('consultation', 0)
-    sales_revenue = revenue_by_category.get('sale', 0) + revenue_by_category.get('prescription', 0)
+    sales_revenue = revenue_by_category.get('sale', 0) + revenue_by_category.get('product_sale', 0) + revenue_by_category.get('prescription', 0)
     
     # Previous period revenue
     prev_revenue_result = await db.execute(
@@ -431,15 +431,15 @@ async def get_consultation_analytics(
     if period == "today":
         start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "week":
-        start_date = now - timedelta(days=7)
+        start_date = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "month":
-        start_date = now - timedelta(days=30)
+        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     elif period == "quarter":
         start_date = now - timedelta(days=90)
     elif period == "year":
-        start_date = now - timedelta(days=365)
+        start_date = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
     else:
-        start_date = now - timedelta(days=30)
+        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
     # Consultations by type
     consultations_by_type_result = await db.execute(
@@ -489,15 +489,15 @@ async def get_staff_performance(
     if period == "today":
         start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "week":
-        start_date = now - timedelta(days=7)
+        start_date = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "month":
-        start_date = now - timedelta(days=30)
+        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     elif period == "quarter":
         start_date = now - timedelta(days=90)
     elif period == "year":
-        start_date = now - timedelta(days=365)
+        start_date = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
     else:
-        start_date = now - timedelta(days=30)
+        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
     # Visits recorded by staff
     visits_by_staff_result = await db.execute(
@@ -565,15 +565,15 @@ async def get_financial_analytics(
     if period == "today":
         start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "week":
-        start_date = now - timedelta(days=7)
+        start_date = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "month":
-        start_date = now - timedelta(days=30)
+        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     elif period == "quarter":
         start_date = now - timedelta(days=90)
     elif period == "year":
-        start_date = now - timedelta(days=365)
+        start_date = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
     else:
-        start_date = now - timedelta(days=30)
+        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
     # Total income
     income_result = await db.execute(

@@ -164,8 +164,14 @@ export default function FrontDeskPage() {
   }, [selectedPatient?.id])
 
 
+  const customRangeValid = !!customStartDate && !!customEndDate && customStartDate <= customEndDate
+  const visitLabel = ({ today: "Today's Visits", yesterday: "Yesterday's Visits", week: 'This Week’s Visits', month: 'This Month’s Visits', custom: 'Visits in Selected Range' } as Record<string, string>)[dateFilter] || 'Visits'
+
   const { data: todayVisits = [] } = useQuery({
     queryKey: ['today-visits', dateFilter, customStartDate, customEndDate],
+    enabled: dateFilter !== 'custom' || customRangeValid,
+    refetchInterval: 5000,
+    refetchOnWindowFocus: 'always',
     queryFn: async () => {
       const params = new URLSearchParams()
       if (dateFilter === 'custom' && customStartDate && customEndDate) {
@@ -509,7 +515,7 @@ export default function FrontDeskPage() {
       />
 
       <SimpleGrid columns={{ base: 1, md: 3, xl: 5 }} spacing="20px" mb="20px">
-        <StatCard name="Today's Visits" value={todayVisits.length} />
+        <StatCard name={visitLabel} value={todayVisits.length} />
         <StatCard name="Waiting" value={todayVisits.filter((v: Visit) => v.status === 'waiting').length} />
         <StatCard name="In Consultation" value={todayVisits.filter((v: Visit) => v.status === 'in_consultation').length} />
         <StatCard name="Visit Payments Due" value={pendingPaymentVisits.length} />
@@ -518,7 +524,7 @@ export default function FrontDeskPage() {
 
       <Tabs variant="soft-rounded" index={TABS.indexOf(activeTab)} onChange={(i) => setActiveTab(TABS[i])}>
         <TabList gap="8px" flexWrap="wrap" mb="16px">
-          <Tab>Today's Visits</Tab>
+          <Tab>{visitLabel}</Tab>
           <Tab>
             Visit Payments
             {pendingPaymentVisits.length > 0 && (
@@ -563,7 +569,7 @@ export default function FrontDeskPage() {
                   </Thead>
                   <Tbody>
                     {todayVisits.length === 0 ? (
-                      <TableMessageRow colSpan={6}>No visits recorded today</TableMessageRow>
+                      <TableMessageRow colSpan={6}>{dateFilter === 'custom' && !customRangeValid ? 'Select a valid start and end date to view visits' : 'No visits recorded for the selected period'}</TableMessageRow>
                     ) : (
                       todayVisits.map((visit: Visit) => (
                         <Tr key={visit.id}>
