@@ -14,7 +14,7 @@ async def send(api_key: str, sender: str, recipients: list[str], message: str, c
     if callback_url:
         body["callback_url"] = callback_url
     try:
-        async with httpx.AsyncClient(timeout=20) as client:
+        async with httpx.AsyncClient(timeout=20, http2=True) as client:
             r = await client.post(f"{BASE}/api/v2/sms/send", json=body, headers={"api-key": api_key, "Accept": "application/json"})
     except httpx.HTTPError as exc:
         raise ArkeselError(f"Could not reach Arkesel: {exc.__class__.__name__}") from exc
@@ -34,7 +34,7 @@ async def send(api_key: str, sender: str, recipients: list[str], message: str, c
 async def balance(api_key: str) -> dict:
     """Arkesel account balance: {'sms_balance': ..., 'main_balance': ...} (whatever Arkesel returns)."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=15, http2=True) as client:
             r = await client.get(f"{BASE}/api/v2/clients/balance-details", headers={"api-key": api_key, "Accept": "application/json"})
         data = r.json()
     except (httpx.HTTPError, ValueError) as exc:

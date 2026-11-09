@@ -17,3 +17,5 @@
 Validation: 25 QA/lab/VAT/payment/review tests and 44 existing security/pentest/superadmin tests passed. `npm run build` passed. Mocked browser interactions and rendered POS were checked at 1440px and 390px in light and dark modes.
 
 No database schema migration. No legacy frontend edits. Production code is deployed as a patch from the existing committed baseline; main is unchanged.
+
+SMS production follow-up: the API timed out over HTTP/1.1 while HTTP/2 returned promptly. Enable HTTP/2 for Arkesel send and balance requests and include HTTPX's optional HTTP/2 dependency. The replacement credential is stored only in production settings.
