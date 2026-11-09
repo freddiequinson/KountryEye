@@ -19,3 +19,5 @@ Validation: 25 QA/lab/VAT/payment/review tests and 44 existing security/pentest/
 No database schema migration. No legacy frontend edits. Production code is deployed as a patch from the existing committed baseline; main is unchanged.
 
 SMS production follow-up: the API timed out over HTTP/1.1 while HTTP/2 returned promptly. Enable HTTP/2 for Arkesel send and balance requests and include HTTPX's optional HTTP/2 dependency. The replacement credential is stored only in production settings.
+
+Stakeholder navigation follow-up: reproduced a production dashboard crash (React error 130) when the compiled ApexCharts wrapper resolved to a module object. Normalize the CommonJS default export before rendering the chart. This prevents the dashboard crash after login that blocked navigation into SMS. Dashboard-to-campaign preview was verified in desktop Chromium/light mode and phone WebKit/dark mode; production build passed.

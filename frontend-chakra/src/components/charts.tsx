@@ -1,8 +1,11 @@
 // Thin ApexCharts wrappers with the Horizon look (replaces recharts).
-import Chart from 'react-apexcharts'
+import ChartModule from 'react-apexcharts'
 import type { ApexOptions } from 'apexcharts'
 import { Center, Icon, Text, useColorMode } from '@chakra-ui/react'
 import { MdInsights } from 'react-icons/md'
+
+// The CommonJS package can be wrapped in a second default export by the bundler.
+const Chart = ((ChartModule as unknown as { default?: typeof ChartModule }).default ?? ChartModule) as typeof ChartModule
 
 export const CHART_COLORS = ['#4C9B4F', '#0CC0DF', '#FFB547', '#EE5D50', '#7551FF', '#01B574', '#3965FF', '#A3AED0']
 
